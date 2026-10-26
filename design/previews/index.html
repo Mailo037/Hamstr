@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hamstr Design Previews</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;600;800&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --page:#e9e6e1; --ink:#1a1a1a; --muted:#6b675f; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--page); color:var(--ink); font-family:Manrope, system-ui, sans-serif; padding:40px 16px 80px; }
+  header.page { max-width:1100px; margin:0 auto 40px; }
+  header.page h1 { font-family:'Bricolage Grotesque'; font-size:40px; font-weight:800; letter-spacing:-1px; }
+  header.page p { color:var(--muted); max-width:640px; margin-top:8px; line-height:1.5; }
+  section.dir { max-width:1100px; margin:0 auto 64px; }
+  .dir-head { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:6px; }
+  .dir-head .num { font-family:'JetBrains Mono'; font-size:13px; color:var(--muted); }
+  .dir-head h2 { font-family:'Bricolage Grotesque'; font-size:28px; font-weight:800; }
+  .dir-desc { color:var(--muted); max-width:720px; line-height:1.5; margin-bottom:20px; font-size:15px; }
+  .swatches { display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap; }
+  .sw { width:34px; height:34px; border-radius:8px; border:1px solid rgba(0,0,0,.15); }
+  .phones { display:flex; gap:28px; flex-wrap:wrap; }
+  .phone { width:320px; height:660px; border-radius:42px; padding:10px; background:#111; box-shadow:0 20px 50px rgba(0,0,0,.25); flex-shrink:0; }
+  .screen { width:100%; height:100%; border-radius:33px; overflow:hidden; position:relative; display:flex; flex-direction:column; }
+  .cap { font-family:'JetBrains Mono'; font-size:12px; color:var(--muted); margin-top:10px; text-align:center; }
+  .statusbar { display:flex; justify-content:space-between; padding:12px 22px 4px; font-size:12px; font-weight:600; }
+  img.fallback-hide[data-missing] { display:none; }
+
+  /* ============ 01 POUCH — neo-brutalist sticker ============ */
+  .pouch { --bg:#FFF4E0; --card:#FFFFFF; --ink:#111; --or:#FF9F1C; --pk:#FF6B9A; --mint:#7BDFB0; --sky:#8EC5FF;
+           background:var(--bg); color:var(--ink); font-family:'Bricolage Grotesque', sans-serif; }
+  .pouch .top { padding:6px 18px 10px; display:flex; align-items:center; gap:10px; }
+  .pouch .logo { width:46px; height:46px; border:2.5px solid var(--ink); border-radius:14px; background:var(--or); box-shadow:3px 3px 0 var(--ink); overflow:hidden; display:grid; place-items:center; font-size:24px; }
+  .pouch .logo img { width:120%; height:120%; object-fit:cover; }
+  .pouch h3 { font-size:28px; font-weight:800; letter-spacing:-1px; line-height:1; }
+  .pouch .sub { font-size:12px; font-weight:600; opacity:.65; }
+  .pouch .stats { margin:4px 18px 14px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .pouch .stat { border:2.5px solid var(--ink); border-radius:16px; padding:10px 12px; box-shadow:3px 3px 0 var(--ink); }
+  .pouch .stat b { font-size:24px; font-weight:800; display:block; line-height:1; }
+  .pouch .stat span { font-size:11px; font-weight:600; }
+  .pouch .stat.a { background:var(--mint); } .pouch .stat.b { background:var(--sky); }
+  .pouch .lbl { margin:2px 18px 8px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; }
+  .pouch .item { margin:0 18px 10px; background:var(--card); border:2.5px solid var(--ink); border-radius:16px; padding:10px; display:flex; gap:10px; box-shadow:3px 3px 0 var(--ink); }
+  .pouch .thumb { width:52px; height:52px; border-radius:10px; border:2px solid var(--ink); flex-shrink:0; display:grid; place-items:center; font-size:20px; }
+  .pouch .meta { flex:1; min-width:0; }
+  .pouch .meta .t { font-size:14px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pouch .meta .s { font-size:11px; font-weight:600; opacity:.6; margin-top:1px; }
+  .pouch .bar { height:12px; border:2px solid var(--ink); border-radius:99px; margin-top:6px; overflow:hidden; background:#fff; }
+  .pouch .bar i { display:block; height:100%; background:repeating-linear-gradient(-45deg,var(--or) 0 6px,#ffb64d 6px 12px); border-right:2px solid var(--ink); }
+  .pouch .tag { display:inline-block; font-size:10px; font-weight:800; padding:1px 7px; border:2px solid var(--ink); border-radius:99px; margin-right:4px; background:var(--pk); }
+  .pouch .tag.y { background:#FFE14D; }
+  .pouch .nav { margin-top:auto; padding:12px 18px 18px; display:flex; gap:10px; }
+  .pouch .nav div { flex:1; text-align:center; font-weight:800; font-size:13px; padding:10px 0; border:2.5px solid var(--ink); border-radius:14px; background:var(--card); }
+  .pouch .nav .on { background:var(--ink); color:var(--bg); }
+  /* pouch share sheet */
+  .pouch .dim { position:absolute; inset:0; background:rgba(17,17,17,.35); }
+  .pouch .notif { position:absolute; top:34px; left:12px; right:12px; background:var(--card); border:2.5px solid var(--ink); border-radius:18px; padding:10px 12px; box-shadow:4px 4px 0 var(--ink); display:flex; gap:10px; align-items:center; z-index:3; }
+  .pouch .notif .ic { width:34px; height:34px; border-radius:10px; background:var(--or); border:2px solid var(--ink); display:grid; place-items:center; overflow:hidden; }
+  .pouch .notif .ic img { width:130%; }
+  .pouch .notif .t { font-size:13px; font-weight:800; } .pouch .notif .s { font-size:11px; opacity:.65; font-weight:600; }
+  .pouch .sheet { position:absolute; left:0; right:0; bottom:0; background:var(--bg); border-top:2.5px solid var(--ink); border-radius:28px 28px 0 0; padding:16px 18px 20px; z-index:2; }
+  .pouch .grab { width:44px; height:6px; border-radius:9px; background:var(--ink); margin:0 auto 14px; }
+  .pouch .src { display:flex; gap:10px; align-items:center; background:var(--card); border:2.5px solid var(--ink); border-radius:16px; padding:10px; box-shadow:3px 3px 0 var(--ink); margin-bottom:14px; }
+  .pouch .seg { display:flex; border:2.5px solid var(--ink); border-radius:14px; overflow:hidden; margin-bottom:12px; }
+  .pouch .seg div { flex:1; text-align:center; padding:9px 0; font-weight:800; font-size:13px; border-right:2.5px solid var(--ink); background:var(--card); }
+  .pouch .seg div:last-child { border-right:none; } .pouch .seg .on { background:var(--or); }
+  .pouch .chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+  .pouch .chip { font-size:12px; font-weight:800; padding:6px 11px; border:2px solid var(--ink); border-radius:99px; background:var(--card); }
+  .pouch .chip.on { background:var(--mint); }
+  .pouch .cta { background:var(--pk); border:2.5px solid var(--ink); border-radius:18px; box-shadow:4px 4px 0 var(--ink); text-align:center; font-size:19px; font-weight:800; padding:14px 0; }
+
+  /* ============ 02 VAULT — dark amber, premium ============ */
+  .vault { --bg:#0E0C0A; --s1:#17140F; --s2:#211C15; --line:#2E271D; --amb:#FFB547; --amb2:#FF7A1A; --tx:#F3EADB; --mt:#8F8371;
+           background:radial-gradient(120% 60% at 50% -10%, #3a2610 0%, var(--bg) 55%); color:var(--tx); font-family:Manrope, sans-serif; }
+  .vault .top { padding:8px 20px 4px; display:flex; justify-content:space-between; align-items:center; }
+  .vault .brand { display:flex; align-items:center; gap:10px; }
+  .vault .brand .ic { width:34px; height:34px; border-radius:10px; overflow:hidden; background:var(--s2); border:1px solid var(--line); display:grid; place-items:center; color:var(--amb); }
+  .vault .brand .ic img { width:100%; height:100%; object-fit:cover; }
+  .vault .brand b { font-size:18px; font-weight:800; letter-spacing:.3px; }
+  .vault .round { width:34px; height:34px; border-radius:50%; border:1px solid var(--line); display:grid; place-items:center; color:var(--mt); font-size:14px; }
+  .vault .hero { padding:18px 20px 16px; }
+  .vault .hero .k { font-family:'JetBrains Mono'; font-size:10px; letter-spacing:2px; color:var(--mt); text-transform:uppercase; }
+  .vault .hero .big { font-size:46px; font-weight:800; letter-spacing:-2px; line-height:1.05; margin-top:4px; }
+  .vault .hero .big small { font-size:18px; color:var(--mt); letter-spacing:0; font-weight:600; }
+  .vault .ring { display:flex; gap:6px; margin-top:12px; }
+  .vault .ring span { flex:1; height:4px; border-radius:4px; background:var(--line); }
+  .vault .ring span.f { background:linear-gradient(90deg,var(--amb2),var(--amb)); }
+  .vault .lbl { padding:6px 20px 8px; font-family:'JetBrains Mono'; font-size:10px; letter-spacing:2px; color:var(--mt); text-transform:uppercase; display:flex; justify-content:space-between; }
+  .vault .item { margin:0 14px 8px; padding:12px; border-radius:18px; background:var(--s1); border:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  .vault .thumb { width:46px; height:46px; border-radius:12px; flex-shrink:0; position:relative; overflow:hidden; }
+  .vault .meta { flex:1; min-width:0; }
+  .vault .meta .t { font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vault .meta .s { font-family:'JetBrains Mono'; font-size:10px; color:var(--mt); margin-top:3px; display:flex; justify-content:space-between; }
+  .vault .bar { height:3px; background:var(--line); border-radius:3px; margin-top:7px; overflow:hidden; }
+  .vault .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--amb2),var(--amb)); box-shadow:0 0 10px var(--amb); }
+  .vault .pct { font-family:'JetBrains Mono'; font-size:13px; font-weight:800; color:var(--amb); }
+  .vault .done { color:#7FD99A; font-size:16px; }
+  .vault .dock { margin:auto 14px 16px; padding:8px; border-radius:22px; background:rgba(33,28,21,.85); border:1px solid var(--line); display:flex; justify-content:space-around; align-items:center; }
+  .vault .dock span { font-size:12px; color:var(--mt); font-weight:600; padding:8px 10px; }
+  .vault .dock .fab { background:var(--amb); color:#1a1205; border-radius:16px; padding:10px 16px; font-weight:800; box-shadow:0 0 24px rgba(255,181,71,.45); }
+  /* vault sheet */
+  .vault .blur { position:absolute; inset:0; background:rgba(5,4,3,.55); backdrop-filter:blur(3px); }
+  .vault .notif { position:absolute; top:36px; left:10px; right:10px; z-index:3; background:rgba(33,28,21,.96); border:1px solid var(--line); border-radius:20px; padding:12px; }
+  .vault .notif .row { display:flex; gap:10px; align-items:center; }
+  .vault .notif .ic { width:28px; height:28px; border-radius:8px; overflow:hidden; background:var(--s2); }
+  .vault .notif .ic img { width:100%; height:100%; object-fit:cover; }
+  .vault .notif .t { font-size:12.5px; font-weight:800; } .vault .notif .s { font-family:'JetBrains Mono'; font-size:10px; color:var(--mt); }
+  .vault .notif .acts { display:flex; gap:16px; margin-top:8px; padding-left:38px; font-size:11px; font-weight:800; color:var(--amb); }
+  .vault .sheet { position:absolute; left:8px; right:8px; bottom:8px; z-index:2; background:var(--s1); border:1px solid var(--line); border-radius:30px; padding:18px; }
+  .vault .src { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+  .vault .opt { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-radius:16px; border:1px solid var(--line); margin-bottom:8px; font-size:13px; font-weight:600; }
+  .vault .opt.on { border-color:var(--amb); background:rgba(255,181,71,.07); }
+  .vault .opt small { font-family:'JetBrains Mono'; font-size:10px; color:var(--mt); }
+  .vault .opt .dot { width:16px; height:16px; border-radius:50%; border:1.5px solid var(--mt); }
+  .vault .opt.on .dot { border:5px solid var(--amb); }
+  .vault .cta { margin-top:12px; text-align:center; padding:15px 0; border-radius:18px; font-weight:800; font-size:15px; color:#1a1205; background:linear-gradient(90deg,var(--amb2),var(--amb)); box-shadow:0 8px 30px rgba(255,122,26,.35); }
+
+  /* ============ 03 RASTER — Slate base + Glyph ASCII accents ============ */
+  @font-face { font-family:InterL; src:url(vendor/fonts/inter-400.woff2) format('woff2'); font-weight:400; }
+  @font-face { font-family:InterL; src:url(vendor/fonts/inter-500.woff2) format('woff2'); font-weight:500; }
+  @font-face { font-family:InterL; src:url(vendor/fonts/inter-600.woff2) format('woff2'); font-weight:600; }
+  .raster { --canvas:#141414; --overlay:#1e1e1e; --surface:#262626; --raised:#2d2d2d; --hover:#343434;
+            --ink:#eeeeee; --muted:#aaaaaa; --ghost:#8a8a8a; --line:#363636; --acc:#FF9A3C; --green:#10b981; --red:#f08080;
+            --mono:'JetBrains Mono', Consolas, monospace;
+            background:var(--canvas); color:var(--ink); font-family:InterL, Inter, system-ui, sans-serif; font-size:13.5px; }
+  .raster canvas.bgr { position:absolute; inset:0 0 auto 0; width:100%; height:260px; pointer-events:none; }
+  .raster > *:not(canvas) { position:relative; }
+  .raster .ico { width:20px; height:20px; display:inline-block; background:currentColor; -webkit-mask:var(--i) center/contain no-repeat; mask:var(--i) center/contain no-repeat; flex-shrink:0; }
+  .raster .i-search { --i:url(vendor/icons/search_24px.svg); } .raster .i-dl { --i:url(vendor/icons/download_fill1_24px.svg); }
+  .raster .i-check { --i:url(vendor/icons/check_fill1_24px.svg); } .raster .i-set { --i:url(vendor/icons/settings_fill1_24px.svg); }
+  .raster .i-pause { --i:url(vendor/icons/pause_fill1_24px.svg); } .raster .i-close { --i:url(vendor/icons/close_24px.svg); }
+  .raster .i-more { --i:url(vendor/icons/expand_more_24px.svg); } .raster .i-grid { --i:url(vendor/icons/grid_view_fill1_24px.svg); }
+  .raster .i-layers { --i:url(vendor/icons/layers_fill1_24px.svg); }
+  .raster .top { display:flex; align-items:center; justify-content:space-between; padding:6px 18px 0; }
+  .raster .brand { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:600; }
+  .raster .brand img, .raster .brand .ph { width:32px; height:32px; border-radius:9px; background:#0a0a09; object-fit:cover; }
+  .raster .ibtn { width:36px; height:36px; border-radius:12px; background:var(--surface); display:grid; place-items:center; color:var(--muted); }
+  .raster .hero { padding:22px 18px 18px; }
+  .raster .hero .big { font-size:34px; font-weight:600; letter-spacing:-.5px; line-height:1.1; }
+  .raster .hero .sub { color:var(--muted); margin-top:4px; display:flex; gap:8px; align-items:center; }
+  .raster .badge { font-family:var(--mono); font-size:10px; font-weight:600; color:var(--muted); letter-spacing:.3px; white-space:nowrap; }
+  .raster .badge.acc { color:var(--acc); }
+  .raster h4 { font-size:16px; font-weight:600; padding:4px 18px 10px; display:flex; justify-content:space-between; align-items:baseline; }
+  .raster h4 span { font-size:12px; font-weight:500; color:var(--ghost); font-family:var(--mono); }
+  .raster .list { margin:0 12px; background:var(--overlay); border-radius:20px; padding:4px; }
+  .raster .row { display:flex; gap:12px; align-items:center; padding:8px; border-radius:16px; }
+  .raster .row + .row { margin-top:2px; }
+  .raster .row.hl { background:var(--surface); }
+  .raster .th { width:52px; height:52px; border-radius:10px; flex-shrink:0; background:#0a0a09; overflow:hidden; }
+  .raster .th canvas, .raster .th img { width:100%; height:100%; display:block; object-fit:cover; }
+  .raster .meta { flex:1; min-width:0; }
+  .raster .meta .t { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .raster .meta .s { display:flex; gap:8px; align-items:center; margin-top:3px; color:var(--ghost); font-size:12px; }
+  .raster .bar { height:3px; border-radius:3px; background:var(--line); margin-top:7px; overflow:hidden; }
+  .raster .bar i { display:block; width:0; height:100%; background:var(--acc); border-radius:3px; }
+  .raster .pct { font-family:var(--mono); font-size:12px; font-weight:600; color:var(--ink); min-width:30px; text-align:right; }
+  .raster .ok { color:var(--green); }
+  .raster .tabs { margin:auto 12px 14px; background:var(--overlay); border-radius:20px; padding:5px; display:flex; position:relative; }
+  .raster .tabs .pill { position:absolute; top:5px; bottom:5px; left:5px; width:calc((100% - 10px)/3); border-radius:15px; background:var(--hover); transition:transform .19s cubic-bezier(.22,.61,.36,1); }
+  .raster .tabs div.tb { flex:1; position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 0 6px; font-size:11px; font-weight:500; color:var(--ghost); cursor:pointer; }
+  .raster .tabs div.tb.on { color:var(--ink); }
+  /* share sheet */
+  .raster .dim { position:absolute; inset:0; background:rgba(0,0,0,.55); }
+  .raster .notif { position:absolute; top:34px; left:10px; right:10px; z-index:3; background:var(--raised); border-radius:20px; padding:12px 14px; }
+  .raster .notif .hd { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ghost); }
+  .raster .notif .hd img { width:16px; height:16px; border-radius:4px; }
+  .raster .notif .t { font-weight:500; margin-top:6px; }
+  .raster .notif .acts { display:flex; gap:18px; margin-top:10px; font-size:12px; font-weight:600; color:var(--acc); }
+  .raster .sheet { position:absolute; left:0; right:0; bottom:0; z-index:2; background:var(--overlay); border-radius:28px 28px 0 0; padding:10px 16px 18px; }
+  .raster .grab { width:36px; height:4px; border-radius:4px; background:var(--line); margin:0 auto 12px; }
+  .raster .prev { width:100%; aspect-ratio:16/9; border-radius:14px; overflow:hidden; background:#0a0a09; }
+  .raster .prev canvas { width:100%; height:100%; display:block; }
+  .raster .ptitle { font-size:15px; font-weight:600; margin-top:10px; font-family:InterL, Inter, sans-serif; }
+  .raster .seg { display:flex; position:relative; background:var(--canvas); border-radius:14px; padding:4px; margin:12px 0 6px; }
+  .raster .seg .pill { position:absolute; top:4px; bottom:4px; left:4px; width:calc((100% - 8px)/3); border-radius:10px; background:var(--hover); transition:transform .19s cubic-bezier(.22,.61,.36,1); }
+  .raster .seg div.sg { flex:1; text-align:center; padding:7px 0; font-weight:500; position:relative; color:var(--muted); cursor:pointer; }
+  .raster .seg div.sg.on { color:var(--ink); }
+  .raster .opt { display:flex; justify-content:space-between; align-items:center; padding:10px 4px; border-bottom:1px solid var(--line); }
+  .raster .opt:last-of-type { border-bottom:none; }
+  .raster .opt .v { display:flex; align-items:center; gap:4px; color:var(--muted); }
+  .raster .sw2 { width:34px; height:20px; border-radius:20px; background:var(--acc); position:relative; }
+  .raster .sw2::after { content:""; position:absolute; right:3px; top:3px; width:14px; height:14px; border-radius:50%; background:#fff; }
+  .raster .btns { display:flex; gap:8px; margin-top:12px; }
+  .raster .btn { flex:1; height:42px; border-radius:14px; display:grid; place-items:center; font-weight:600; background:var(--surface); color:var(--ink); }
+  .raster .btn.primary { flex:2; background:var(--acc); color:#1a0f04; }
+  .replay { font-family:'JetBrains Mono'; font-size:12px; border:1px solid #bbb; background:none; border-radius:8px; padding:6px 10px; cursor:pointer; color:var(--ink); }
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Hamstr — 3 Richtungen</h1>
+  <p>Link teilen → Hamstr stopft ihn in die Backentasche → yt-dlp lädt lokal auf dem Handy, mit Fortschritt in der Benachrichtigung. Jede Richtung zeigt den Vorrat (Downloads) und das Share-Sheet mit Benachrichtigung.</p>
+</header>
+
+<!-- ======================= 01 POUCH ======================= -->
+<section class="dir">
+  <div class="dir-head"><span class="num">01</span><h2>Pouch</h2></div>
+  <p class="dir-desc">Verspielter Neo-Brutalismus: Creme-Hintergrund, dicke schwarze Konturen, harte Versatz-Schatten, kräftige Sticker-Farben. Fühlt sich an wie ein Aufkleberheft, also das Gegenteil von Material.</p>
+  <div class="swatches"><div class="sw" style="background:#FFF4E0"></div><div class="sw" style="background:#111"></div><div class="sw" style="background:#FF9F1C"></div><div class="sw" style="background:#FF6B9A"></div><div class="sw" style="background:#7BDFB0"></div><div class="sw" style="background:#8EC5FF"></div><div class="sw" style="background:#FFE14D"></div></div>
+  <div class="phones">
+    <div>
+      <div class="phone"><div class="screen pouch">
+        <div class="statusbar"><span>9:41</span><span>▮▮▮ 87%</span></div>
+        <div class="top">
+          <div class="logo"><img src="../assets/mascot_pouch.png" alt="" onerror="this.replaceWith('🐹')"></div>
+          <div><h3>Hamstr</h3><div class="sub">deine Backentasche fürs Internet</div></div>
+        </div>
+        <div class="stats">
+          <div class="stat a"><b>128</b><span>Sachen gebunkert</span></div>
+          <div class="stat b"><b>14,2 GB</b><span>im Vorrat</span></div>
+        </div>
+        <div class="lbl">Wird gestopft · 2</div>
+        <div class="item"><div class="thumb" style="background:#FFE14D">♫</div><div class="meta"><div class="t">Lofi Beats to Code To — 3h Mix</div><div class="s"><span class="tag">AUDIO</span>opus · 2,4 MB/s · 0:41</div><div class="bar"><i style="width:62%"></i></div></div></div>
+        <div class="item"><div class="thumb" style="background:#8EC5FF">▶</div><div class="meta"><div class="t">Katze vs. Gurke Compilation</div><div class="s"><span class="tag y">1080p</span>tiktok · 1,1 MB/s</div><div class="bar"><i style="width:18%"></i></div></div></div>
+        <div class="lbl">Gebunkert</div>
+        <div class="item"><div class="thumb" style="background:#7BDFB0">✓</div><div class="meta"><div class="t">How to fold a fitted sheet</div><div class="s">youtube · 48 MB · gerade eben</div></div></div>
+        <div class="nav"><div class="on">Vorrat</div><div>Ordner</div><div>⚙</div></div>
+      </div></div>
+      <div class="cap">Vorrat</div>
+    </div>
+    <div>
+      <div class="phone"><div class="screen pouch">
+        <div class="statusbar"><span>9:42</span><span>▮▮▮ 87%</span></div>
+        <div class="dim"></div>
+        <div class="notif"><div class="ic"><img src="../assets/mascot_pouch.png" alt="" onerror="this.replaceWith('🐹')"></div><div><div class="t">Mampf! 1 Link gestopft</div><div class="s">Never Gonna Give You Up · 34 % · 0:12 übrig</div></div></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="src"><div class="thumb" style="background:#FF6B9A;width:46px;height:46px;border-radius:10px;border:2px solid #111;display:grid;place-items:center;font-size:18px">▶</div><div style="min-width:0"><div style="font-weight:800;font-size:14px">Never Gonna Give You Up</div><div style="font-size:11px;font-weight:600;opacity:.6">youtu.be/dQw4w9 · 3:33</div></div></div>
+          <div class="seg"><div class="on">Video</div><div>Audio</div><div>Custom</div></div>
+          <div class="chips"><span class="chip">2160p</span><span class="chip on">1080p</span><span class="chip">720p</span><span class="chip">mp4</span><span class="chip on">mkv</span><span class="chip">+ Untertitel</span></div>
+          <div class="cta">Ab in die Backe! 🐹</div>
+        </div>
+      </div></div>
+      <div class="cap">Share-Sheet + Benachrichtigung</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 02 VAULT ======================= -->
+<section class="dir">
+  <div class="dir-head"><span class="num">02</span><h2>Vault</h2></div>
+  <p class="dir-desc">Dunkel und hochwertig: Fast-Schwarz mit warmem Bernstein-Glühen, Mono-Ziffern für Technikdaten, schwebendes Dock statt Navigationsleiste. Der Bau des Hamsters als edler Tresor.</p>
+  <div class="swatches"><div class="sw" style="background:#0E0C0A"></div><div class="sw" style="background:#17140F"></div><div class="sw" style="background:#2E271D"></div><div class="sw" style="background:#FF7A1A"></div><div class="sw" style="background:#FFB547"></div><div class="sw" style="background:#F3EADB"></div><div class="sw" style="background:#7FD99A"></div></div>
+  <div class="phones">
+    <div>
+      <div class="phone"><div class="screen vault">
+        <div class="statusbar"><span>9:41</span><span>87%</span></div>
+        <div class="top"><div class="brand"><div class="ic"><img src="../assets/icon_vault.png" alt="" onerror="this.replaceWith('◉')"></div><b>hamstr</b></div><div class="round">⌕</div></div>
+        <div class="hero">
+          <div class="k">Vorrat</div>
+          <div class="big">14,2 <small>GB · 128 Dateien</small></div>
+          <div class="ring"><span class="f"></span><span class="f"></span><span class="f"></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="lbl"><span>Aktiv</span><span>3,5 MB/s</span></div>
+        <div class="item"><div class="thumb" style="background:linear-gradient(135deg,#5b3a8a,#e0705a)"></div><div class="meta"><div class="t">Lofi Beats to Code To — 3h Mix</div><div class="s"><span>opus · 160k</span><span>0:41</span></div><div class="bar"><i style="width:62%"></i></div></div><div class="pct">62</div></div>
+        <div class="item"><div class="thumb" style="background:linear-gradient(135deg,#1f6f5c,#c9e265)"></div><div class="meta"><div class="t">Katze vs. Gurke Compilation</div><div class="s"><span>1080p · mp4</span><span>2:10</span></div><div class="bar"><i style="width:18%"></i></div></div><div class="pct">18</div></div>
+        <div class="lbl"><span>Zuletzt</span><span>alle →</span></div>
+        <div class="item"><div class="thumb" style="background:linear-gradient(135deg,#334,#8aa)"></div><div class="meta"><div class="t">How to fold a fitted sheet</div><div class="s"><span>720p · 48 MB</span><span>jetzt</span></div></div><div class="done">✓</div></div>
+        <div class="dock"><span>Vorrat</span><span class="fab">＋ Link</span><span>Ordner</span></div>
+      </div></div>
+      <div class="cap">Vorrat</div>
+    </div>
+    <div>
+      <div class="phone"><div class="screen vault">
+        <div class="statusbar"><span>9:42</span><span>87%</span></div>
+        <div class="blur"></div>
+        <div class="notif"><div class="row"><div class="ic"><img src="../assets/icon_vault.png" alt="" onerror="this.replaceWith('◉')"></div><div style="flex:1"><div class="t">Hamstr · lädt 1 Datei</div><div class="s">Never Gonna Give You Up — 34 %</div></div></div><div class="bar" style="margin:8px 0 0 38px;height:3px;background:#2E271D;border-radius:3px;overflow:hidden"><i style="display:block;width:34%;height:100%;background:#FFB547"></i></div><div class="acts"><span>PAUSE</span><span>ABBRECHEN</span></div></div>
+        <div class="sheet">
+          <div class="src"><div class="thumb" style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#7a2b2b,#f2a65a)"></div><div><div style="font-weight:800;font-size:14px">Never Gonna Give You Up</div><div style="font-family:'JetBrains Mono';font-size:10px;color:#8F8371;margin-top:2px">youtube.com · 3:33</div></div></div>
+          <div class="opt on"><div>Video · Beste<br><small>1080p · mkv · ~62 MB</small></div><div class="dot"></div></div>
+          <div class="opt"><div>Nur Audio<br><small>opus · 160k · ~4 MB</small></div><div class="dot"></div></div>
+          <div class="opt"><div>Eigenes Format…<br><small>yt-dlp -f</small></div><div class="dot"></div></div>
+          <div class="cta">Bunkern</div>
+        </div>
+      </div></div>
+      <div class="cap">Share-Sheet + Benachrichtigung</div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 03 RASTER ======================= -->
+<section class="dir">
+  <div class="dir-head"><span class="num">03</span><h2>Raster</h2><button class="replay" id="replay">Animation neu abspielen</button></div>
+  <p class="dir-desc">Slate als Basis: neutrales Dunkelgrau, Flächen ohne Rahmen, Inter, eine Akzentfarbe (Backen-Orange). ASCII nach Glyph-Art nur als Akzent: Zeichenraster im Hintergrund, <code>[ BADGES ]</code>, Thumbnails, die sich während des Downloads aus ASCII in das echte Bild auflösen, und Titel, die aus Zeichenrauschen „dekodieren“.</p>
+  <div class="swatches"><div class="sw" style="background:#141414"></div><div class="sw" style="background:#1e1e1e"></div><div class="sw" style="background:#262626"></div><div class="sw" style="background:#343434"></div><div class="sw" style="background:#eeeeee"></div><div class="sw" style="background:#FF9A3C"></div><div class="sw" style="background:#10b981"></div></div>
+  <div class="phones">
+    <div>
+      <div class="phone"><div class="screen raster" id="rasterA">
+        <canvas class="bgr"></canvas>
+        <div class="statusbar"><span>9:41</span><span>87%</span></div>
+        <div class="top">
+          <div class="brand"><img src="../assets/icon_mark.png" alt="" onerror="this.className='ph';this.removeAttribute('src')"><span data-decode>Hamstr</span></div>
+          <div class="ibtn"><span class="ico i-search"></span></div>
+        </div>
+        <div class="hero">
+          <div class="big" data-decode>14,2 GB</div>
+          <div class="sub">128 Dateien <span class="badge acc">[ 2 AKTIV ]</span></div>
+        </div>
+        <h4>Wird geladen <span>3,5 MB/s</span></h4>
+        <div class="list">
+          <div class="row hl" data-prog="0.62" data-speed="0.004"><div class="th"><canvas data-img="../assets/thumb_lofi.png" data-seed="1"></canvas></div><div class="meta"><div class="t" data-decode>Lofi Beats to Code To — 3h Mix</div><div class="s"><span class="badge">[ OPUS ]</span>2,4 MB/s · 0:41</div><div class="bar"><i></i></div></div><div class="pct">62%</div></div>
+          <div class="row" data-prog="0.18" data-speed="0.0025"><div class="th"><canvas data-img="../assets/thumb_cat.png" data-seed="2"></canvas></div><div class="meta"><div class="t" data-decode>Katze vs. Gurke Compilation</div><div class="s"><span class="badge">[ 1080P ]</span>1,1 MB/s · 2:10</div><div class="bar"><i></i></div></div><div class="pct">18%</div></div>
+        </div>
+        <h4 style="margin-top:14px">Gebunkert <span>alle</span></h4>
+        <div class="list">
+          <div class="row"><div class="th"><img src="../assets/thumb_sheet.png" alt="" onerror="this.remove()"></div><div class="meta"><div class="t">How to fold a fitted sheet</div><div class="s"><span class="badge">[ 720P ]</span>48 MB · gerade eben</div></div><span class="ico i-check ok"></span></div>
+        </div>
+        <div class="tabs"><div class="pill"></div><div class="tb on"><span class="ico i-dl"></span>Vorrat</div><div class="tb"><span class="ico i-grid"></span>Mediathek</div><div class="tb"><span class="ico i-set"></span>Einstellungen</div></div>
+      </div></div>
+      <div class="cap">Vorrat: Thumbnails lösen sich mit dem Fortschritt aus ASCII auf</div>
+    </div>
+    <div>
+      <div class="phone"><div class="screen raster" id="rasterB">
+        <canvas class="bgr"></canvas>
+        <div class="statusbar"><span>9:42</span><span>87%</span></div>
+        <div class="dim"></div>
+        <div class="notif">
+          <div class="hd"><img src="../assets/icon_mark.png" alt="" onerror="this.remove()">Hamstr · jetzt</div>
+          <div class="t">Lädt: Katze vs. Gurke Compilation</div>
+          <div class="bar"><i style="width:18%"></i></div>
+          <div class="acts"><span>Pause</span><span>Abbrechen</span></div>
+        </div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="prev"><canvas id="sharePrev" data-img="../assets/thumb_rick.png" data-seed="3"></canvas></div>
+          <div class="ptitle" id="shareTitle">Never Gonna Give You Up</div>
+          <div class="sub" style="display:flex;gap:8px;margin-top:3px"><span class="badge">[ YOUTUBE ]</span><span class="badge">[ 3:33 ]</span><span class="badge acc">[ ~62 MB ]</span></div>
+          <div class="seg"><div class="pill"></div><div class="sg on">Video</div><div class="sg">Audio</div><div class="sg">Eigenes</div></div>
+          <div class="opt"><span>Qualität</span><span class="v">1080p <span class="ico i-more" style="width:18px;height:18px"></span></span></div>
+          <div class="opt"><span>Format</span><span class="v">mkv <span class="ico i-more" style="width:18px;height:18px"></span></span></div>
+          <div class="opt"><span>Untertitel (de)</span><span class="sw2"></span></div>
+          <div class="btns"><div class="btn">Abbrechen</div><div class="btn primary">Bunkern</div></div>
+        </div>
+      </div></div>
+      <div class="cap">Teilen → Sheet: Vorschau lädt als ASCII-Regen</div>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+  const NOISE = '+#0*.:-=';
+  const RAMP = ' .:-=+*#0@';
+  const imgCache = {};
+  const loadImg = src => imgCache[src] ??= new Promise(res => {
+    const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src;
+  });
+
+  // Fallback source when an image is missing: a soft procedural gradient.
+  function fallback(seed) {
+    const c = document.createElement('canvas'); c.width = 160; c.height = 90; c.dataset.k = 'fb' + seed;
+    const x = c.getContext('2d'), hues = [[30, 280], [150, 60], [10, 210]][seed % 3];
+    const g = x.createLinearGradient(0, 0, 160, 90);
+    g.addColorStop(0, `hsl(${hues[0]} 60% 45%)`); g.addColorStop(1, `hsl(${hues[1]} 55% 30%)`);
+    x.fillStyle = g; x.fillRect(0, 0, 160, 90);
+    x.fillStyle = 'rgba(255,255,255,.5)'; x.beginPath(); x.arc(60 + seed * 20, 45, 22, 0, 7); x.fill();
+    return c;
+  }
+
+  function fit(cv) {
+    const d = devicePixelRatio || 1, r = cv.getBoundingClientRect();
+    if (cv.width !== Math.round(r.width * d)) { cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); }
+    return d;
+  }
+
+  // Sample the source into a cols x rows grid of [r,g,b,lum].
+  const sampleCache = new Map();
+  function sample(src, cols, rows) {
+    const key = src.src || src.dataset?.k || src, k2 = key + cols + 'x' + rows;
+    if (sampleCache.has(k2)) return sampleCache.get(k2);
+    const c = document.createElement('canvas'); c.width = cols; c.height = rows;
+    const x = c.getContext('2d');
+    const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+    const s = Math.max(cols / sw, rows / sh), w = sw * s, h = sh * s;
+    x.drawImage(src, (cols - w) / 2, (rows - h) / 2, w, h);
+    const d = x.getImageData(0, 0, cols, rows).data, out = [];
+    for (let i = 0; i < d.length; i += 4) out.push([d[i], d[i + 1], d[i + 2], (0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]) / 255]);
+    sampleCache.set(k2, out); return out;
+  }
+
+  // ASCII rendering + real image revealed from the top by `reveal` (0..1).
+  // `shimmer` (0..1) blends towards random flickering characters (loading state).
+  function drawAscii(cv, src, reveal, shimmer, t) {
+    const d = fit(cv), W = cv.width, H = cv.height, x = cv.getContext('2d');
+    const cell = 6 * d, cols = Math.ceil(W / cell), rows = Math.ceil(H / cell);
+    const px = sample(src, cols, rows);
+    x.fillStyle = '#0a0a09'; x.fillRect(0, 0, W, H);
+    x.font = `600 ${cell * 1.05}px 'JetBrains Mono', monospace`; x.textAlign = 'center'; x.textBaseline = 'middle';
+    const hash = v => { const h = Math.sin(v * 127.1 + 311.7) * 43758.5453; return h - Math.floor(h); };
+    const sec = t / 1000;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const [R, G, B, L] = px[r * cols + c];
+      // Matrix rain: each column has its own speed, start and trail; characters stay put, only brightness falls.
+      let rain = 0, head = false;
+      if (shimmer > 0) {
+        const speed = 7 + hash(c) * 9, trail = 6 + hash(c + 50) * 10;
+        const pos = (sec * speed + hash(c + 99) * (rows + trail) * 2) % (rows + trail);
+        const dist = pos - r;
+        if (dist >= 0 && dist < trail) { rain = 1 - dist / trail; head = dist < 1; }
+      }
+      const imgCh = RAMP[Math.min(RAMP.length - 1, L * RAMP.length | 0)];
+      const rainCh = NOISE[(hash(c * 31 + r * 17 + Math.floor(sec * 2 + hash(c) * 9) * 0.37) * NOISE.length) | 0];
+      const ch = shimmer >= 0.5 ? rainCh : imgCh;
+      if (ch === ' ') continue;
+      if (shimmer >= 0.5) {
+        if (rain <= 0) continue;
+        x.fillStyle = head ? '#FF9A3C' : `rgba(225,222,215,${(rain * 0.75 * shimmer).toFixed(3)})`;
+      } else {
+        const k = 0.55 + L * 0.6, a = 1 - shimmer * 2 + rain * shimmer;
+        x.fillStyle = `rgba(${Math.min(255, R * k + 40)},${Math.min(255, G * k + 40)},${Math.min(255, B * k + 40)},${Math.min(1, a).toFixed(3)})`;
+      }
+      x.fillText(ch, c * cell + cell / 2, r * cell + cell / 2);
+    }
+    if (reveal > 0) {
+      const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+      const s = Math.max(W / sw, H / sh), w = sw * s, h = sh * s, edge = Math.round(H * reveal);
+      x.save(); x.beginPath(); x.rect(0, 0, W, edge); x.clip();
+      x.drawImage(src, (W - w) / 2, (H - h) / 2, w, h); x.restore();
+      if (reveal < 1) { x.fillStyle = '#FF9A3C'; x.fillRect(0, edge - d, W, d); }
+    }
+  }
+
+  // Background: a faint character raster under a warm glow, fading out downwards.
+  function drawBg(cv, t) {
+    const d = fit(cv), W = cv.width, H = cv.height, x = cv.getContext('2d');
+    x.clearRect(0, 0, W, H);
+    const g = x.createRadialGradient(W * .3, -H * .1, 0, W * .3, -H * .1, H * 1.1);
+    g.addColorStop(0, 'rgba(255,154,60,.20)'); g.addColorStop(1, 'rgba(255,154,60,0)');
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const cell = 11 * d; x.font = `${cell * .8}px 'JetBrains Mono', monospace`; x.textAlign = 'center'; x.textBaseline = 'middle';
+    for (let r = 0; r * cell < H; r++) for (let c = 0; c * cell < W; c++) {
+      const fade = Math.pow(1 - r * cell / H, 2.2);
+      const v = (Math.sin(c * .55 + t / 1800) + Math.sin(r * .7 - t / 2300) + Math.sin((c + r) * .3 + t / 3100)) / 3;
+      const a = fade * (0.05 + Math.max(0, v) * 0.16);
+      if (a < 0.02) continue;
+      x.fillStyle = `rgba(230,225,215,${a})`;
+      x.fillText(v > .45 ? '+' : v > .2 ? '·' : '.', c * cell + cell / 2, r * cell + cell / 2);
+    }
+  }
+
+  // Text decodes in from ASCII noise, left to right.
+  function decode(el, dur = 520) {
+    const final = el.dataset.final ??= el.textContent, t0 = performance.now();
+    const step = now => {
+      const p = Math.min(1, (now - t0) / dur), n = final.length;
+      el.textContent = [...final].map((ch, i) => ch === ' ' || i < p * n ? ch : NOISE[Math.random() * NOISE.length | 0]).join('');
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  function pillTabs(root, sel, pillSel) {
+    const items = [...root.querySelectorAll(sel)], pill = root.querySelector(pillSel);
+    items.forEach((it, i) => it.onclick = () => {
+      items.forEach(o => o.classList.toggle('on', o === it));
+      pill.style.transform = `translateX(${i * 100}%)`;
+    });
+  }
+
+  let run = 0;
+  async function start() {
+    const id = ++run, t0 = performance.now();
+    const A = document.getElementById('rasterA'), B = document.getElementById('rasterB');
+    pillTabs(A, '.tb', '.tabs .pill'); pillTabs(B, '.sg', '.seg .pill');
+    document.querySelectorAll('.raster [data-decode]').forEach((el, i) => setTimeout(() => decode(el), 120 * i));
+    const rows = [...A.querySelectorAll('.row[data-prog]')].map(r => ({
+      r, p: +r.dataset.prog, sp: +r.dataset.speed, cv: r.querySelector('canvas'),
+      bar: r.querySelector('.bar i'), pct: r.querySelector('.pct')
+    }));
+    for (const o of rows) o.src = (await loadImg(o.cv.dataset.img)) || fallback(+o.cv.dataset.seed);
+    const pv = document.getElementById('sharePrev'), title = document.getElementById('shareTitle');
+    const pvSrc = (await loadImg(pv.dataset.img)) || fallback(3);
+    let titled = false, lastT = 0;
+    const bgs = [...document.querySelectorAll('.raster canvas.bgr')];
+    const frame = now => {
+      if (id !== run) return;
+      const t = (now - t0) % 8000;
+      if (t < lastT) titled = false;
+      lastT = t;
+      bgs.forEach(c => drawBg(c, now));
+      for (const o of rows) {
+        // Slow demo progress; wraps around so the ASCII-to-image reveal keeps replaying.
+        o.p += o.sp * 0.05;
+        if (o.p > 1.15) o.p = 0;
+        const p = Math.min(1, o.p);
+        drawAscii(o.cv, o.src, p, 0, now);
+        o.bar.style.width = (p * 100).toFixed(1) + '%';
+        o.pct.textContent = Math.round(p * 100) + '%';
+      }
+      // Share preview: 2.8s rain, 0.6s settle into the image's ASCII, then a 0.9s reveal.
+      const sh = t < 2800 ? 1 : Math.max(0, 1 - (t - 2800) / 600);
+      const rv = t < 3600 ? 0 : Math.min(1, (t - 3600) / 900);
+      drawAscii(pv, pvSrc, rv, sh, now);
+      if (t > 3000 && !titled) { titled = true; title.style.visibility = 'visible'; decode(title); }
+      if (!titled) title.style.visibility = 'hidden';
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+  document.getElementById('replay').onclick = () => {
+    document.querySelectorAll('.row[data-prog]').forEach(r => r.dataset.prog = r.dataset.prog);
+    start();
+  };
+  (document.fonts?.ready ?? Promise.resolve()).then(start);
+})();
+</script>
+</body>
+</html>
