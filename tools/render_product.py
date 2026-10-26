@@ -26,7 +26,7 @@ def font(name, size):
     return ImageFont.truetype(str(FONTS / name), size)
 
 
-def raster(img, cell, height, seed=7):
+def raster(img, cell, height, seed=7, avoid=()):
     """Slate canvas with Glyph's character raster, a band that fades out downwards."""
     rnd = random.Random(seed)
     w, _ = img.size
@@ -36,7 +36,7 @@ def raster(img, cell, height, seed=7):
     for y in range(0, height, cell):
         k = (1 - y / height) ** 1.4
         for x in range(0, w, cell):
-            if rnd.random() > 0.55 * k:
+            if rnd.random() > 0.55 * k or any(x0 <= x <= x1 and y0 <= y <= y1 for x0, y0, x1, y1 in avoid):
                 continue
             ch = NOISE[1 + min(len(NOISE) - 2, int(k * (len(NOISE) - 1) * rnd.uniform(0.3, 1.1)))]
             hot = rnd.random() < 0.05
@@ -90,13 +90,10 @@ def hero(shots):
     img = Image.new("RGBA", (W, H), CANVAS + (255,))
     glow(img, (300, 0), 560, ACCENT, 40)
     glow(img, (1750, 560), 640, ACCENT, 22)
-    raster(img, 30, 560)
+    # The mark itself is ASCII art, so the raster keeps clear of it.
+    raster(img, 30, 560, avoid=[(110, 150, 470, 420)])
     d = ImageDraw.Draw(img)
-
-    tile = Image.new("RGBA", (190, 190), (0, 0, 0, 0))
-    ImageDraw.Draw(tile).rounded_rectangle((0, 0, 189, 189), 46, fill=BLACK + (255,), outline=LINE + (255,), width=2)
-    tile.alpha_composite(render_mark(190, 0.74, background=False))
-    drop(img, tile, (140, 210), blur=24, alpha=150)
+    img.alpha_composite(render_mark(340, 0.9, background=False), (118, 112))
     d.text((132, 440), "Hamstr", font=font("inter_600.ttf", 168), fill=INK)
     d.text((142, 668), "Share a link. Keep the file.", font=font("inter_500.ttf", 58), fill=INK)
     sub = font("inter_400.ttf", 38)
