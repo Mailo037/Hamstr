@@ -1,5 +1,6 @@
 package app.hamstr.ui.components
 
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -61,8 +62,9 @@ fun AccentPicker(presets: List<AccentPreset>, accent: Int, onPick: (Int) -> Unit
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     Column {
+        val scroll = rememberScrollState()
         Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll).padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             presets.forEach { p ->

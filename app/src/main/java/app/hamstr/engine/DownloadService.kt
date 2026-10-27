@@ -1,5 +1,6 @@
 package app.hamstr.engine
 
+import java.util.UUID
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -140,13 +141,32 @@ class DownloadService : Service() {
             }
             currentCoroutineContext().ensureActive()
             if (res.exitCode != 0) error(res.err.lines().lastOrNull { it.isNotBlank() } ?: "yt-dlp exit ${res.exitCode}")
-            val path = pathFile.takeIf { it.exists() }?.readLines()?.lastOrNull { it.isNotBlank() }?.trim()
+            val entries = pathFile.takeIf { it.exists() }?.readLines().orEmpty().filter { it.isNotBlank() }.map(::finishedEntry)
+            val main = entries.firstOrNull()
+            val path = main?.path
             val file = path?.let(::File)
             val uri = file?.let { scan(it) }
             currentCoroutineContext().ensureActive()
+            // A playlist becomes a group: this task keeps the first entry, the rest join it.
+            val grouped = entries.size > 1
+            val groupTitle = if (grouped) entries.firstNotNullOfOrNull { it.playlist } ?: task.title else null
             DownloadStore.update(task.id) {
                 if (it.status != Status.Running) it else it.copy(status = Status.Done, progress = 1f, filePath = path, contentUri = uri?.toString(),
-                    sizeBytes = file?.length() ?: 0, speed = "", etaSec = -1, finishedAt = System.currentTimeMillis())
+                    sizeBytes = file?.length() ?: 0, speed = "", etaSec = -1, finishedAt = System.currentTimeMillis(),
+                    title = if (grouped) main?.title ?: it.title else it.title,
+                    thumbnail = if (grouped) main?.thumbnail ?: it.thumbnail else it.thumbnail,
+                    group = if (grouped) task.id else null, groupTitle = groupTitle)
+            }
+            if (grouped && DownloadStore.get(task.id)?.status == Status.Done) {
+                val base = DownloadStore.get(task.id) ?: task
+                entries.drop(1).forEachIndexed { i, e ->
+                    val f = File(e.path)
+                    DownloadStore.add(base.copy(
+                        id = UUID.randomUUID().toString(), title = e.title ?: f.nameWithoutExtension, thumbnail = e.thumbnail,
+                        durationSec = e.duration, filePath = e.path, contentUri = scan(f)?.toString(), sizeBytes = f.length(),
+                        createdAt = base.createdAt + i + 1,
+                    ))
+                }
             }
             if (DownloadStore.get(task.id)?.status == Status.Done) {
                 Engine.clearTemporaryFiles(task)
@@ -166,6 +186,14 @@ class DownloadService : Service() {
                 if (DownloadStore.get(task.id)?.status == Status.Failed) notifyFailed(task.id)
             }
         }
+    }
+
+    private data class Finished(val path: String, val title: String?, val thumbnail: String?, val duration: Int, val playlist: String?)
+
+    private fun finishedEntry(line: String): Finished {
+        val o = runCatching { JSONObject(line) }.getOrNull() ?: return Finished(line.trim(), null, null, 0, null)
+        fun string(key: String) = if (o.isNull(key)) null else o.optString(key).takeIf { it.isNotBlank() }
+        return Finished(string("filepath") ?: "", string("title"), string("thumbnail"), o.optDouble("duration", 0.0).toInt(), string("playlist_title"))
     }
 
     private fun updateMetadata(id: String, text: String) {

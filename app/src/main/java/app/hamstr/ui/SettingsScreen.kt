@@ -1,5 +1,11 @@
 package app.hamstr.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import app.hamstr.ui.components.searchHighlight
+import app.hamstr.ui.components.LocalSettingHighlight
+import app.hamstr.ui.components.SearchField
+import androidx.compose.foundation.gestures.Orientation
+import app.hamstr.ui.components.edgeFade
 import android.content.Intent
 import android.net.Uri
 import android.text.format.DateUtils
@@ -95,7 +101,8 @@ private enum class Page(val title: String, val icon: Int) {
 @Composable
 fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit) {
     var page by rememberSaveable { mutableStateOf<Page?>(null) }
-    BackHandler(enabled = page != null) { page = null }
+    var highlight by rememberSaveable { mutableStateOf<String?>(null) }
+    BackHandler(enabled = page != null) { page = null; highlight = null }
     AnimatedContent(
         targetState = page,
         transitionSpec = {
@@ -109,26 +116,40 @@ fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit) {
         },
         label = "settingsPage",
     ) { p ->
-        if (p == null) Root(contentPadding) { page = it }
-        else SubPage(p, contentPadding, onUpdate, onBack = { page = null })
+        if (p == null) Root(contentPadding) { target, setting -> page = target; highlight = setting }
+        else CompositionLocalProvider(LocalSettingHighlight provides highlight) {
+            SubPage(p, contentPadding, onUpdate, onBack = { page = null; highlight = null })
+        }
     }
 }
 
 @Composable
-private fun Root(contentPadding: PaddingValues, open: (Page) -> Unit) {
+private fun Root(contentPadding: PaddingValues, open: (Page, String?) -> Unit) {
     val s by Prefs.settings.collectAsState()
     val engine by Engine.state.collectAsState()
+    val scroll = rememberScrollState()
+    var query by rememberSaveable { mutableStateOf("") }
+    val results = remember(query) { searchSettings(query) }
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .edgeFade(scroll, Orientation.Vertical, insets = contentPadding)
+            .verticalScroll(scroll)
             .padding(contentPadding)
             .padding(horizontal = 12.dp),
     ) {
         DecodeText("Settings", style = Hamstr.type.title, modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp))
-        Spacer(Modifier.height(14.dp))
-        Group {
-            Page.entries.forEach { p -> CategoryRow(p, summary(p, s, engine)) { open(p) } }
+        Spacer(Modifier.height(10.dp))
+        SearchField(query, { query = it }, "Search settings")
+        Spacer(Modifier.height(12.dp))
+        if (query.isNotBlank()) {
+            if (results.isEmpty()) {
+                Txt("Nothing matches \u201c${query.trim()}\u201d", color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp))
+            } else Group {
+                results.forEach { r -> CategoryRow(r.page, r.page.title, title = r.title) { open(r.page, r.title) } }
+            }
+        } else Group {
+            Page.entries.forEach { p -> CategoryRow(p, summary(p, s, engine)) { open(p, null) } }
         }
     }
 }
@@ -150,7 +171,7 @@ private fun summary(p: Page, s: Settings, engine: EngineState): String = when (p
 }
 
 @Composable
-private fun CategoryRow(p: Page, summary: String, onClick: () -> Unit) {
+private fun CategoryRow(p: Page, summary: String, title: String = p.title, onClick: () -> Unit) {
     val c = Hamstr.colors
     Row(
         Modifier
@@ -165,7 +186,7 @@ private fun CategoryRow(p: Page, summary: String, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Txt(p.title, style = Hamstr.type.bodyMedium)
+            Txt(title, style = Hamstr.type.bodyMedium)
             Spacer(Modifier.height(2.dp))
             Txt(summary, style = Hamstr.type.small, color = c.ghost, maxLines = 1)
         }
@@ -185,6 +206,7 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
     var width by remember { mutableIntStateOf(1) }
     var raw by remember { mutableFloatStateOf(0f) }
     val stretch by rememberVelocityStretch({ offset.value }, sensitivity = 0.00004f, max = 0.05f)
+    val scroll = rememberScrollState()
     Column(
         Modifier
             .fillMaxSize()
@@ -213,7 +235,8 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
                     onDragCancel = { scope.launch { offset.animateTo(0f) } },
                 )
             }
-            .verticalScroll(rememberScrollState())
+            .edgeFade(scroll, Orientation.Vertical, insets = contentPadding)
+            .verticalScroll(scroll)
             .padding(contentPadding)
             .padding(horizontal = 12.dp),
     ) {
@@ -239,19 +262,20 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
 private fun Label(text: String, modifier: Modifier = Modifier) = Txt(text, style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = modifier)
 
 @Composable
-private fun Block(content: @Composable ColumnScope.() -> Unit) =
-    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+private fun Block(label: String, content: @Composable ColumnScope.() -> Unit) =
+    Column(Modifier.searchHighlight(label).padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Label(label)
+        content()
+    }
 
 @Composable
 private fun AppearancePage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        Block {
-            Label("Accent colour")
+        Block("Accent colour") {
             AccentPicker(ACCENTS, s.accent) { a -> Prefs.edit { it.copy(accent = a) } }
         }
-        Block {
-            Label("Background")
+        Block("Background") {
             Segmented(Base.entries.toList(), s.base, { it.label }, { b -> Prefs.edit { it.copy(base = b) } })
         }
     }
@@ -289,20 +313,16 @@ private fun MotionPage() {
 private fun DownloadsPage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        Block {
-            Label("Default when sharing")
+        Block("Default when sharing") {
             Segmented(listOf(Mode.Video, Mode.Audio), s.mode, { if (it == Mode.Video) "Video" else "Audio" }, { m -> Prefs.edit { it.copy(mode = m) } })
         }
-        Block {
-            Label("Video quality")
+        Block("Video quality") {
             Chips(Prefs.heights, s.height, ::heightLabel) { h -> Prefs.edit { it.copy(height = h) } }
         }
-        Block {
-            Label("Video format")
+        Block("Video format") {
             Chips(Prefs.containers, s.container, { it }) { f -> Prefs.edit { it.copy(container = f) } }
         }
-        Block {
-            Label("Audio format")
+        Block("Audio format") {
             Chips(Prefs.audioFormats, s.audioFormat, { it }) { f -> Prefs.edit { it.copy(audioFormat = f) } }
         }
     }
@@ -320,8 +340,7 @@ private fun DownloadsPage() {
 private fun QueuePage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        Block {
-            Label("Parallel downloads")
+        Block("Parallel downloads") {
             Segmented(listOf(1, 2, 3), s.parallel, { it.toString() }, { n -> Prefs.edit { it.copy(parallel = n) } })
         }
         SettingRow("Save location", subtitle = Engine.outputDir.absolutePath.replace("/storage/emulated/0", "Internal storage"))
@@ -424,4 +443,41 @@ private fun AboutPage(onUpdate: () -> Unit) {
 @Composable
 private fun FxRow(title: String, subtitle: String, on: Boolean, set: (Boolean) -> Unit) {
     SettingRow(title, subtitle = subtitle, onClick = { set(!on) }) { HSwitch(on, set) }
+}
+
+private class SettingEntry(val title: String, val page: Page, val words: String)
+
+private val SETTINGS_INDEX = listOf(
+    SettingEntry("Accent colour", Page.Appearance, "color colour farbe accent hue theme pink orange"),
+    SettingEntry("Background", Page.Appearance, "theme dark oled black cocoa graphite hintergrund"),
+    SettingEntry("Startup animation", Page.Motion, "intro splash start animation"),
+    SettingEntry("Hamster moods", Page.Motion, "blink wink munch hamster mark"),
+    SettingEntry("Stretchy motion", Page.Motion, "stretch deform drag speed animation"),
+    SettingEntry("Haptics", Page.Motion, "vibration haptic vibrate"),
+    SettingEntry("ASCII background", Page.Motion, "raster characters top"),
+    SettingEntry("ASCII thumbnails", Page.Motion, "characters thumbnails images"),
+    SettingEntry("Matrix rain", Page.Motion, "rain falling loading effect"),
+    SettingEntry("Decoding text", Page.Motion, "noise titles text effect"),
+    SettingEntry("Default when sharing", Page.Downloads, "mode video audio default share"),
+    SettingEntry("Video quality", Page.Downloads, "resolution 1080p 4k 720p qualitat qualität"),
+    SettingEntry("Video format", Page.Downloads, "container mp4 mkv webm"),
+    SettingEntry("Audio format", Page.Downloads, "opus m4a mp3 music musik"),
+    SettingEntry("Embed subtitles", Page.Downloads, "subtitles captions untertitel"),
+    SettingEntry("Instant stash", Page.Downloads, "quick instant share sheet direct"),
+    SettingEntry("Whole playlists", Page.Downloads, "playlist album"),
+    SettingEntry("Parallel downloads", Page.Queue, "parallel concurrent queue at once"),
+    SettingEntry("Save location", Page.Queue, "folder storage path speicher ordner"),
+    SettingEntry("Version", Page.Engine, "yt-dlp engine version"),
+    SettingEntry("Update automatically", Page.Engine, "yt-dlp update auto"),
+    SettingEntry("Source code", Page.About, "github code source"),
+    SettingEntry("Check on launch", Page.About, "app update release github"),
+    SettingEntry("Licenses", Page.About, "license open source gpl"),
+)
+
+private fun searchSettings(query: String): List<SettingEntry> {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return emptyList()
+    return SETTINGS_INDEX
+        .filter { e -> q.split(' ').all { w -> e.title.lowercase().contains(w) || e.words.contains(w) || e.page.title.lowercase().contains(w) } }
+        .sortedByDescending { it.title.lowercase().startsWith(q) }
 }

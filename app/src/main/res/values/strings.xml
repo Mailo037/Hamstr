@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sc_paste_short">Stash copied link</string>
+    <string name="sc_paste_long">Stash the link on the clipboard</string>
+    <string name="sc_add_short">Add link or file</string>
+    <string name="sc_add_long">Add a link or files from your phone</string>
+    <string name="sc_library_short">Library</string>
+    <string name="sc_library_long">Open your library</string>
+    <string name="widget_description">Downloads at a glance, paste a link in one tap</string>
+</resources>

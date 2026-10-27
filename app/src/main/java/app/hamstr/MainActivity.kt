@@ -1,5 +1,11 @@
 package app.hamstr
 
+import androidx.compose.ui.platform.LocalWindowInfo
+import kotlinx.coroutines.flow.MutableStateFlow
+import app.hamstr.ui.GroupSheet
+import androidx.activity.compose.rememberLauncherForActivityResult
+import app.hamstr.data.Importer
+import app.hamstr.ui.AddSheet
 import android.Manifest
 import android.content.ClipboardManager
 import android.content.Intent
@@ -91,6 +97,7 @@ import app.hamstr.ui.LibraryScreen
 import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.StashScreen
+import app.hamstr.ui.DownloadPreview
 import app.hamstr.ui.UpdateBanner
 import app.hamstr.ui.UpdateSheet
 import app.hamstr.ui.release
@@ -116,7 +123,22 @@ class MainActivity : ComponentActivity() {
         if (DownloadStore.tasks.value.any { it.status == Status.Queued }) DownloadService.send(this, DownloadService.ACTION_START)
         Updater.checkOnLaunch(this)
         addOnPictureInPictureModeChangedListener { inPip.value = it.isInPictureInPictureMode }
+        if (savedInstanceState == null) pendingAction.value = intent?.action?.takeIf { it in ACTIONS }
         setContent { HamstrTheme { App(inPip.value) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.action?.takeIf { it in ACTIONS }?.let { pendingAction.value = it }
+    }
+
+    companion object {
+        // Launcher shortcuts and the widget's buttons.
+        const val ACTION_PASTE = "app.hamstr.action.PASTE"
+        const val ACTION_ADD = "app.hamstr.action.ADD"
+        const val ACTION_LIBRARY = "app.hamstr.action.LIBRARY"
+        private val ACTIONS = setOf(ACTION_PASTE, ACTION_ADD, ACTION_LIBRARY)
+        internal val pendingAction = MutableStateFlow<String?>(null)
     }
 
     private val inPip = androidx.compose.runtime.mutableStateOf(false)
@@ -155,12 +177,32 @@ private fun App(inPip: Boolean) {
     val engine by Engine.state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(Tab.Stash) }
     val fx = LocalFx.current
-    var introDone by rememberSaveable { mutableStateOf(!fx.intro) }
+    // Shortcuts and the widget are for getting something done fast, so they skip the intro.
+    var introDone by rememberSaveable { mutableStateOf(!fx.intro || MainActivity.pendingAction.value != null) }
     var sheetUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     var hint by remember { mutableStateOf<String?>(null) }
-    val playing by Playback.current.collectAsState()
     val scope = rememberCoroutineScope()
+    var addSheet by rememberSaveable { mutableStateOf(false) }
+    var groupFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var clipLink by remember { mutableStateOf<String?>(null) }
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            hint = if (uris.size == 1) "Bringing it in …" else "Bringing ${uris.size} files in …"
+            val n = Importer.import(context, uris)
+            hint = when {
+                n == uris.size -> if (n == 1) "Added to the stash" else "$n files added"
+                n == 0 -> "Couldn't read that file"
+                else -> "$n of ${uris.size} files added"
+            }
+        }
+    }
+    fun clipboardLink(): String? {
+        val cm = context.getSystemService(ClipboardManager::class.java)
+        val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+        return URL.find(text)?.value
+    }
+    val playing by Playback.current.collectAsState()
     val play: (DownloadTask) -> Unit = { t -> scope.launch { Playback.open(context, t) } }
     val settings by Prefs.settings.collectAsState()
     val update by Updater.state.collectAsState()
@@ -174,6 +216,23 @@ private fun App(inPip: Boolean) {
     val padding = PaddingValues(top = top + 8.dp, bottom = bottom + 84.dp + if (playing != null) 72.dp else 0.dp)
 
     LaunchedEffect(hint) { if (hint != null) { kotlinx.coroutines.delay(2600); hint = null } }
+
+    // The clipboard is only readable once the window has focus.
+    val action by MainActivity.pendingAction.collectAsState()
+    val focused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(action, focused) {
+        when (action) {
+            MainActivity.ACTION_LIBRARY -> tab = Tab.Library
+            MainActivity.ACTION_ADD -> if (focused) { tab = Tab.Stash; clipLink = clipboardLink(); addSheet = true } else return@LaunchedEffect
+            MainActivity.ACTION_PASTE -> if (focused) {
+                tab = Tab.Stash
+                val url = clipboardLink()
+                if (url != null) sheetUrl = url else { hint = "No link in the clipboard"; clipLink = null; addSheet = true }
+            } else return@LaunchedEffect
+            else -> return@LaunchedEffect
+        }
+        MainActivity.pendingAction.value = null
+    }
 
     Box(Modifier.fillMaxSize().background(c.canvas)) {
         RasterBackground(Modifier.fillMaxWidth().height(top + 280.dp))
@@ -190,15 +249,14 @@ private fun App(inPip: Boolean) {
                 Tab.Stash -> StashScreen(
                     tasks, engine, padding,
                     onAdd = {
-                        val cm = context.getSystemService(ClipboardManager::class.java)
-                        val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-                        val url = URL.find(text)?.value
+                        val url = clipboardLink()
                         if (url != null) sheetUrl = url else hint = "No link in the clipboard"
                     },
+                    onOpenAdd = { clipLink = clipboardLink(); addSheet = true },
                     onMenu = { menuFor = it },
                     onPlay = play,
                 )
-                Tab.Library -> LibraryScreen(tasks, padding, onMenu = { menuFor = it }, onPlay = play)
+                Tab.Library -> LibraryScreen(tasks, padding, onMenu = { menuFor = it }, onPlay = play, onGroup = { groupFor = it })
                 Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true })
             }
         }
@@ -224,6 +282,16 @@ private fun App(inPip: Boolean) {
             lastOffered?.let { r -> UpdateBanner(r, onOpen = { updateSheet = true }, onDismiss = { Updater.dismiss(r) }) }
         }
 
+        Overlay(visible = groupFor != null, onDismiss = { groupFor = null }) {
+            groupFor?.let { g -> GroupSheet(g, onPlay = { groupFor = null; play(it) }, onMenu = { menuFor = it }) }
+        }
+        Overlay(visible = addSheet, onDismiss = { addSheet = false }) {
+            AddSheet(
+                clipboardLink = clipLink,
+                onLink = { url -> addSheet = false; sheetUrl = url },
+                onFiles = { addSheet = false; pickFiles.launch(arrayOf("*/*")) },
+            )
+        }
         Overlay(visible = sheetUrl != null, onDismiss = { sheetUrl = null }) {
             sheetUrl?.let { url ->
                 ShareSheet(
@@ -251,9 +319,12 @@ private fun App(inPip: Boolean) {
 }
 
 @Composable
-private fun TaskMenu(t: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit) {
+private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
+    // The menu stays open while the download moves on, so it follows the live task.
+    val tasks by DownloadStore.tasks.collectAsState()
+    val t = tasks.firstOrNull { it.id == task.id } ?: task
     val file = t.filePath?.let(::File)?.takeIf { it.exists() }
     Column(
         Modifier
@@ -266,6 +337,10 @@ private fun TaskMenu(t: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: (
     ) {
         Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
         Spacer(Modifier.height(12.dp))
+        if (t.status != Status.Done && t.status != Status.Canceled) {
+            DownloadPreview(t, Modifier.padding(horizontal = 4.dp))
+            Spacer(Modifier.height(12.dp))
+        }
         Txt(t.title, style = Hamstr.type.section, maxLines = 2, modifier = Modifier.padding(horizontal = 12.dp))
         Spacer(Modifier.height(2.dp))
         Txt(t.url, style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp))

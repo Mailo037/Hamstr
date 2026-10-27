@@ -1,5 +1,17 @@
 package app.hamstr.ui
 
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.Alignment
+import app.hamstr.R
+import app.hamstr.ui.components.IconButton
+import app.hamstr.ui.components.SearchField
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.gestures.Orientation
+import app.hamstr.ui.components.edgeFade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -45,20 +57,27 @@ private enum class Filter(val label: String) { All("All"), Video("Video"), Audio
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(tasks: List<DownloadTask>, contentPadding: PaddingValues, onMenu: (DownloadTask) -> Unit, onPlay: (DownloadTask) -> Unit) {
+fun LibraryScreen(tasks: List<DownloadTask>, contentPadding: PaddingValues, onMenu: (DownloadTask) -> Unit, onPlay: (DownloadTask) -> Unit, onGroup: (String) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     var filter by rememberSaveable { mutableStateOf(Filter.All) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val q = query.trim().lowercase()
     val done = tasks.filter { it.status == Status.Done }.filter {
+        q.isEmpty() || listOfNotNull(it.title, it.source, it.groupTitle).any { s -> s.lowercase().contains(q) }
+    }.filter {
         when (filter) {
             Filter.All -> true
             Filter.Video -> it.choice.mode != Mode.Audio
             Filter.Audio -> it.choice.mode == Mode.Audio
         }
     }
+    val gridState = rememberLazyGridState()
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize(),
+        state = gridState,
+        modifier = Modifier.fillMaxSize().edgeFade(gridState, Orientation.Vertical, insets = contentPadding),
         contentPadding = PaddingValues(
             start = 12.dp, end = 12.dp,
             top = contentPadding.calculateTopPadding(),
@@ -69,17 +88,50 @@ fun LibraryScreen(tasks: List<DownloadTask>, contentPadding: PaddingValues, onMe
     ) {
         item(span = { GridItemSpan(2) }) {
             Column(Modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
-                Txt("Library", style = Hamstr.type.title)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Txt("Library", style = Hamstr.type.title, modifier = Modifier.weight(1f))
+                    IconButton(
+                        if (searching) R.drawable.ic_close else R.drawable.ic_search,
+                        if (searching) "Close search" else "Search",
+                        { searching = !searching; if (!searching) query = "" },
+                        tint = c.ink,
+                    )
+                }
+                AnimatedVisibility(searching, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                    SearchField(query, { query = it }, "Search your stash", Modifier.padding(top = 12.dp), autoFocus = true)
+                }
                 Spacer(Modifier.height(14.dp))
                 Segmented(Filter.entries.toList(), filter, { it.label }, { filter = it }, background = c.overlay)
             }
         }
         if (done.isEmpty()) {
             item(span = { GridItemSpan(2) }) {
-                Txt("Everything you finish stashing ends up here.", color = c.muted, modifier = Modifier.padding(6.dp))
+                Txt(
+                    if (q.isNotEmpty()) "Nothing in the stash matches \u201c${query.trim()}\u201d" else "Everything you finish stashing ends up here.",
+                    color = c.muted, modifier = Modifier.padding(6.dp),
+                )
             }
         }
-        items(done, key = { it.id }) { t ->
+        items(shelves(done), key = { it.key }) { shelf ->
+            if (shelf is Shelf.Group) {
+                Column(
+                    Modifier
+                        .animateItem(fadeInSpec = tween(320), placementSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1)), fadeOutSpec = tween(160))
+                        .clip(RoundedCornerShape(14.dp))
+                        .combinedClickable(onClick = { onGroup(shelf.id) }, onLongClick = { onGroup(shelf.id) }),
+                ) {
+                    PlaylistFan(shelf.items, Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(7.dp))
+                    Txt(shelf.title, style = Hamstr.type.bodyMedium, maxLines = 2, modifier = Modifier.padding(horizontal = 2.dp))
+                    Spacer(Modifier.height(3.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 2.dp)) {
+                        Badge("${shelf.items.size} files", accent = true)
+                        Badge(formatBytes(shelf.items.sumOf { it.sizeBytes }))
+                    }
+                }
+                return@items
+            }
+            val t = (shelf as Shelf.One).task
             Column(
                 Modifier
                     .animateItem(fadeInSpec = tween(320), placementSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1)), fadeOutSpec = tween(160))

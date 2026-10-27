@@ -44,6 +44,9 @@ data class DownloadTask(
     val error: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val finishedAt: Long = 0,
+    // Files that arrived together (a playlist, a batch of imports) share a group.
+    val group: String? = null,
+    val groupTitle: String? = null,
 )
 
 /**
@@ -98,6 +101,7 @@ object DownloadStore {
         put("status", t.status.name); put("progress", t.progress.toDouble())
         put("filePath", t.filePath); put("contentUri", t.contentUri); put("size", t.sizeBytes)
         put("error", t.error); put("createdAt", t.createdAt); put("finishedAt", t.finishedAt)
+        put("group", t.group); put("groupTitle", t.groupTitle)
     }
 
     private fun fromJson(o: JSONObject) = DownloadTask(
@@ -123,6 +127,8 @@ object DownloadStore {
         error = o.optStringOrNull("error"),
         createdAt = o.optLong("createdAt"),
         finishedAt = o.optLong("finishedAt"),
+        group = o.optStringOrNull("group"),
+        groupTitle = o.optStringOrNull("groupTitle"),
     )
 
     private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }

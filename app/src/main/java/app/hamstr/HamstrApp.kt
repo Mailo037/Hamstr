@@ -1,5 +1,6 @@
 package app.hamstr
 
+import app.hamstr.widget.Widgets
 import android.app.Application
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.Prefs
@@ -15,5 +16,6 @@ class HamstrApp : Application() {
         DownloadService.channels(this)
         Engine.start(this)
         Updater.init(this)
+        Widgets.start(this)
     }
 }

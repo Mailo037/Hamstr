@@ -1,5 +1,13 @@
 package app.hamstr.ui
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.Orientation
+import app.hamstr.ui.components.edgeFade
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -88,6 +96,7 @@ fun StashScreen(
     engine: EngineState,
     contentPadding: PaddingValues,
     onAdd: () -> Unit,
+    onOpenAdd: () -> Unit,
     onMenu: (DownloadTask) -> Unit,
     onPlay: (DownloadTask) -> Unit,
 ) {
@@ -169,8 +178,11 @@ fun StashScreen(
                 color = if (armed) c.accent else c.ghost,
             )
         }
+        val listState = rememberLazyListState()
         LazyColumn(
-            Modifier.fillMaxSize().graphicsLayer { translationY = pull },
+            // The fade stays put while the list itself follows the pull.
+            Modifier.fillMaxSize().edgeFade(listState, Orientation.Vertical, insets = contentPadding).graphicsLayer { translationY = pull },
+            state = listState,
             contentPadding = contentPadding,
         ) {
             item(key = "header") {
@@ -178,7 +190,7 @@ fun StashScreen(
                     HamstrMark(34.dp, state = mark)
                     Spacer(Modifier.width(10.dp))
                     DecodeText("Hamstr", style = Hamstr.type.title, modifier = Modifier.weight(1f))
-                    IconButton(R.drawable.ic_add, "Link from clipboard", onAdd, tint = c.ink)
+                    IconButton(R.drawable.ic_add, "Add a link or file", onOpenAdd, tint = c.ink)
                 }
             }
             item(key = "hero") {
@@ -367,7 +379,7 @@ private fun EmptyState() {
         Spacer(Modifier.height(16.dp))
         Txt("The cheeks are still empty", style = Hamstr.type.section)
         Spacer(Modifier.height(6.dp))
-        Txt("Share a link from YouTube, Instagram, TikTok, SoundCloud … to Hamstr, copy it and tap +, or pull this screen down.", color = c.muted)
+        Txt("Share a link from YouTube, Instagram, TikTok, SoundCloud … to Hamstr, or tap + to paste a link or add files from your phone.", color = c.muted)
     }
 }
 
@@ -394,5 +406,57 @@ private fun ago(ts: Long): String {
         m < 60 -> "$m min ago"
         m < 60 * 24 -> "${m / 60} h ago"
         else -> "${m / 60 / 24} d ago"
+    }
+}
+
+/**
+ * A download, big: the thumbnail resolves out of falling characters as the file fills up,
+ * with the percentage on top. Shown when a row that is still downloading is tapped.
+ */
+@Composable
+fun DownloadPreview(t: DownloadTask, modifier: Modifier = Modifier) {
+    val c = Hamstr.colors
+    val bitmap = rememberBitmap(t.thumbnail, 480)
+    val progress by animateFloatAsState(t.progress, spring(stiffness = Spring.StiffnessLow), label = "previewProgress")
+    val moving = t.status == Status.Running || t.status == Status.Queued
+    Box(modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp))) {
+        AsciiImage(
+            bitmap = bitmap,
+            reveal = progress,
+            // Matrix columns keep running through the part that isn't there yet.
+            rain = when {
+                bitmap == null -> if (moving) 1f else 0.6f
+                moving -> 0.3f
+                else -> 0f
+            },
+            animate = moving,
+            cell = 7.dp,
+            modifier = Modifier.matchParentSize(),
+        )
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.78f))))
+        Badge(
+            when (t.status) {
+                Status.Queued -> "queued"
+                Status.Running -> "downloading"
+                Status.Paused -> "paused"
+                Status.Failed -> "failed"
+                else -> t.status.name
+            },
+            accent = t.status == Status.Running,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(10.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Txt(
+                "${(progress * 100).toInt()}%",
+                style = Hamstr.type.mono.copy(fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
+                color = if (t.status == Status.Failed) c.red else Color.White,
+            )
+            Txt(statusLine(t), style = Hamstr.type.small, color = Color.White.copy(alpha = 0.75f), maxLines = 1)
+        }
     }
 }

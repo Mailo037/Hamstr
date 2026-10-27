@@ -221,7 +221,8 @@ object Engine {
             addOption("-P", outputDir.absolutePath)
             addOption("-P", "temp:" + File(tempDir, task.id).absolutePath)
             addOption("-o", "%(title).150B [%(id)s].%(ext)s")
-            addCommands(listOf("--print-to-file", "after_move:filepath", pathFile(task).absolutePath))
+            // One JSON line per finished file; a playlist leaves one per entry.
+            addCommands(listOf("--print-to-file", "after_move:%(.{filepath,title,thumbnail,duration,playlist_title})j", pathFile(task).absolutePath))
             // Read metadata from this extraction instead of starting a second process first.
             addOption("--print", "before_dl:$METADATA_PREFIX%(.{title,thumbnail,extractor_key,duration})j")
             addOption("--no-simulate")

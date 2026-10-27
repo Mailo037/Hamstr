@@ -2,4 +2,11 @@
 <resources>
     <color name="canvas">#FF141414</color>
     <color name="icon_background">#FF0A0A09</color>
+    <color name="shortcut_background">#FF1E1E1E</color>
+    <color name="widget_surface">#FF1E1E1E</color>
+    <color name="widget_raised">#FF2D2D2D</color>
+    <color name="widget_line">#FF363636</color>
+    <color name="widget_ink">#FFEEEEEE</color>
+    <color name="widget_ghost">#FF8A8A8A</color>
+    <color name="widget_accent">#FFFF9A3C</color>
 </resources>

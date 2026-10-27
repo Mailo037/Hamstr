@@ -319,6 +319,7 @@ fun SettingRow(
     Row(
         modifier
             .fillMaxWidth()
+            .searchHighlight(title)
             .clip(RoundedCornerShape(Radii.row))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 12.dp, vertical = 12.dp),

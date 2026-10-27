@@ -1,5 +1,7 @@
 package app.hamstr.ui
 
+import androidx.compose.foundation.gestures.Orientation
+import app.hamstr.ui.components.edgeFade
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -236,7 +238,8 @@ private fun PickRow(title: String, value: String, expanded: Boolean, onToggle: (
 @Composable
 fun <T> Chips(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
     val c = Hamstr.colors
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    val scroll = rememberScrollState()
+    Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEach { o ->
             val on = o == selected
             Box(

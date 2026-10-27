@@ -1,5 +1,7 @@
 package app.hamstr.ui
 
+import androidx.compose.foundation.gestures.Orientation
+import app.hamstr.ui.components.edgeFade
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -117,15 +119,16 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
         }
         if (release != null && release.notes.isNotBlank()) {
             Spacer(Modifier.height(16.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(c.surface)
-                    .heightIn(max = 240.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(14.dp),
-            ) { Txt(plainNotes(release.notes), style = Hamstr.type.body, color = c.muted) }
+            val scroll = rememberScrollState()
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surface)) {
+                Box(
+                    Modifier
+                        .heightIn(max = 240.dp)
+                        .edgeFade(scroll, Orientation.Vertical, length = 22.dp)
+                        .verticalScroll(scroll)
+                        .padding(14.dp),
+                ) { Txt(plainNotes(release.notes), style = Hamstr.type.body, color = c.muted) }
+            }
         }
         Spacer(Modifier.height(16.dp))
         AnimatedContent(state, contentKey = { it.javaClass }, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "updateStatus") { s ->
