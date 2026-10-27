@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.data.DownloadEngine
 import androidx.compose.runtime.CompositionLocalProvider
 import app.hamstr.ui.components.searchHighlight
 import app.hamstr.ui.components.LocalSettingHighlight
@@ -94,7 +95,7 @@ private enum class Page(val title: String, val icon: Int) {
     Motion("Motion & effects", R.drawable.ic_auto_awesome),
     Downloads("Downloads", R.drawable.ic_download),
     Queue("Queue & storage", R.drawable.ic_folder_open),
-    Engine("yt-dlp", R.drawable.ic_code),
+    Engine("Engine", R.drawable.ic_code),
     About("About", R.drawable.ic_info),
 }
 
@@ -163,7 +164,7 @@ private fun summary(p: Page, s: Settings, engine: EngineState): String = when (p
     Page.Downloads -> if (s.mode == Mode.Audio) "Audio · ${s.audioFormat}" else "Video · ${heightLabel(s.height)} · ${s.container}"
     Page.Queue -> "${s.parallel} at once · Download/Hamstr"
     Page.Engine -> when (engine) {
-        is EngineState.Ready -> engine.version + if (s.autoUpdate) " · auto-update" else ""
+        is EngineState.Ready -> (if (s.engine == DownloadEngine.Cheek) "Cheek + yt-dlp " else "yt-dlp ") + engine.version
         EngineState.Starting -> "starting …"
         is EngineState.Broken -> "error"
     }
@@ -357,6 +358,22 @@ private fun EnginePage() {
     val updating by Engine.updating.collectAsState()
     var updateMsg by remember { mutableStateOf<String?>(null) }
     Group {
+        Block("Download engine") {
+            Segmented(DownloadEngine.entries.toList(), s.engine, { it.label }, { e -> Prefs.edit { it.copy(engine = e) } })
+            Txt(
+                when (s.engine) {
+                    DownloadEngine.YtDlp -> "yt-dlp finds the streams and downloads them, one connection at a time."
+                    DownloadEngine.Cheek -> "yt-dlp finds the streams, Cheek (Rust) fetches them over many connections at once. " +
+                        "Playlists, subtitles and custom formats still go through yt-dlp."
+                },
+                style = Hamstr.type.small, color = c.ghost,
+            )
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+    Label("yt-dlp", Modifier.padding(horizontal = 6.dp))
+    Spacer(Modifier.height(8.dp))
+    Group {
         SettingRow(
             "Version",
             subtitle = when (val e = engine) {
@@ -467,6 +484,7 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry("Whole playlists", Page.Downloads, "playlist album"),
     SettingEntry("Parallel downloads", Page.Queue, "parallel concurrent queue at once"),
     SettingEntry("Save location", Page.Queue, "folder storage path speicher ordner"),
+    SettingEntry("Download engine", Page.Engine, "cheek rust engine yt-dlp speed fast parallel connections"),
     SettingEntry("Version", Page.Engine, "yt-dlp engine version"),
     SettingEntry("Update automatically", Page.Engine, "yt-dlp update auto"),
     SettingEntry("Source code", Page.About, "github code source"),

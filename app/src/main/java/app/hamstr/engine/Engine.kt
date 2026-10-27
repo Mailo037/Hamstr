@@ -1,5 +1,7 @@
 package app.hamstr.engine
 
+import app.hamstr.data.DownloadEngine
+import app.hamstr.data.Choice
 import android.content.Context
 import android.os.Environment
 import android.util.Log
@@ -88,6 +90,7 @@ object Engine {
         outputDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Hamstr")
         tempDir = File(app.cacheDir, "parts").apply { mkdirs() }
         extractorCacheDir = File(app.cacheDir, "yt-dlp").apply { mkdirs() }
+        Cheek.init(app)
         scope.launch {
             try {
                 YoutubeDL.getInstance().init(app)
@@ -195,6 +198,12 @@ object Engine {
 
     suspend fun execute(task: DownloadTask, callback: ((Float, Long, String) -> Unit)? = null): YoutubeDLResponse = withContext(Dispatchers.IO) {
         awaitReady()
+        if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.handles(task)) {
+            val res = executeCheek(task, callback)
+            // Formats cheek can't fetch (DASH fragments, DRM) go to yt-dlp after all.
+            if (!Cheek.unsupported(res)) return@withContext res
+            Log.i(TAG, "cheek handed ${task.id} back to yt-dlp: ${res.err.lines().firstOrNull()}")
+        }
         val initialRequest = request(task)
         try {
             readRuntime { YoutubeDL.getInstance().execute(initialRequest, task.id, callback) }
@@ -205,6 +214,45 @@ object Engine {
             previews.invalidate(task.url)
             readRuntime { YoutubeDL.getInstance().execute(request(task, reusePreview = false), task.id, callback) }
         }
+    }
+
+    /** yt-dlp picks the formats and prints them as JSON; cheek downloads them. */
+    private suspend fun executeCheek(task: DownloadTask, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
+        suspend fun resolve(reusePreview: Boolean): String {
+            val preview = if (reusePreview) previews.get(task.url) else null
+            val infoFile = preview?.let { File(File(tempDir, task.id).apply { mkdirs() }, "preview.json").apply { writeText(it.json) } }
+            val req = (if (infoFile == null) YoutubeDLRequest(task.url) else YoutubeDLRequest(emptyList())).apply {
+                if (infoFile != null) addOption("--load-info-json", infoFile.absolutePath)
+                addOption("-J")
+                addOption("--no-playlist")
+                addOption("--cache-dir", extractorCacheDir.absolutePath)
+                addOption("--socket-timeout", 20)
+                addOption("-f", formatSelector(task.choice))
+            }
+            return readRuntime { YoutubeDL.getInstance().execute(req, task.id, null) }.out
+        }
+        outputDir.mkdirs()
+        val first = Cheek.execute(task, resolve(reusePreview = true), tempDir, outputDir, pathFile(task), callback)
+        // A preview's stream URLs can expire; resolve once more from the page.
+        if (first.exitCode != 0 && expiredMedia.containsMatchIn(first.err) && !pathFile(task).exists()) {
+            previews.invalidate(task.url)
+            return Cheek.execute(task, resolve(reusePreview = false), tempDir, outputDir, pathFile(task), callback)
+        }
+        return first
+    }
+
+    /** The yt-dlp format selector for a choice, shared by both engines. */
+    internal fun formatSelector(c: Choice): String = when (c.mode) {
+        // Prefer an existing stream in the requested codec: remuxing avoids
+        // a lossy, CPU-heavy re-encode. Keep the original fallback for other sites.
+        Mode.Audio -> when (c.audioFormat) {
+            "m4a" -> "ba[ext=m4a]/ba[acodec^=mp4a]/ba[acodec=aac]/ba[ext=mp4]/ba/b"
+            "opus" -> "ba[acodec^=opus]/ba[ext=opus]/ba[ext=ogg]/ba/b"
+            "mp3" -> "ba[ext=mp3]/ba/b"
+            else -> "ba/b"
+        }
+        Mode.Video -> c.height.let { h -> if (h != null) "bv*[height<=$h]+ba/b[height<=$h]/bv*+ba/b" else "bv*+ba/b" }
+        Mode.Custom -> c.customFormat.ifBlank { "bv*+ba/b" }
     }
 
     fun request(task: DownloadTask, reusePreview: Boolean = true): YoutubeDLRequest {
@@ -239,14 +287,7 @@ object Engine {
             addOption("--socket-timeout", 20)
             when (c.mode) {
                 Mode.Audio -> {
-                    // Prefer an existing stream in the requested codec: remuxing avoids
-                    // a lossy, CPU-heavy re-encode. Keep the original fallback for other sites.
-                    addOption("-f", when (c.audioFormat) {
-                        "m4a" -> "ba[ext=m4a]/ba[acodec^=mp4a]/ba[acodec=aac]/ba[ext=mp4]/ba/b"
-                        "opus" -> "ba[acodec^=opus]/ba[ext=opus]/ba[ext=ogg]/ba/b"
-                        "mp3" -> "ba[ext=mp3]/ba/b"
-                        else -> "ba/b"
-                    })
+                    addOption("-f", formatSelector(c))
                     addOption("-x")
                     addOption("--audio-format", c.audioFormat)
                     addOption("--audio-quality", "0")
@@ -256,8 +297,7 @@ object Engine {
                     }
                 }
                 Mode.Video -> {
-                    val h = c.height
-                    addOption("-f", if (h != null) "bv*[height<=$h]+ba/b[height<=$h]/bv*+ba/b" else "bv*+ba/b")
+                    addOption("-f", formatSelector(c))
                     addOption("--merge-output-format", c.container)
                     if (c.container != "webm") addOption("--embed-thumbnail")
                     if (c.subtitles) {
@@ -267,7 +307,7 @@ object Engine {
                     }
                 }
                 Mode.Custom -> {
-                    addOption("-f", c.customFormat.ifBlank { "bv*+ba/b" })
+                    addOption("-f", formatSelector(c))
                 }
             }
         }

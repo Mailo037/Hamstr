@@ -216,6 +216,7 @@ class DownloadService : Service() {
         DownloadStore.update(id) { it.copy(status = status, speed = "", etaSec = -1) }
         val job = synchronized(this) { jobs[id] }
         YoutubeDL.getInstance().destroyProcessById(id)
+        Cheek.destroy(id)
         job?.cancel()
         if (status == Status.Canceled && job == null) scope.launch { Engine.clearTemporaryFiles(task) }
         notifyProgress(force = true)
@@ -235,7 +236,7 @@ class DownloadService : Service() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
-        synchronized(this) { jobs.keys.toList() }.forEach { YoutubeDL.getInstance().destroyProcessById(it) }
+        synchronized(this) { jobs.keys.toList() }.forEach { YoutubeDL.getInstance().destroyProcessById(it); Cheek.destroy(it) }
         scope.cancel()
         super.onDestroy()
     }
