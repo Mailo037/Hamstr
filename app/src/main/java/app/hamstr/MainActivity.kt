@@ -133,6 +133,8 @@ import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.RasterBackground
 import app.hamstr.ui.components.Txt
+import app.hamstr.ui.components.edgeFade
+import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.LocalFx
 import app.hamstr.ui.theme.HamstrTheme
@@ -531,6 +533,7 @@ private fun TaskMenu(
     val t = tasks.firstOrNull { it.id == task.id } ?: task
     val file = t.filePath?.let(::File)?.takeIf { it.exists() }
     var updating by remember { mutableStateOf(false) }
+    val scroll = rememberScrollState()
     Column(
         Modifier
             .fillMaxWidth()
@@ -538,7 +541,9 @@ private fun TaskMenu(
             .background(c.overlay)
             .clickable(enabled = false) {}
             .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.9f)
-            .verticalScroll(rememberScrollState())
+            // After the background, so only the menu's content fades and the sheet stays solid.
+            .edgeFade(scroll, Orientation.Vertical, length = 22.dp)
+            .verticalScroll(scroll)
             .navigationBarsPadding()
             .padding(12.dp),
     ) {

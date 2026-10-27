@@ -5,6 +5,7 @@ import android.text.format.DateUtils
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.data.DownloadTask
 import app.hamstr.ui.components.Txt
+import app.hamstr.ui.components.edgeFade
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +83,11 @@ fun InfoSheet(task: DownloadTask, onCopy: (String) -> Unit) {
         Txt(stringResource(R.string.info_title), style = Hamstr.type.section, modifier = Modifier.padding(horizontal = 4.dp))
         Txt(stringResource(R.string.info_tap_copy), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
         Spacer(Modifier.height(12.dp))
-        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val scroll = rememberScrollState()
+        Column(
+            Modifier.heightIn(max = 520.dp).edgeFade(scroll, Orientation.Vertical, length = 22.dp).verticalScroll(scroll),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             (saved + fromFile).forEach { (label, value) -> InfoRow(label, value) { onCopy(value) } }
         }
         Spacer(Modifier.height(8.dp))
