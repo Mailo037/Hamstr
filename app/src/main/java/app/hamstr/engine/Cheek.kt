@@ -11,6 +11,9 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
+import java.util.concurrent.TimeUnit
 
 /**
  * cheek (github.com/Mailo037/cheek), the Rust download engine. yt-dlp still decides which
@@ -34,6 +37,20 @@ object Cheek {
     }
 
     val available get() = ::bin.isInitialized && bin.exists()
+
+    /** Read the executable actually installed with this APK, without blocking the UI. */
+    suspend fun version(): String = runInterruptible(Dispatchers.IO) {
+        check(available) { "Cheek is not available in this installation" }
+        val process = ProcessBuilder(bin.absolutePath, "--version").redirectErrorStream(true).start()
+        try {
+            check(process.waitFor(5, TimeUnit.SECONDS)) { "Cheek version check timed out" }
+            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            check(process.exitValue() == 0 && output.startsWith("cheek ")) { "Couldn't read the installed Cheek version" }
+            output.removePrefix("cheek ")
+        } finally {
+            if (process.isAlive) process.destroy()
+        }
+    }
 
     /** What cheek can't do yet goes to yt-dlp: playlists, subtitles, a custom format string. */
     fun handles(task: DownloadTask): Boolean {

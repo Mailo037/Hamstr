@@ -1,9 +1,6 @@
 package app.hamstr.player
 
-import android.app.PictureInPictureParams
 import android.content.pm.ActivityInfo
-import android.os.Build
-import android.util.Rational
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
@@ -142,12 +139,6 @@ fun rememberPlayerUi(player: Player?): PlayerUi {
     return ui
 }
 
-/** Picture-in-picture is offered while a video plays (read by MainActivity before API 31). */
-object Pip {
-    var eligible = false
-    var aspect = Rational(16, 9)
-}
-
 private data class Box4(val x: Float, val y: Float, val w: Float, val h: Float) {
     fun towards(to: Box4, t: Float) = Box4(lerp(x, to.x, t), lerp(y, to.y, t), lerp(w, to.w, t), lerp(h, to.h, t))
 }
@@ -162,32 +153,21 @@ private data class Box4(val x: Float, val y: Float, val w: Float, val h: Float) 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
     val task by Playback.current.collectAsState()
-    val t = task ?: return
     val controller by Playback.controller.collectAsState()
+    if (inPip) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            if (task?.filePath?.let { kindOf(File(it)) } == Kind.Video) {
+                controller?.let { PlayerSurface(it, Modifier.fillMaxSize(), SURFACE_TYPE_TEXTURE_VIEW) }
+            }
+        }
+        return
+    }
+
+    val t = task ?: return
     val ui = rememberPlayerUi(controller)
     val file = remember(t.id) { t.filePath?.let(::File) }
     val kind = remember(t.id) { file?.let(::kindOf) ?: Kind.Other }
     val activity = LocalActivity.current
-
-    // Offer PiP for playing videos.
-    LaunchedEffect(kind, ui.isPlaying, ui.aspect) {
-        val eligible = kind == Kind.Video && ui.isPlaying
-        val ratio = Rational((ui.aspect.coerceIn(0.42f, 2.38f) * 1000).roundToInt(), 1000)
-        Pip.eligible = eligible
-        Pip.aspect = ratio
-        if (activity != null) {
-            val b = PictureInPictureParams.Builder().setAspectRatio(ratio)
-            if (Build.VERSION.SDK_INT >= 31) b.setAutoEnterEnabled(eligible).setSeamlessResizeEnabled(true)
-            runCatching { activity.setPictureInPictureParams(b.build()) }
-        }
-    }
-
-    if (inPip) {
-        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-            controller?.let { PlayerSurface(it, Modifier.fillMaxSize(), SURFACE_TYPE_TEXTURE_VIEW) }
-        }
-        return
-    }
 
     val c = Hamstr.colors
     val scope = rememberCoroutineScope()

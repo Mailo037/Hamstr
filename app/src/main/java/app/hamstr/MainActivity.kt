@@ -87,7 +87,9 @@ import app.hamstr.ui.components.LocalReduceMotion
 import app.hamstr.ui.components.MarkState
 import kotlinx.coroutines.delay
 import app.hamstr.player.Kind
-import app.hamstr.player.Pip
+import app.hamstr.player.PipController
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.combine
 import app.hamstr.player.Playback
 import app.hamstr.player.PlayerHost
 import app.hamstr.player.kindOf
@@ -113,6 +115,7 @@ import app.hamstr.ui.theme.TravelEasing
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    private val pip = PipController { params -> runCatching { setPictureInPictureParams(params) } }
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
     private val storagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
@@ -123,6 +126,12 @@ class MainActivity : ComponentActivity() {
         if (DownloadStore.tasks.value.any { it.status == Status.Queued }) DownloadService.send(this, DownloadService.ACTION_START)
         Updater.checkOnLaunch(this)
         addOnPictureInPictureModeChangedListener { inPip.value = it.isInPictureInPictureMode }
+        inPip.value = isInPictureInPictureMode
+        pip.bind(null, null)
+        lifecycleScope.launch {
+            combine(Playback.current, Playback.controller) { task, player -> task to player }
+                .collect { (task, player) -> pip.bind(task, player) }
+        }
         if (savedInstanceState == null) pendingAction.value = intent?.action?.takeIf { it in ACTIONS }
         setContent { HamstrTheme { App(inPip.value) } }
     }
@@ -146,9 +155,14 @@ class MainActivity : ComponentActivity() {
     /** Before Android 12 there is no auto-enter: going home with a playing video enters PiP here. */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT < 31 && Pip.eligible) {
-            runCatching { enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(Pip.aspect).build()) }
+        if (Build.VERSION.SDK_INT < 31 && pip.eligible) {
+            runCatching { enterPictureInPictureMode(pip.params()) }
         }
+    }
+
+    override fun onDestroy() {
+        pip.close()
+        super.onDestroy()
     }
 }
 
@@ -261,9 +275,7 @@ private fun App(inPip: Boolean) {
             }
         }
         TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
-        // In picture-in-picture the player covers everything; the rest stays composed so
-        // tabs, scroll positions and the intro flag survive the trip.
-        PlayerHost(miniBottom = bottom + 78.dp, inPip = inPip)
+        if (!inPip) PlayerHost(miniBottom = bottom + 78.dp, inPip = false)
 
         AnimatedVisibility(hint != null, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp)) {
             Box(Modifier.clip(RoundedCornerShape(14.dp)).background(c.raised).padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -315,6 +327,9 @@ private fun App(inPip: Boolean) {
             )
         }
         if (!introDone) Intro(onDone = { introDone = true })
+        // Always cover the entire app in PiP, even if playback stops during the transition.
+        // Keep the normal UI composed underneath so tabs and scroll positions survive.
+        if (inPip) PlayerHost(miniBottom = 0.dp, inPip = true)
     }
 }
 

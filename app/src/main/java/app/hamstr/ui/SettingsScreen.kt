@@ -69,6 +69,7 @@ import app.hamstr.data.Prefs
 import app.hamstr.data.Settings
 import app.hamstr.data.heightLabel
 import app.hamstr.engine.Engine
+import app.hamstr.engine.Cheek
 import app.hamstr.engine.EngineState
 import app.hamstr.ui.components.AccentPicker
 import app.hamstr.ui.components.ButtonKind
@@ -87,6 +88,7 @@ import app.hamstr.ui.theme.Hamstr
 import app.hamstr.update.UpdateState
 import app.hamstr.update.Updater
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 
 /** Settings are split into categories, each on its own page (Glyph: never one long page). */
@@ -164,7 +166,7 @@ private fun summary(p: Page, s: Settings, engine: EngineState): String = when (p
     Page.Downloads -> if (s.mode == Mode.Audio) "Audio · ${s.audioFormat}" else "Video · ${heightLabel(s.height)} · ${s.container}"
     Page.Queue -> "${s.parallel} at once · Download/Hamstr"
     Page.Engine -> when (engine) {
-        is EngineState.Ready -> (if (s.engine == DownloadEngine.Cheek) "Cheek + yt-dlp " else "yt-dlp ") + engine.version
+        is EngineState.Ready -> (if (s.engine == DownloadEngine.Cheek) "Cheek ${BuildConfig.CHEEK_VERSION} · yt-dlp " else "yt-dlp ") + engine.version
         EngineState.Starting -> "starting …"
         is EngineState.Broken -> "error"
     }
@@ -252,7 +254,7 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
             Page.Motion -> MotionPage()
             Page.Downloads -> DownloadsPage()
             Page.Queue -> QueuePage()
-            Page.Engine -> EnginePage()
+            Page.Engine -> EnginePage(onUpdate)
             Page.About -> AboutPage(onUpdate)
         }
         Spacer(Modifier.height(24.dp))
@@ -349,14 +351,18 @@ private fun QueuePage() {
 }
 
 @Composable
-private fun EnginePage() {
+private fun EnginePage(onUpdate: () -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val s by Prefs.settings.collectAsState()
     val engine by Engine.state.collectAsState()
     val updating by Engine.updating.collectAsState()
+    val appUpdate by Updater.state.collectAsState()
     var updateMsg by remember { mutableStateOf<String?>(null) }
+    var cheekVersion by remember { mutableStateOf(BuildConfig.CHEEK_VERSION) }
+    var checkingVersion by remember { mutableStateOf(false) }
+    var cheekMsg by remember { mutableStateOf<String?>(null) }
     Group {
         Block("Download engine") {
             Segmented(DownloadEngine.entries.toList(), s.engine, { it.label }, { e -> Prefs.edit { it.copy(engine = e) } })
@@ -370,8 +376,54 @@ private fun EnginePage() {
             )
         }
     }
+    if (s.engine == DownloadEngine.Cheek) {
+        Spacer(Modifier.height(12.dp))
+        Label("Cheek", Modifier.padding(horizontal = 6.dp))
+        Spacer(Modifier.height(8.dp))
+        Group {
+            SettingRow("Cheek version", subtitle = "$cheekVersion · included with Hamstr ${BuildConfig.VERSION_NAME}")
+            Divider()
+            FxRow("Automatic update checks", "Check on launch. Cheek is updated with Hamstr.", s.appUpdates) { v ->
+                Prefs.edit { it.copy(appUpdates = v) }
+            }
+            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Txt("Cheek is bundled with the app. A newer Cheek version is installed through a Hamstr update.", style = Hamstr.type.small, color = c.ghost)
+                HButton(
+                    if (checkingVersion) "Checking version …" else "Check version",
+                    onClick = {
+                        checkingVersion = true
+                        scope.launch {
+                            try {
+                                cheekVersion = Cheek.version()
+                                cheekMsg = "Installed Cheek: $cheekVersion"
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                cheekMsg = e.message ?: "Version check failed"
+                            } finally { checkingVersion = false }
+                        }
+                    }, enabled = !checkingVersion,
+                )
+                val busy = appUpdate is UpdateState.Checking || appUpdate is UpdateState.Downloading || appUpdate is UpdateState.Installing
+                HButton(if (appUpdate is UpdateState.Checking) "Checking updates …" else "Check for updates", { Updater.check(context) }, enabled = !busy)
+                appUpdate.release?.let { release ->
+                    HButton("Update now · Hamstr ${release.version}", onUpdate, kind = ButtonKind.Primary, enabled = !busy)
+                }
+                val message = when (val update = appUpdate) {
+                    is UpdateState.Available -> "Hamstr ${update.release.version} is available"
+                    UpdateState.UpToDate -> "No newer Hamstr release available"
+                    is UpdateState.Failed -> update.message
+                    is UpdateState.Downloading -> "Downloading Hamstr ${update.release.version}"
+                    is UpdateState.Installing -> "Installing Hamstr ${update.release.version}"
+                    else -> null
+                }
+                cheekMsg?.let { Txt(it, style = Hamstr.type.small, color = c.muted) }
+                message?.let { Txt(it, style = Hamstr.type.small, color = c.muted) }
+            }
+        }
+    }
     Spacer(Modifier.height(12.dp))
-    Label("yt-dlp", Modifier.padding(horizontal = 6.dp))
+    Label(if (s.engine == DownloadEngine.Cheek) "yt-dlp · link resolver" else "yt-dlp", Modifier.padding(horizontal = 6.dp))
     Spacer(Modifier.height(8.dp))
     Group {
         SettingRow(
@@ -486,6 +538,8 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry("Save location", Page.Queue, "folder storage path speicher ordner"),
     SettingEntry("Download engine", Page.Engine, "cheek rust engine yt-dlp speed fast parallel connections"),
     SettingEntry("Version", Page.Engine, "yt-dlp engine version"),
+    SettingEntry("Cheek version", Page.Engine, "cheek engine installed bundled check version update now"),
+    SettingEntry("Automatic update checks", Page.Engine, "cheek engine hamstr app updates automatically"),
     SettingEntry("Update automatically", Page.Engine, "yt-dlp update auto"),
     SettingEntry("Source code", Page.About, "github code source"),
     SettingEntry("Check on launch", Page.About, "app update release github"),

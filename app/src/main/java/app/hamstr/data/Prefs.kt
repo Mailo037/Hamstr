@@ -17,7 +17,7 @@ data class Settings(
     val playlists: Boolean = false,
     val autoUpdate: Boolean = true,
     val lastUpdateCheck: Long = 0,
-    val engine: DownloadEngine = DownloadEngine.YtDlp,
+    val engine: DownloadEngine = DownloadEngine.Cheek,
     // Hamstr's own updates from GitHub Releases
     val appUpdates: Boolean = true,
     val lastAppCheck: Long = 0,
@@ -60,7 +60,7 @@ object Prefs {
             playlists = sp.getBoolean("playlists", false),
             autoUpdate = sp.getBoolean("autoUpdate", true),
             lastUpdateCheck = sp.getLong("lastUpdateCheck", 0),
-            engine = runCatching { DownloadEngine.valueOf(sp.getString("engine", null)!!) }.getOrDefault(DownloadEngine.YtDlp),
+            engine = runCatching { DownloadEngine.valueOf(sp.getString("engine", null)!!) }.getOrDefault(DownloadEngine.Cheek),
             appUpdates = sp.getBoolean("appUpdates", true),
             lastAppCheck = sp.getLong("lastAppCheck", 0),
             seenRelease = sp.getString("seenRelease", "")!!,

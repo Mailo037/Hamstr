@@ -19,10 +19,15 @@ import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
+import kotlinx.coroutines.runBlocking
 
 /** Tests the packaged release binary through Hamstr's real bridge, without yt-dlp fallback. */
 @RunWith(AndroidJUnit4::class)
 class CheekReleaseIntegrationTest {
+    @Test fun versionCheckReadsTheInstalledExecutable(): Unit = runBlocking {
+        assertEquals(BuildConfig.CHEEK_VERSION, Cheek.version())
+    }
+
     @Test fun packagedVersionAndDashFragmentsMatchTheRelease() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val binary = File(context.applicationInfo.nativeLibraryDir, "libcheek.so")

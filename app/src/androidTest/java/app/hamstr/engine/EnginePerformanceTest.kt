@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import app.hamstr.data.Choice
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.DownloadEngine
 import app.hamstr.data.Mode
 import app.hamstr.data.Prefs
 import app.hamstr.data.Status
@@ -44,7 +45,7 @@ class EnginePerformanceTest {
 
     @Before fun setUp() = runBlocking {
         Engine.awaitReady()
-        Prefs.edit { it.copy(autoUpdate = false, playlists = false, parallel = 2) }
+        Prefs.edit { it.copy(autoUpdate = false, playlists = false, parallel = 2, engine = DownloadEngine.YtDlp) }
         // Startup may already have scheduled an automatic update before ready was observed.
         delay(200)
         withTimeout(60_000) { Engine.updating.first { !it } }
