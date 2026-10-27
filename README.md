@@ -81,6 +81,8 @@ You need JDK 21 and the Android SDK with platform 37.
 ./gradlew assembleDebug
 ```
 
+To test with the pinned, published Cheek binaries even when `local.properties` sets `cheek.dir`, use `./gradlew assembleDebug -Pcheek.useRelease=true`. Downloaded Cheek binaries are checked against the release's `SHA256SUMS.txt` before packaging.
+
 The APKs end up in `app/build/outputs/apk/debug/`, one per ABI plus a universal one.
 
 ## Releasing

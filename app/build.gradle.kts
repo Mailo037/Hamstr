@@ -1,4 +1,5 @@
 import java.net.URI
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -7,7 +8,7 @@ plugins {
 }
 
 // Releases are cut from tags: CI passes v1.2.3 in as -Phamstr.version=1.2.3.
-val appVersion = providers.gradleProperty("hamstr.version").getOrElse("0.1.0")
+val appVersion = providers.gradleProperty("hamstr.version").getOrElse("0.2.0")
 val (major, minor, patch) = appVersion.substringBefore('-').split('.').map(String::toInt)
 
 // The release key lives outside git: signing/keystore.properties next to the .jks, written
@@ -19,9 +20,9 @@ val signingProps = Properties().apply {
 // cheek, the Rust download engine (github.com/Mailo037/cheek), goes into the APK as
 // libcheek.so per ABI. Builds take a pinned release; `cheek.dir` in local.properties points
 // at a local checkout built with cargo-ndk instead.
-val cheekVersion = "0.1.0"
+val cheekVersion = "0.1.1"
 val cheekTargets = mapOf("arm64-v8a" to "aarch64-linux-android", "armeabi-v7a" to "armv7-linux-androideabi", "x86_64" to "x86_64-linux-android")
-val cheekLocal = Properties().apply {
+val cheekLocal = if (providers.gradleProperty("cheek.useRelease").getOrElse("false").toBoolean()) null else Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }.getProperty("cheek.dir")
 val fetchCheek by tasks.registering {
@@ -32,16 +33,28 @@ val fetchCheek by tasks.registering {
     val local = cheekLocal
     inputs.property("version", version)
     inputs.property("local", local ?: "")
+    if (local != null) inputs.files(targets.values.map { File(local, "target/$it/release/cheek") })
     outputs.files(targets.keys.map { jniLibs.file("$it/libcheek.so") })
     doLast {
+        val releaseBase = "https://github.com/Mailo037/cheek/releases/download/v$version"
+        val checksums by lazy {
+            URI("$releaseBase/SHA256SUMS.txt").toURL().readText().lineSequence()
+                .filter { it.isNotBlank() }.associate { line ->
+                    val (hash, name) = line.trim().split(Regex("\\s+"), limit = 2)
+                    name.removePrefix("*") to hash.lowercase()
+                }
+        }
         targets.forEach { (abi, triple) ->
             val dest = jniLibs.file("$abi/libcheek.so").asFile.apply { parentFile.mkdirs() }
             val built = local?.let { File(it, "target/$triple/release/cheek") }
             if (built != null && built.exists()) {
                 built.copyTo(dest, overwrite = true)
             } else {
-                val url = "https://github.com/Mailo037/cheek/releases/download/v$version/cheek-android-$abi"
-                URI(url).toURL().openStream().use { input -> dest.outputStream().use { input.copyTo(it) } }
+                val name = "cheek-android-$abi"
+                val bytes = URI("$releaseBase/$name").toURL().readBytes()
+                val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+                check(hash == checksums[name]) { "Cheek $version checksum mismatch for $abi" }
+                dest.writeBytes(bytes)
             }
         }
     }
@@ -58,6 +71,7 @@ android {
         targetSdk = 36
         versionCode = major * 10_000 + minor * 100 + patch
         versionName = appVersion
+        buildConfigField("String", "CHEEK_VERSION", "\"$cheekVersion\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // yt-dlp ships Python + ffmpeg per ABI; phones plus the x86_64 emulator.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }

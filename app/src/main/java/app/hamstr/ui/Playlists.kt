@@ -63,13 +63,14 @@ sealed interface Shelf {
 /** Collapses grouped files into one tile at the position of their newest member. */
 fun shelves(done: List<DownloadTask>): List<Shelf> {
     val seen = HashSet<String>()
+    val groups = done.filter { it.group != null }.groupBy { it.group }
     return done.mapNotNull { t ->
         val g = t.group
         when {
             g == null -> Shelf.One(t)
             !seen.add(g) -> null
             else -> {
-                val items = done.filter { it.group == g }.sortedBy { it.createdAt }
+                val items = groups.getValue(g).sortedBy { it.createdAt }
                 if (items.size > 1) Shelf.Group(g, t.groupTitle ?: "Playlist", items) else Shelf.One(t)
             }
         }

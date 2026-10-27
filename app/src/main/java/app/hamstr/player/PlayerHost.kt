@@ -1,11 +1,11 @@
 package app.hamstr.player
 
-import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.util.Rational
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -159,6 +159,7 @@ private data class Box4(val x: Float, val y: Float, val w: Float, val h: Float) 
  * (landscape) and picture-in-picture when the app is left.
  */
 @Composable
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
     val task by Playback.current.collectAsState()
     val t = task ?: return
@@ -166,7 +167,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
     val ui = rememberPlayerUi(controller)
     val file = remember(t.id) { t.filePath?.let(::File) }
     val kind = remember(t.id) { file?.let(::kindOf) ?: Kind.Other }
-    val activity = LocalContext.current as? Activity
+    val activity = LocalActivity.current
 
     // Offer PiP for playing videos.
     LaunchedEffect(kind, ui.isPlaying, ui.aspect) {
@@ -428,6 +429,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
 }
 
 @Composable
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 private fun VideoSurface(controller: Player?, ui: PlayerUi, expanded: Boolean, fullscreen: Boolean, onExitFullscreen: () -> Unit, onTapMini: () -> Unit) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current

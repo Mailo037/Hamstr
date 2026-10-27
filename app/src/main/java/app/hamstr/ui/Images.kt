@@ -15,7 +15,7 @@ import coil3.toBitmap
 @Composable
 fun rememberBitmap(url: String?, sizePx: Int = 480): Bitmap? {
     val context = LocalContext.current
-    val bitmap by produceState<Bitmap?>(null, url) {
+    val bitmap by produceState<Bitmap?>(null, url, sizePx) {
         value = null
         if (url == null) return@produceState
         val request = ImageRequest.Builder(context)

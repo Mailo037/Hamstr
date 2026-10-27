@@ -96,16 +96,17 @@ fun AsciiImage(
     animate: Boolean = rain > 0f,
 ) {
     val fx = LocalFx.current
-    val paint = rememberMonoPaint()
     val accent = Hamstr.colors.accent
     val bg = Hamstr.colors.black
-    if (!fx.asciiThumbs || (!fx.rain && bitmap == null)) {
+    // A fully revealed image covers every ASCII cell; skip sampling and glyph drawing.
+    if ((bitmap != null && reveal >= 1f) || !fx.asciiThumbs || (!fx.rain && bitmap == null)) {
         PlainImage(bitmap, reveal, modifier, bg, accent)
         return
     }
+    val paint = rememberMonoPaint()
     val cellPx = with(LocalDensity.current) { cell.toPx() }
     var time by remember { mutableLongStateOf(0L) }
-    if (animate) {
+    if (animate && fx.rain && !LocalReduceMotion.current) {
         LaunchedEffect(Unit) { while (true) withInfiniteAnimationFrameMillis { time = it } }
     }
     val image: ImageBitmap? = remember(bitmap) { bitmap?.asImageBitmap() }
@@ -176,6 +177,10 @@ private fun PlainImage(bitmap: Bitmap?, reveal: Float, modifier: Modifier, bg: C
     Canvas(modifier) {
         drawRect(bg)
         if (image == null) return@Canvas
+        if (reveal >= 1f) {
+            drawCover(image)
+            return@Canvas
+        }
         drawCover(image, alpha = 0.3f)
         val edge = size.height * reveal.coerceIn(0f, 1f)
         clipRect(bottom = edge) { drawCover(image) }

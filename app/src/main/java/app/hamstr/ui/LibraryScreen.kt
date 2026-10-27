@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -64,15 +65,20 @@ fun LibraryScreen(tasks: List<DownloadTask>, contentPadding: PaddingValues, onMe
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     val q = query.trim().lowercase()
-    val done = tasks.filter { it.status == Status.Done }.filter {
-        q.isEmpty() || listOfNotNull(it.title, it.source, it.groupTitle).any { s -> s.lowercase().contains(q) }
-    }.filter {
-        when (filter) {
-            Filter.All -> true
-            Filter.Video -> it.choice.mode != Mode.Audio
-            Filter.Audio -> it.choice.mode == Mode.Audio
+    val completed = remember(tasks) { tasks.filter { it.status == Status.Done } }
+    // Active download progress shouldn't rebuild the completed library's groups.
+    val done = remember(completed, q, filter) {
+        completed.filter {
+            q.isEmpty() || listOfNotNull(it.title, it.source, it.groupTitle).any { s -> s.contains(q, ignoreCase = true) }
+        }.filter {
+            when (filter) {
+                Filter.All -> true
+                Filter.Video -> it.choice.mode != Mode.Audio
+                Filter.Audio -> it.choice.mode == Mode.Audio
+            }
         }
     }
+    val tiles = remember(done) { shelves(done) }
     val gridState = rememberLazyGridState()
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -112,7 +118,7 @@ fun LibraryScreen(tasks: List<DownloadTask>, contentPadding: PaddingValues, onMe
                 )
             }
         }
-        items(shelves(done), key = { it.key }) { shelf ->
+        items(tiles, key = { it.key }) { shelf ->
             if (shelf is Shelf.Group) {
                 Column(
                     Modifier

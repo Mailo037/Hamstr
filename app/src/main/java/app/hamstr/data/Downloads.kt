@@ -1,6 +1,13 @@
 package app.hamstr.data
 
 import android.content.Context
+import android.util.AtomicFile
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,19 +58,45 @@ data class DownloadTask(
 
 /**
  * All downloads, as one observable list. Progress lives in memory only; the list is
- * written to disk on every status change so history survives restarts.
+ * saved by a single IO worker on status changes. Bursts share a pending write so
+ * queue actions never serialize the entire history or wait for disk on the UI thread.
  */
 object DownloadStore {
     private val _tasks = MutableStateFlow<List<DownloadTask>>(emptyList())
     val tasks: StateFlow<List<DownloadTask>> = _tasks.asStateFlow()
     private lateinit var file: File
+    private val saves = Channel<Unit>(Channel.CONFLATED)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    @Synchronized
     fun init(context: Context) {
+        if (::file.isInitialized) return
         file = File(context.filesDir, "downloads.json")
-        val loaded = runCatching { JSONArray(file.readText()).let { a -> List(a.length()) { fromJson(a.getJSONObject(it)) } } }
+        val atomic = AtomicFile(file)
+        val loaded = runCatching { JSONArray(atomic.openRead().bufferedReader().use { it.readText() }).let { a -> List(a.length()) { fromJson(a.getJSONObject(it)) } } }
             .getOrDefault(emptyList())
         // A process death interrupts running work; it resumes as queued (yt-dlp continues .part files).
         _tasks.value = loaded.map { if (it.status == Status.Running) it.copy(status = Status.Queued, speed = "", etaSec = -1) else it }
+        scope.launch {
+            for (ignored in saves) {
+                try {
+                    val snapshot = _tasks.value
+                    val arr = JSONArray()
+                    snapshot.forEach { arr.put(toJson(it)) }
+                    val bytes = arr.toString().toByteArray(Charsets.UTF_8)
+                    val output = atomic.startWrite()
+                    try {
+                        output.write(bytes)
+                        atomic.finishWrite(output)
+                    } catch (e: Exception) {
+                        atomic.failWrite(output)
+                        throw e
+                    }
+                } catch (e: Exception) {
+                    Log.e("HamstrStore", "Could not save download history", e)
+                }
+            }
+        }
     }
 
     fun get(id: String) = _tasks.value.firstOrNull { it.id == id }
@@ -83,14 +116,9 @@ object DownloadStore {
         save()
     }
 
-    @Synchronized
     private fun save() {
         if (!::file.isInitialized) return
-        val arr = JSONArray()
-        _tasks.value.forEach { arr.put(toJson(it)) }
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(arr.toString())
-        tmp.renameTo(file)
+        saves.trySend(Unit)
     }
 
     private fun toJson(t: DownloadTask) = JSONObject().apply {
