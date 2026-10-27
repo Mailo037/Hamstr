@@ -1,6 +1,18 @@
 import java.net.URI
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.Properties
+import javax.inject.Inject
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream
+import org.apache.commons.compress.archivers.zip.ZipFile
+
+buildscript {
+    repositories { mavenCentral() }
+    // Rewrites libffmpeg.zip.so while keeping its symlinks and file modes (see alignFfmpeg).
+    dependencies { classpath("org.apache.commons:commons-compress:1.28.0") }
+}
 
 plugins {
     id("com.android.application")
@@ -61,9 +73,135 @@ val fetchCheek by tasks.registering {
 }
 tasks.named("preBuild") { dependsOn(fetchCheek) }
 
+// youtubedl-android unpacks ffmpeg's shared libraries from libffmpeg.zip.so at runtime. In
+// 0.18.1 (the newest release) five of them, libwebp and its helpers, are still linked for
+// 4 KB pages, so on 16 KB-page phones the linker refuses to start ffmpeg at all
+// (github.com/yausername/youtubedl-android/issues/365). Moving p_align is not enough, they
+// need relinking: this rebuilds the same libwebp release with the NDK at 16 KB alignment
+// and swaps it into the zip; the other entries are copied over unchanged.
+abstract class AlignFfmpeg @Inject constructor(
+    private val exec: ExecOperations,
+    private val archives: ArchiveOperations,
+    private val fs: FileSystemOperations,
+) : DefaultTask() {
+    @get:InputFiles abstract val ffmpegAar: ConfigurableFileCollection
+    @get:Input abstract val webpVersion: Property<String>
+    @get:Input abstract val webpSha256: Property<String>
+    @get:Input abstract val abis: ListProperty<String>
+    @get:Input abstract val ndkVersion: Property<String>
+    @get:Internal abstract val ndkDir: DirectoryProperty
+    @get:Internal abstract val cmakeDir: DirectoryProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    private val webpLibs = listOf("libsharpyuv.so", "libwebp.so", "libwebpdecoder.so", "libwebpdemux.so", "libwebpmux.so")
+
+    @TaskAction
+    fun align() {
+        val work = temporaryDir.apply { deleteRecursively(); mkdirs() }
+        val version = webpVersion.get()
+        val bytes = URI("https://github.com/webmproject/libwebp/archive/refs/tags/v$version.tar.gz").toURL().readBytes()
+        val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        check(hash == webpSha256.get()) { "libwebp $version checksum mismatch" }
+        val tarball = File(work, "libwebp.tar.gz").apply { writeBytes(bytes) }
+        fs.copy { from(archives.tarTree(archives.gzip(tarball))); into(work) }
+
+        val exe = if (System.getProperty("os.name").startsWith("Windows")) ".exe" else ""
+        val ndk = ndkDir.get().asFile
+        val cmake = cmakeDir.file("bin/cmake$exe").get().asFile
+        val ninja = cmakeDir.file("bin/ninja$exe").get().asFile
+        val strip = File(File(ndk, "toolchains/llvm/prebuilt").listFiles()!!.single(), "bin/llvm-strip$exe")
+        fs.delete { delete(outputDir) }
+        abis.get().forEach { abi ->
+            val build = File(work, "build-$abi")
+            // Same switches as the Termux package youtubedl-android takes ffmpeg from, minus the tools.
+            exec.exec {
+                commandLine(
+                    cmake, "-S", File(work, "libwebp-$version"), "-B", build, "-G", "Ninja",
+                    "-DCMAKE_MAKE_PROGRAM=$ninja", "-DCMAKE_TOOLCHAIN_FILE=$ndk/build/cmake/android.toolchain.cmake",
+                    "-DANDROID_ABI=$abi", "-DANDROID_PLATFORM=android-24", "-DCMAKE_BUILD_TYPE=Release",
+                    "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384", "-DBUILD_SHARED_LIBS=ON",
+                    "-DWEBP_ENABLE_SWAP_16BIT_CSP=ON", "-DWEBP_BUILD_ANIM_UTILS=OFF", "-DWEBP_BUILD_CWEBP=OFF",
+                    "-DWEBP_BUILD_DWEBP=OFF", "-DWEBP_BUILD_GIF2WEBP=OFF", "-DWEBP_BUILD_IMG2WEBP=OFF",
+                    "-DWEBP_BUILD_VWEBP=OFF", "-DWEBP_BUILD_WEBPINFO=OFF", "-DWEBP_BUILD_WEBPMUX=OFF",
+                    "-DWEBP_BUILD_EXTRAS=OFF",
+                )
+            }
+            exec.exec { commandLine(cmake, "--build", build) }
+            val rebuilt = webpLibs.associate { name ->
+                val lib = File(build, name)
+                exec.exec { commandLine(strip, "--strip-unneeded", lib) }
+                "usr/lib/$name" to lib
+            }
+
+            val original = archives.zipTree(ffmpegAar.singleFile).matching { include("jni/$abi/libffmpeg.zip.so") }.singleFile
+            val aligned = outputDir.file("$abi/libffmpeg.zip.so").get().asFile.apply { parentFile.mkdirs() }
+            ZipFile.builder().setFile(original).get().use { zip ->
+                ZipArchiveOutputStream(aligned).use { out ->
+                    for (entry in zip.entries) {
+                        val lib = rebuilt[entry.name]
+                        if (lib == null) {
+                            out.addRawArchiveEntry(entry, zip.getRawInputStream(entry))
+                        } else {
+                            out.putArchiveEntry(ZipArchiveEntry(entry.name).apply { unixMode = entry.unixMode; time = entry.time })
+                            lib.inputStream().use { it.copyTo(out) }
+                            out.closeArchiveEntry()
+                        }
+                    }
+                }
+            }
+            // youtubedl-android re-extracts the zip only when its size changes.
+            check(aligned.length() != original.length()) { "Aligned libffmpeg.zip.so for $abi has the original's size" }
+            ZipFile.builder().setFile(aligned).get().use { zip ->
+                val names = zip.entries.toList().map { it.name }
+                check(names.containsAll(rebuilt.keys)) { "libffmpeg.zip.so for $abi is missing libwebp" }
+                for (entry in zip.entries) {
+                    if (entry.isUnixSymlink) continue
+                    val elf = zip.getInputStream(entry).use { it.readBytes() }
+                    val align = minLoadAlign(elf) ?: continue
+                    check(align >= 16384) { "${entry.name} in libffmpeg.zip.so for $abi is aligned to $align bytes" }
+                }
+            }
+        }
+    }
+
+    /** The smallest p_align over an ELF file's PT_LOAD segments, or null if it is not one. */
+    private fun minLoadAlign(elf: ByteArray): Long? {
+        if (elf.size < 64 || elf[0] != 0x7f.toByte() || String(elf, 1, 3) != "ELF") return null
+        val buf = ByteBuffer.wrap(elf).order(if (elf[5] == 1.toByte()) ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN)
+        val is64 = elf[4] == 2.toByte()
+        val phoff = if (is64) buf.getLong(0x20) else buf.getInt(0x1c).toLong()
+        val phentsize = buf.getShort(if (is64) 0x36 else 0x2a).toInt()
+        val phnum = buf.getShort(if (is64) 0x38 else 0x2c).toInt()
+        return (0 until phnum).map { phoff.toInt() + it * phentsize }
+            .filter { buf.getInt(it) == 1 }
+            .minOfOrNull { if (is64) buf.getLong(it + 48) else buf.getInt(it + 28).toLong() }
+    }
+}
+
+val youtubedlVersion = "0.18.1"
+val ffmpegPackage by configurations.creating { isTransitive = false }
+val alignFfmpeg by tasks.registering(AlignFfmpeg::class) {
+    description = "Rebuilds the 4 KB-aligned libwebp inside youtubedl-android's libffmpeg.zip.so for 16 KB pages"
+    ffmpegAar.from(ffmpegPackage)
+    webpVersion = "1.6.0"
+    webpSha256 = "93a852c2b3efafee3723efd4636de855b46f9fe1efddd607e1f42f60fc8f2136"
+    // 32-bit ARM devices always use 4 KB pages, so armeabi-v7a keeps the published zip.
+    abis = listOf("arm64-v8a", "x86_64")
+    ndkVersion = android.ndkVersion
+    ndkDir = androidComponents.sdkComponents.ndkDirectory
+    cmakeDir = androidComponents.sdkComponents.sdkDirectory.map { it.dir("cmake/3.22.1") }
+    outputDir = layout.buildDirectory.dir("generated/ffmpeg16k")
+}
+// The app's own libffmpeg.zip.so wins over the one from the ffmpeg AAR when packaging.
+androidComponents.onVariants { variant ->
+    variant.sources.jniLibs?.addGeneratedSourceDirectory(alignFfmpeg, AlignFfmpeg::outputDir)
+}
+
 android {
     namespace = "app.hamstr"
     compileSdk = 37
+    // Builds libwebp for alignFfmpeg; installed with sdkmanager "ndk;28.2.13676358" "cmake;3.22.1".
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "app.hamstr"
@@ -140,8 +278,9 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3")
 
-    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
-    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
+    implementation("io.github.junkfood02.youtubedl-android:library:$youtubedlVersion")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubedlVersion")
+    ffmpegPackage("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubedlVersion@aar")
 
     // In-app player: ExoPlayer behind a MediaSession (background audio, media notification).
     implementation("androidx.media3:media3-exoplayer:1.11.1")
