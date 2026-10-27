@@ -1,5 +1,6 @@
 package app.hamstr.data
 
+import app.hamstr.R
 import android.text.format.DateFormat
 import java.util.UUID
 import android.content.Context
@@ -26,7 +27,7 @@ object Importer {
     /** Copies each picked file and returns how many made it. */
     suspend fun import(context: Context, uris: List<Uri>): Int = withContext(Dispatchers.IO) {
         // Several files picked at once stay together, like a playlist.
-        val group = if (uris.size > 1) UUID.randomUUID().toString() to "Imported " + DateFormat.format("d MMM, HH:mm", System.currentTimeMillis()) else null
+        val group = if (uris.size > 1) UUID.randomUUID().toString() to context.getString(R.string.import_group, DateFormat.format("d MMM, HH:mm", System.currentTimeMillis())) else null
         val start = System.currentTimeMillis()
         uris.withIndex().count { (i, uri) -> runCatching { importOne(context, uri, group, start + i) }.isSuccess }
     }

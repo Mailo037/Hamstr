@@ -1,5 +1,6 @@
 package app.hamstr.engine
 
+import app.hamstr.R
 import android.content.Context
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -41,8 +42,8 @@ object AudioOut {
     suspend fun save(context: Context, video: DownloadTask): Result<DownloadTask> = withContext(Dispatchers.IO) {
         runCatching {
             Engine.awaitReady()
-            val source = video.filePath?.let(::File)?.takeIf { it.isFile } ?: error("The video file is gone")
-            val copy = containerFor(source) ?: error("This video has no sound")
+            val source = video.filePath?.let(::File)?.takeIf { it.isFile } ?: error(context.getString(R.string.audio_video_gone))
+            val copy = containerFor(source) ?: error(context.getString(R.string.audio_no_sound))
             // Anything else is re-encoded to AAC, which every player knows.
             val ext = copy.ifEmpty { "m4a" }
             Engine.outputDir.mkdirs()

@@ -23,6 +23,26 @@ enum class Status { Queued, Running, Paused, Done, Failed, Canceled;
     val active get() = this == Queued || this == Running
 }
 
+/** What a download is doing when it isn't moving bytes. */
+enum class Stage {
+    Resolving, Merging, ExtractingAudio, Remuxing, Tagging,
+    WaitingForNetwork, WaitingForWifi, Retrying, PausedBySystem;
+
+    /** Waiting stages keep the progress bar still; working stages animate it. */
+    val waiting get() = this == WaitingForNetwork || this == WaitingForWifi || this == Retrying || this == PausedBySystem
+
+    companion object {
+        /** Cheek's stage events and yt-dlp's post-processor tags. */
+        fun fromEngine(name: String): Stage? = when (name.lowercase()) {
+            "merging", "merger" -> Merging
+            "extracting audio", "extractaudio" -> ExtractingAudio
+            "remuxing", "fixupm3u8", "fixupm4a", "fixupstretched", "fixuptimestamp", "videoremuxer", "videoconvertor" -> Remuxing
+            "tagging", "embedthumbnail", "metadata", "embedsubtitle", "thumbnailsconvertor" -> Tagging
+            else -> null
+        }
+    }
+}
+
 /** What the user picked in the share sheet; turned into yt-dlp options by DownloadOptions. */
 data class Choice(
     val mode: Mode,
@@ -58,6 +78,13 @@ data class DownloadTask(
     val versionOf: String? = null,
     val replaces: String? = null,
     val videoHeight: Int = 0, // measured from the finished file, 0 = audio or unknown
+    val uploader: String? = null, // channel or artist
+    // The video behind the link, e.g. "Youtube:dQw4w9WgXcQ", however it was shared.
+    val mediaKey: String? = null,
+    // Live only, never saved: what happens besides fetching bytes, and the retry state.
+    val stage: Stage? = null,
+    val attempts: Int = 0,
+    val retryAt: Long = 0,
 ) {
     /** The first download of a link and all its other qualities share this key. */
     val family get() = versionOf ?: id
@@ -135,6 +162,27 @@ object DownloadStore {
         save()
     }
 
+    /** Takes entries off the list and returns them with their places, for [restore]. */
+    fun removeAll(ids: Set<String>): List<IndexedValue<DownloadTask>> {
+        var removed = emptyList<IndexedValue<DownloadTask>>()
+        _tasks.update { list ->
+            removed = list.withIndex().filter { it.value.id in ids }
+            list.filterNot { it.id in ids }
+        }
+        save()
+        return removed
+    }
+
+    /** Puts entries from [removeAll] back where they were (Undo). */
+    fun restore(removed: List<IndexedValue<DownloadTask>>) {
+        _tasks.update { list ->
+            val out = list.toMutableList()
+            removed.sortedBy { it.index }.forEach { (i, t) -> if (out.none { it.id == t.id }) out.add(i.coerceAtMost(out.size), t) }
+            out
+        }
+        save()
+    }
+
     /** Deleting a physical file also removes duplicate entries that reference it. */
     fun removeFile(file: File) {
         val path = file.absoluteFile.normalize()
@@ -170,6 +218,7 @@ object DownloadStore {
         put("error", t.error); put("createdAt", t.createdAt); put("finishedAt", t.finishedAt)
         put("group", t.group); put("groupTitle", t.groupTitle)
         put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
+        put("uploader", t.uploader); put("mediaKey", t.mediaKey)
     }
 
     private fun fromJson(o: JSONObject) = DownloadTask(
@@ -200,6 +249,8 @@ object DownloadStore {
         versionOf = o.optStringOrNull("versionOf"),
         replaces = o.optStringOrNull("replaces"),
         videoHeight = o.optInt("videoHeight"),
+        uploader = o.optStringOrNull("uploader"),
+        mediaKey = o.optStringOrNull("mediaKey"),
     )
 
     private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }

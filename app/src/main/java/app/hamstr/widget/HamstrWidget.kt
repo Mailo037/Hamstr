@@ -65,20 +65,22 @@ object Widgets {
             val more = running.size - 1 + queued
             v.setTextViewText(
                 R.id.widget_line,
-                listOf("${(current.progress * 100).toInt()}%", current.speed, DownloadService.eta(current.etaSec), if (more > 0) "+$more more" else "")
-                    .filter { it.isNotEmpty() }.joinToString(" · "),
+                // While FFmpeg works or the queue waits, that is what it says.
+                DownloadService.stageText(context, current)
+                    ?: listOf("${(current.progress * 100).toInt()}%", current.speed, DownloadService.eta(current.etaSec), if (more > 0) context.getString(R.string.widget_more, more) else "")
+                        .filter { it.isNotEmpty() }.joinToString(" · "),
             )
             v.setViewVisibility(R.id.widget_progress, View.VISIBLE)
             v.setProgressBar(R.id.widget_progress, 1000, (current.progress * 1000).toInt(), false)
         } else {
             val done = tasks.filter { it.status == Status.Done }
-            v.setTextViewText(R.id.widget_title, "${formatBytes(done.sumOf { it.sizeBytes })} stashed")
+            v.setTextViewText(R.id.widget_title, context.getString(R.string.widget_stashed, formatBytes(done.sumOf { it.sizeBytes })))
             v.setTextViewText(
                 R.id.widget_line,
                 when {
-                    queued > 0 -> "$queued waiting"
-                    done.isEmpty() -> "Share a link to start"
-                    else -> "${done.size} ${if (done.size == 1) "file" else "files"} · last: ${done.first().title}"
+                    queued > 0 -> tasks.firstOrNull { it.status == Status.Queued && it.stage != null }?.let { DownloadService.stageText(context, it) } ?: context.getString(R.string.widget_waiting, queued)
+                    done.isEmpty() -> context.getString(R.string.widget_start)
+                    else -> context.resources.getQuantityString(R.plurals.widget_files, done.size, done.size, done.first().title)
                 },
             )
             v.setViewVisibility(R.id.widget_progress, View.GONE)

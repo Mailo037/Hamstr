@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import app.hamstr.engine.Failures
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.data.Choice
@@ -82,7 +84,7 @@ private data class Pick(val height: Int)
  * more. Fetched ones either join the current file or replace it once they are in.
  */
 @Composable
-fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAudio: (DownloadTask) -> Unit, onDone: (String) -> Unit) {
+fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAudio: (DownloadTask) -> Unit, onDelete: (DownloadTask) -> Unit, onDone: (String) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -107,7 +109,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
         state = try { InfoState.Loaded(Engine.info(task.url)) } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            InfoState.Failed(e.message?.lines()?.lastOrNull { it.contains("ERROR") }?.substringAfter("ERROR: ") ?: "Couldn't read the link")
+            InfoState.Failed(errorLine(e))
         }
     }
     val info = (state as? InfoState.Loaded)?.info
@@ -134,12 +136,12 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
     ) {
         Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
         Spacer(Modifier.height(12.dp))
-        Txt("Quality", style = Hamstr.type.section, modifier = Modifier.padding(horizontal = 8.dp))
+        Txt(stringResource(R.string.menu_quality), style = Hamstr.type.section, modifier = Modifier.padding(horizontal = 8.dp))
         Spacer(Modifier.height(2.dp))
         Txt(current.title, style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 8.dp))
         Spacer(Modifier.height(12.dp))
 
-        Txt("On this phone", style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp))
+        Txt(stringResource(R.string.q_on_phone), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp))
         Spacer(Modifier.height(4.dp))
         versions.forEach { v ->
             val on = playing?.let { Playback.isCurrent(v) } ?: (v.id == current.id)
@@ -158,14 +160,9 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                     listOfNotNull(v.filePath?.let { File(it).extension }, formatBytes(v.sizeBytes).takeIf { v.sizeBytes > 0 }).joinToString(" · "),
                     style = Hamstr.type.small, color = c.ghost, modifier = Modifier.weight(1f),
                 )
-                if (on && playing != null) Txt("playing", style = Hamstr.type.badge, color = c.accent, modifier = Modifier.padding(end = 10.dp))
+                if (on && playing != null) Txt(stringResource(R.string.q_playing), style = Hamstr.type.badge, color = c.accent, modifier = Modifier.padding(end = 10.dp))
                 if (versions.size > 1) {
-                    IconButton(R.drawable.ic_delete, "Delete ${formatBadge(v)}", {
-                        scope.launch {
-                            val result = DownloadFiles.delete(context, v)
-                            result.exceptionOrNull()?.let { onDone(it.message ?: "Couldn't delete the file") }
-                        }
-                    }, tint = c.red, background = c.overlay, size = 34.dp)
+                    IconButton(R.drawable.ic_delete, stringResource(R.string.q_delete, formatBadge(v)), { onDelete(v) }, tint = c.red, background = c.overlay, size = 34.dp)
                 } else Spacer(Modifier.height(34.dp))
             }
         }
@@ -180,8 +177,8 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
             ) {
                 Icon(R.drawable.ic_music_note, tint = c.accent, size = 18.dp)
                 Spacer(Modifier.width(10.dp))
-                Txt("Save the audio from this video", style = Hamstr.type.bodyMedium, modifier = Modifier.weight(1f))
-                Txt("no download", style = Hamstr.type.badge, color = c.ghost)
+                Txt(stringResource(R.string.q_save_audio), style = Hamstr.type.bodyMedium, modifier = Modifier.weight(1f))
+                Txt(stringResource(R.string.q_no_download), style = Hamstr.type.badge, color = c.ghost)
             }
         }
         pending.forEach { p ->
@@ -189,20 +186,24 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                 Badge(formatBadge(p))
                 Spacer(Modifier.width(10.dp))
                 Txt(
-                    if (p.status == Status.Paused) "paused" else if (p.replaces != null) "on its way · replaces ${DownloadStore.get(p.replaces)?.let(::formatBadge) ?: "the old file"}" else "on its way",
+                    when {
+                        p.status == Status.Paused -> stringResource(R.string.status_paused_short)
+                        p.replaces != null -> stringResource(R.string.q_coming_replaces, DownloadStore.get(p.replaces)?.let(::formatBadge) ?: stringResource(R.string.q_old_file))
+                        else -> stringResource(R.string.q_coming)
+                    },
                     style = Hamstr.type.small, color = c.ghost, maxLines = 1,
                 )
             }
         }
 
         Spacer(Modifier.height(14.dp))
-        Txt("Get another quality", style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp))
+        Txt(stringResource(R.string.q_get_another), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp))
         Spacer(Modifier.height(8.dp))
         when (val s = state) {
-            InfoState.Loading -> Txt("Sniffing the link …", color = c.muted, modifier = Modifier.padding(horizontal = 8.dp))
-            is InfoState.Failed -> Txt(s.message, style = Hamstr.type.small, color = c.red, maxLines = 3, modifier = Modifier.padding(horizontal = 8.dp))
+            InfoState.Loading -> Txt(stringResource(R.string.share_sniffing), color = c.muted, modifier = Modifier.padding(horizontal = 8.dp))
+            is InfoState.Failed -> Txt(stringResource(Failures.explain(s.message).title), style = Hamstr.type.small, color = c.red, maxLines = 3, modifier = Modifier.padding(horizontal = 8.dp))
             is InfoState.Loaded -> if (offers.isEmpty()) {
-                Txt("Every quality this link offers is already here.", color = c.muted, modifier = Modifier.padding(horizontal = 8.dp))
+                Txt(stringResource(R.string.q_all_here), color = c.muted, modifier = Modifier.padding(horizontal = 8.dp))
             } else {
                 val scroll = rememberScrollState()
                 Row(
@@ -220,29 +221,31 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                                 .padding(horizontal = 14.dp, vertical = 7.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Txt(if (o.height == 0) "Audio" else heightLabel(o.height), style = Hamstr.type.bodyMedium, color = if (on) c.onAccent else c.ink)
-                            Txt(if (bytes > 0) "~" + formatBytes(bytes) else "size ?", style = Hamstr.type.small, color = if (on) c.onAccent else c.ghost)
+                            Txt(if (o.height == 0) stringResource(R.string.mode_audio) else heightLabel(o.height), style = Hamstr.type.bodyMedium, color = if (on) c.onAccent else c.ink)
+                            Txt(if (bytes > 0) "~" + formatBytes(bytes) else stringResource(R.string.q_size_unknown), style = Hamstr.type.small, color = if (on) c.onAccent else c.ghost)
                         }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+                val replaceLabel = stringResource(R.string.q_replace, formatBadge(current))
+                val keepLabel = stringResource(R.string.q_keep_both)
                 Segmented(
                     listOf(false, true), replace,
-                    { if (it) "Replace ${formatBadge(current)}" else "Keep both" },
+                    { if (it) replaceLabel else keepLabel },
                     { replace = it },
                     background = c.canvas,
                 )
                 Spacer(Modifier.height(6.dp))
                 Txt(
-                    if (replace) "${formatBadge(current)} stays until the new file is in, then it's deleted."
-                    else "The new files sit next to ${formatBadge(current)}. Switch between them any time.",
+                    if (replace) stringResource(R.string.q_replace_hint, formatBadge(current))
+                    else stringResource(R.string.q_keep_hint, formatBadge(current)),
                     style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp),
                 )
             }
         }
         Spacer(Modifier.height(14.dp))
         HButton(
-            when (picked.size) { 0 -> "Pick a quality"; 1 -> "Stash it"; else -> "Stash ${picked.size}" },
+            when (picked.size) { 0 -> stringResource(R.string.q_pick); 1 -> stringResource(R.string.share_stash); else -> stringResource(R.string.q_stash_n, picked.size) },
             onClick = {
                 val defaults = Prefs.settings.value
                 picked.sortedByDescending { it.height }.forEach { p ->
@@ -253,7 +256,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                     }
                     DownloadService.stashVersion(context, current, choice, replace)
                 }
-                onDone(if (picked.size == 1) "Fetching another quality" else "Fetching ${picked.size} qualities")
+                onDone(if (picked.size == 1) context.getString(R.string.q_fetching_one) else context.getString(R.string.q_fetching_many, picked.size))
             },
             modifier = Modifier.fillMaxWidth(),
             kind = ButtonKind.Primary,

@@ -1,5 +1,6 @@
 package app.hamstr.ui.components
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -75,7 +76,7 @@ fun SearchField(
                     if (value.isEmpty()) Txt(placeholder, color = c.ghost, maxLines = 1)
                     field()
                 }
-                if (value.isNotEmpty()) IconButton(R.drawable.ic_close, "Clear", { onValueChange("") }, background = Color.Transparent, size = 36.dp)
+                if (value.isNotEmpty()) IconButton(R.drawable.ic_close, stringResource(R.string.clear), { onValueChange("") }, background = Color.Transparent, size = 36.dp)
             }
         },
     )

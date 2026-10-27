@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -75,7 +76,7 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             HamstrMark(36.dp)
             Spacer(Modifier.width(12.dp))
-            Txt("Add to the stash", style = Hamstr.type.section)
+            Txt(stringResource(R.string.add_title), style = Hamstr.type.section)
         }
         Spacer(Modifier.height(16.dp))
 
@@ -100,11 +101,11 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
                     Icon(R.drawable.ic_link, tint = if (link != null) c.accent else c.ghost, size = 18.dp)
                     Spacer(Modifier.width(10.dp))
                     Box(Modifier.weight(1f)) {
-                        if (text.isEmpty()) Txt("Paste or type a link", style = Hamstr.type.mono, color = c.ghost, maxLines = 1)
+                        if (text.isEmpty()) Txt(stringResource(R.string.add_hint), style = Hamstr.type.mono, color = c.ghost, maxLines = 1)
                         field()
                     }
                     if (text.isNotEmpty()) {
-                        IconButton(R.drawable.ic_close, "Clear", { text = "" }, background = androidx.compose.ui.graphics.Color.Transparent, size = 36.dp)
+                        IconButton(R.drawable.ic_close, stringResource(R.string.clear), { text = "" }, background = androidx.compose.ui.graphics.Color.Transparent, size = 36.dp)
                     }
                 }
             },
@@ -122,17 +123,17 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(R.drawable.ic_content_paste, tint = c.muted, size = 18.dp)
-                Badge("clipboard", accent = true)
+                Badge(stringResource(R.string.add_clipboard), accent = true)
                 Txt(clipboardLink.orEmpty(), style = Hamstr.type.mono, color = c.muted, maxLines = 1, modifier = Modifier.weight(1f))
             }
         }
 
         Spacer(Modifier.height(12.dp))
-        HButton("Stash this link", { submit() }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download, enabled = link != null)
+        HButton(stringResource(R.string.add_stash), { submit() }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download, enabled = link != null)
 
         Row(Modifier.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).height(1.dp).background(c.line))
-            Txt("or", style = Hamstr.type.mono, color = c.ghost, modifier = Modifier.padding(horizontal = 12.dp))
+            Txt(stringResource(R.string.add_or), style = Hamstr.type.mono, color = c.ghost, modifier = Modifier.padding(horizontal = 12.dp))
             Box(Modifier.weight(1f).height(1.dp).background(c.line))
         }
 
@@ -150,9 +151,9 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Txt("Add files from your phone", style = Hamstr.type.bodyMedium)
+                Txt(stringResource(R.string.add_files), style = Hamstr.type.bodyMedium)
                 Spacer(Modifier.height(2.dp))
-                Txt("Videos, music, documents. They're copied into Download/Hamstr.", style = Hamstr.type.small, color = c.ghost)
+                Txt(stringResource(R.string.add_files_hint), style = Hamstr.type.small, color = c.ghost)
             }
             Icon(R.drawable.ic_chevron_right, tint = c.ghost, size = 20.dp)
         }

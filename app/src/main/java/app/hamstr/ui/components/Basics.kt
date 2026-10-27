@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -161,14 +162,21 @@ fun IconButton(
     background: Color = Hamstr.colors.surface,
     size: Dp = 38.dp,
 ) {
+    // The visible button can be small; the finger always gets at least 48 dp.
     Box(
         modifier
-            .size(size)
-            .clip(RoundedCornerShape(12.dp))
-            .background(background)
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .pressable(onClick, label = label, pressedScale = 0.92f),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, tint = tint, size = 20.dp) }
+    ) {
+        Box(
+            Modifier
+                .size(size)
+                .clip(RoundedCornerShape(12.dp))
+                .background(background),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, tint = tint, size = 20.dp) }
+    }
 }
 
 /** Flat 3dp progress line, accent fill. */
