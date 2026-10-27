@@ -1,6 +1,7 @@
 package app.hamstr.engine
 
 import app.hamstr.data.DownloadEngine
+import app.hamstr.BuildConfig
 import app.hamstr.data.Choice
 import android.content.Context
 import android.os.Environment
@@ -32,6 +33,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 /** Metadata shown in the share sheet before downloading. */
@@ -65,6 +68,8 @@ object Engine {
     val state: StateFlow<EngineState> = _state.asStateFlow()
     private val _updating = MutableStateFlow(false)
     val updating: StateFlow<Boolean> = _updating.asStateFlow()
+    private val _versionCheck = MutableStateFlow<EngineVersionCheck>(EngineVersionCheck.Idle)
+    val versionCheck: StateFlow<EngineVersionCheck> = _versionCheck.asStateFlow()
 
     lateinit var outputDir: File
         private set
@@ -114,6 +119,43 @@ object Engine {
 
     suspend fun awaitReady() = ready.await()
 
+    /** Compare versions without calling the updater or changing the installed archive. */
+    suspend fun checkVersion() = checkVersion { latestStableVersion() }
+
+    internal suspend fun checkVersion(latestVersion: suspend () -> String) = withContext(Dispatchers.IO) { updateMutex.withLock {
+        _versionCheck.value = EngineVersionCheck.Checking
+        try {
+            awaitReady()
+            val latest = latestVersion()
+            // The wrapper can report '?' before the first update. Ask the installed
+            // executable so a fresh installation is compared correctly as well.
+            val installed = readRuntime {
+                YoutubeDL.getInstance().execute(YoutubeDLRequest(emptyList()).apply { addOption("--version") }).out.trim()
+            }
+            val available = newerYtDlpVersion(latest, installed)
+            _state.value = EngineState.Ready(installed)
+            _versionCheck.value = if (available) EngineVersionCheck.Available(latest) else EngineVersionCheck.Current
+        } catch (e: CancellationException) {
+            _versionCheck.value = EngineVersionCheck.Idle
+            throw e
+        } catch (e: Exception) {
+            _versionCheck.value = EngineVersionCheck.Failed(e.message ?: "Version check failed")
+        }
+    } }
+
+    private suspend fun latestStableVersion(): String = runInterruptible {
+        val connection = URL(YoutubeDL.UpdateChannel._STABLE.apiUrl).openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 10_000
+            connection.setRequestProperty("User-Agent", "Hamstr/${BuildConfig.VERSION_NAME}")
+            connection.setRequestProperty("Accept", "application/vnd.github+json")
+            check(connection.responseCode == 200) { "Version check failed: HTTP ${connection.responseCode}" }
+            val release = connection.inputStream.bufferedReader().use { JSONObject(it.readText()) }
+            release.getString("tag_name").trim().removePrefix("v")
+        } finally { connection.disconnect() }
+    }
+
     /** Pulls the newest stable yt-dlp; sites change often, so an old build breaks quickly. */
     suspend fun update(context: Context): Result<String> = withContext(Dispatchers.IO) { updateMutex.withLock {
         _updating.value = true
@@ -128,6 +170,7 @@ object Engine {
                 } finally { lock.unlock() }
             }
             _state.value = EngineState.Ready(v)
+            _versionCheck.value = EngineVersionCheck.Current
             Prefs.edit { it.copy(lastUpdateCheck = System.currentTimeMillis()) }
             Result.success(v)
         } catch (e: CancellationException) {

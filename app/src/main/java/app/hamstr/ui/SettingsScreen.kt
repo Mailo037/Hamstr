@@ -71,6 +71,7 @@ import app.hamstr.data.heightLabel
 import app.hamstr.engine.Engine
 import app.hamstr.engine.Cheek
 import app.hamstr.engine.EngineState
+import app.hamstr.engine.EngineVersionCheck
 import app.hamstr.ui.components.AccentPicker
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.DecodeText
@@ -254,7 +255,7 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
             Page.Motion -> MotionPage()
             Page.Downloads -> DownloadsPage()
             Page.Queue -> QueuePage()
-            Page.Engine -> EnginePage(onUpdate)
+            Page.Engine -> EnginePage()
             Page.About -> AboutPage(onUpdate)
         }
         Spacer(Modifier.height(24.dp))
@@ -351,14 +352,14 @@ private fun QueuePage() {
 }
 
 @Composable
-private fun EnginePage(onUpdate: () -> Unit) {
+private fun EnginePage() {
     val c = Hamstr.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val s by Prefs.settings.collectAsState()
     val engine by Engine.state.collectAsState()
     val updating by Engine.updating.collectAsState()
-    val appUpdate by Updater.state.collectAsState()
+    val versionCheck by Engine.versionCheck.collectAsState()
     var updateMsg by remember { mutableStateOf<String?>(null) }
     var cheekVersion by remember { mutableStateOf(BuildConfig.CHEEK_VERSION) }
     var checkingVersion by remember { mutableStateOf(false) }
@@ -383,11 +384,8 @@ private fun EnginePage(onUpdate: () -> Unit) {
         Group {
             SettingRow("Cheek version", subtitle = "$cheekVersion · included with Hamstr ${BuildConfig.VERSION_NAME}")
             Divider()
-            FxRow("Automatic update checks", "Check on launch. Cheek is updated with Hamstr.", s.appUpdates) { v ->
-                Prefs.edit { it.copy(appUpdates = v) }
-            }
             Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Txt("Cheek is bundled with the app. A newer Cheek version is installed through a Hamstr update.", style = Hamstr.type.small, color = c.ghost)
+                Txt("Cheek is included with Hamstr. Manage app updates in About.", style = Hamstr.type.small, color = c.ghost)
                 HButton(
                     if (checkingVersion) "Checking version …" else "Check version",
                     onClick = {
@@ -404,21 +402,7 @@ private fun EnginePage(onUpdate: () -> Unit) {
                         }
                     }, enabled = !checkingVersion,
                 )
-                val busy = appUpdate is UpdateState.Checking || appUpdate is UpdateState.Downloading || appUpdate is UpdateState.Installing
-                HButton(if (appUpdate is UpdateState.Checking) "Checking updates …" else "Check for updates", { Updater.check(context) }, enabled = !busy)
-                appUpdate.release?.let { release ->
-                    HButton("Update now · Hamstr ${release.version}", onUpdate, kind = ButtonKind.Primary, enabled = !busy)
-                }
-                val message = when (val update = appUpdate) {
-                    is UpdateState.Available -> "Hamstr ${update.release.version} is available"
-                    UpdateState.UpToDate -> "No newer Hamstr release available"
-                    is UpdateState.Failed -> update.message
-                    is UpdateState.Downloading -> "Downloading Hamstr ${update.release.version}"
-                    is UpdateState.Installing -> "Installing Hamstr ${update.release.version}"
-                    else -> null
-                }
                 cheekMsg?.let { Txt(it, style = Hamstr.type.small, color = c.muted) }
-                message?.let { Txt(it, style = Hamstr.type.small, color = c.muted) }
             }
         }
     }
@@ -437,16 +421,30 @@ private fun EnginePage(onUpdate: () -> Unit) {
         Divider()
         FxRow("Update automatically", "Once a day, so sites don't break", s.autoUpdate) { v -> Prefs.edit { it.copy(autoUpdate = v) } }
         Column(Modifier.padding(8.dp)) {
+            val available = versionCheck as? EngineVersionCheck.Available
+            val checking = versionCheck == EngineVersionCheck.Checking
             HButton(
-                if (updating) "Updating …" else "Update now",
+                when {
+                    updating -> "Updating …"
+                    checking -> "Checking version …"
+                    available != null -> "Update now"
+                    else -> "Check version"
+                },
                 onClick = {
-                    if (!updating) scope.launch {
-                        updateMsg = Engine.update(context).fold({ "Up to date: $it" }, { "Update failed: ${it.message}" })
+                    if (!updating && !checking) scope.launch {
+                        updateMsg = null
+                        if (available == null) Engine.checkVersion()
+                        else updateMsg = Engine.update(context).exceptionOrNull()?.let { "Update failed: ${it.message}" }
                     }
                 },
-                enabled = !updating,
+                enabled = !updating && !checking && engine is EngineState.Ready,
             )
-            updateMsg?.let {
+            val message = updateMsg ?: when (val check = versionCheck) {
+                is EngineVersionCheck.Available -> "Version ${check.version} available"
+                is EngineVersionCheck.Failed -> check.message
+                else -> null
+            }
+            message?.let {
                 Spacer(Modifier.height(8.dp))
                 Txt(it, style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
             }
@@ -538,8 +536,7 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry("Save location", Page.Queue, "folder storage path speicher ordner"),
     SettingEntry("Download engine", Page.Engine, "cheek rust engine yt-dlp speed fast parallel connections"),
     SettingEntry("Version", Page.Engine, "yt-dlp engine version"),
-    SettingEntry("Cheek version", Page.Engine, "cheek engine installed bundled check version update now"),
-    SettingEntry("Automatic update checks", Page.Engine, "cheek engine hamstr app updates automatically"),
+    SettingEntry("Cheek version", Page.Engine, "cheek engine installed bundled check version"),
     SettingEntry("Update automatically", Page.Engine, "yt-dlp update auto"),
     SettingEntry("Source code", Page.About, "github code source"),
     SettingEntry("Check on launch", Page.About, "app update release github"),
