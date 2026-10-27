@@ -74,36 +74,6 @@ Android asks once whether your browser may install apps. Later updates come thro
 
 yt-dlp resolves links once, in a Python process that stays running for a few minutes so the next link skips its start. Cheek picks the streams from that JSON by yt-dlp's rules and downloads them by default; direct files, HLS playlists and plain pages that no yt-dlp extractor knows, Cheek resolves itself, without Python. Playlists, subtitles, custom formats and unsupported download protocols fall back to yt-dlp. FFmpeg merges streams and converts audio when needed.
 
-- `engine/`: the Cheek bridge, yt-dlp and FFmpeg through [youtubedl-android](https://github.com/JunkFood02/youtubedl-android), the download queue and its notifications.
-- `player/`: a Media3 ExoPlayer behind a `MediaSession`, plus the mini player, picture-in-picture and fullscreen.
-- `update/`: the self-updater, built on GitHub Releases and `PackageInstaller` sessions.
-- `ui/`: Compose Foundation only, no Material components. The tokens live in `ui/theme`, the motion helpers in `ui/components`.
-
-## Build
-
-You need JDK 21 and the Android SDK with platform 37.
-
-```bash
-./gradlew assembleDebug
-```
-
-To test with the pinned, published Cheek binaries even when `local.properties` sets `cheek.dir`, use `./gradlew assembleDebug -Pcheek.useRelease=true`. Downloaded Cheek binaries are checked against the release's `SHA256SUMS.txt` before packaging.
-
-The APKs end up in `app/build/outputs/apk/debug/`, one per ABI plus a universal one.
-
-## Releasing
-
-Push a tag and GitHub Actions does the rest:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-[`release.yml`](.github/workflows/release.yml) builds the APKs, signs them with the release key and publishes the release with checksums. The version comes from the tag. If `.github/release-notes/v0.2.0.md` exists, it becomes the release text; otherwise GitHub writes notes from the commits. Every app that is already installed finds the release on its next start.
-
-The key comes from four repository secrets: `HAMSTR_KEYSTORE_B64`, `HAMSTR_KEYSTORE_PASSWORD`, `HAMSTR_KEY_ALIAS` and `HAMSTR_KEY_PASSWORD`. Local release builds read the same values from `signing/keystore.properties`, which git ignores. Keep that key safe: an update only installs over an app signed with the same key.
-
 ## License
 
 Hamstr is licensed under the [GPL-3.0](LICENSE), like youtubedl-android, which it builds on. Bundled third-party work:
