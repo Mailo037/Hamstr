@@ -54,7 +54,26 @@ data class DownloadTask(
     // Files that arrived together (a playlist, a batch of imports) share a group.
     val group: String? = null,
     val groupTitle: String? = null,
-)
+    // Other qualities of a stashed link point at the first download; [replaces] goes once this one is in.
+    val versionOf: String? = null,
+    val replaces: String? = null,
+    val videoHeight: Int = 0, // measured from the finished file, 0 = audio or unknown
+) {
+    /** The first download of a link and all its other qualities share this key. */
+    val family get() = versionOf ?: id
+}
+
+/** Each family of qualities once, as its first download (or the newest left), with all its files. */
+fun collapseVersions(done: List<DownloadTask>): List<Pair<DownloadTask, List<DownloadTask>>> {
+    if (done.none { it.versionOf != null }) return done.map { it to listOf(it) }
+    val families = done.groupBy { it.family }
+    val seen = HashSet<String>()
+    return done.mapNotNull { t ->
+        if (!seen.add(t.family)) return@mapNotNull null
+        val all = families.getValue(t.family)
+        (all.firstOrNull { it.versionOf == null } ?: t) to all
+    }
+}
 
 /**
  * All downloads, as one observable list. Progress lives in memory only; the list is
@@ -139,6 +158,7 @@ object DownloadStore {
         put("filePath", t.filePath); put("contentUri", t.contentUri); put("size", t.sizeBytes)
         put("error", t.error); put("createdAt", t.createdAt); put("finishedAt", t.finishedAt)
         put("group", t.group); put("groupTitle", t.groupTitle)
+        put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
     }
 
     private fun fromJson(o: JSONObject) = DownloadTask(
@@ -166,6 +186,9 @@ object DownloadStore {
         finishedAt = o.optLong("finishedAt"),
         group = o.optStringOrNull("group"),
         groupTitle = o.optStringOrNull("groupTitle"),
+        versionOf = o.optStringOrNull("versionOf"),
+        replaces = o.optStringOrNull("replaces"),
+        videoHeight = o.optInt("videoHeight"),
     )
 
     private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }

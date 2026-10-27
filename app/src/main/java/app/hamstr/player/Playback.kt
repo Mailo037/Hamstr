@@ -72,11 +72,11 @@ object Playback {
     }
 
     /** Opens a stashed file in the player (video and audio) or the viewer (images, others). */
-    suspend fun open(context: Context, task: DownloadTask) = withContext(Dispatchers.Main.immediate) {
+    suspend fun open(context: Context, task: DownloadTask, startAt: Long = 0, play: Boolean = true, expand: Boolean = true) = withContext(Dispatchers.Main.immediate) {
         val request = ++openGeneration
         val file = task.filePath?.let(::File)?.takeIf { it.isFile } ?: return@withContext
         _current.value = task
-        _expanded.value = true
+        if (expand) _expanded.value = true
         val kind = kindOf(file)
         if (kind != Kind.Video && kind != Kind.Audio) {
             _controller.value?.pause()
@@ -102,10 +102,17 @@ object Playback {
             )
             .build()
         if (c.currentMediaItem?.mediaId != task.id) {
-            c.setMediaItem(item)
+            c.setMediaItem(item, startAt)
             c.prepare()
         }
-        c.play()
+        if (play) c.play() else c.pause()
+    }
+
+    /** Another quality of what is open: same spot, same play/pause, same player size. */
+    suspend fun switchTo(context: Context, task: DownloadTask) = withContext(Dispatchers.Main.immediate) {
+        val c = _controller.value?.takeIf { it.isConnected && _current.value?.family == task.family }
+        if (c == null) open(context, task)
+        else open(context, task, startAt = c.currentPosition, play = c.playWhenReady, expand = false)
     }
 
     fun expand() { _expanded.value = true }
@@ -119,12 +126,14 @@ object Playback {
     }
 
     /** Different history entries can point at the same downloaded file. */
-    fun closeIfCurrent(task: DownloadTask) {
-        val current = _current.value ?: return
+    fun isCurrent(task: DownloadTask): Boolean {
+        val current = _current.value ?: return false
         val sameFile = current.filePath != null && task.filePath != null &&
             File(current.filePath).absoluteFile.normalize() == File(task.filePath).absoluteFile.normalize()
-        if (current.id == task.id || sameFile) close()
+        return current.id == task.id || sameFile
     }
+
+    fun closeIfCurrent(task: DownloadTask) { if (isCurrent(task)) close() }
 
     // ---- leaving the app with the file ------------------------------------------------
 

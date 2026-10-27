@@ -47,7 +47,15 @@ data class MediaInfo(
     val uploader: String?,
     val heights: List<Int>, // video heights on offer, descending
     val approxBytes: Long,
-)
+    val videoBytes: Map<Int, Long> = emptyMap(), // per height, with the best audio added where needed
+    val audioBytes: Long = 0,
+) {
+    /** Roughly what "up to [height]" weighs, or 0 when the site doesn't say. */
+    fun bytesFor(height: Int?): Long {
+        val h = if (height == null) heights.firstOrNull() else heights.firstOrNull { it <= height } ?: heights.lastOrNull()
+        return h?.let { videoBytes[it] } ?: 0
+    }
+}
 
 sealed interface EngineState {
     data object Starting : EngineState
@@ -108,6 +116,7 @@ object Engine {
                     while (Prefs.settings.value.autoUpdate && DownloadStore.tasks.value.any { it.status.active }) delay(10_000)
                     val s = Prefs.settings.value
                     if (s.autoUpdate && System.currentTimeMillis() - s.lastUpdateCheck > 24 * 3600_000L) update(app)
+                    if (s.cheekAutoUpdate && Cheek.available && System.currentTimeMillis() - s.lastCheekCheck > 24 * 3600_000L) CheekUpdates.update()
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "init failed", e)
@@ -214,12 +223,16 @@ object Engine {
     private fun mediaInfo(url: String, v: JSONObject): MediaInfo {
         fun string(key: String) = if (v.isNull(key)) null else v.optString(key).takeIf { it.isNotBlank() }
         val formats = v.optJSONArray("formats")
-        val heights = (0 until (formats?.length() ?: 0))
-            .mapNotNull { formats?.optJSONObject(it) }
-            .filter { !it.isNull("vcodec") && it.optString("vcodec") != "none" && it.optInt("height") > 0 }
-            .map { it.optInt("height") }
-            .distinct()
-            .sortedDescending()
+        val all = (0 until (formats?.length() ?: 0)).mapNotNull { formats?.optJSONObject(it) }
+        fun JSONObject.has(codec: String) = !isNull(codec) && optString(codec) != "none"
+        fun JSONObject.bytes() = optLong("filesize").takeIf { it > 0 } ?: optLong("filesize_approx")
+        val video = all.filter { it.has("vcodec") && it.optInt("height") > 0 }
+        val heights = video.map { it.optInt("height") }.distinct().sortedDescending()
+        val audioBytes = all.filter { !it.has("vcodec") && it.has("acodec") }.maxOfOrNull { it.bytes() } ?: 0
+        val videoBytes = heights.associateWith { h ->
+            video.filter { it.optInt("height") == h && it.bytes() > 0 }
+                .maxOfOrNull { it.bytes() + if (it.has("acodec")) 0 else audioBytes } ?: 0
+        }
         return MediaInfo(
             url = string("webpage_url") ?: url,
             title = string("title") ?: string("fulltitle") ?: url,
@@ -229,8 +242,22 @@ object Engine {
             uploader = string("uploader"),
             heights = heights,
             approxBytes = v.optLong("filesize").takeIf { it > 0 } ?: v.optLong("filesize_approx"),
+            videoBytes = videoBytes,
+            audioBytes = audioBytes,
         )
     }
+
+    /** Another quality of a stashed link gets its own name, so it can't overwrite the first file. */
+    internal fun outputTemplate(task: DownloadTask): String {
+        val tag = if (task.versionOf == null) "" else " " + when (task.choice.mode) {
+            Mode.Audio -> "audio"
+            else -> task.choice.height?.let { "${it}p" } ?: "best"
+        }
+        return "%(title).150B [%(id)s]$tag.%(ext)s"
+    }
+
+    /** A version is one more file of one video, even when playlists are switched on. */
+    internal fun playlists(task: DownloadTask) = Prefs.settings.value.playlists && task.versionOf == null
 
     fun pathFile(task: DownloadTask) = File(tempDir, "${task.id}.path")
 
@@ -300,7 +327,7 @@ object Engine {
 
     fun request(task: DownloadTask, reusePreview: Boolean = true): YoutubeDLRequest {
         val c = task.choice
-        val playlists = Prefs.settings.value.playlists
+        val playlists = playlists(task)
         // A playlist preview describes just one video, so it cannot replace a playlist request.
         val preview = if (playlists || !reusePreview) null else previews.get(task.url)
         val infoFile = preview?.let {
@@ -311,7 +338,7 @@ object Engine {
             outputDir.mkdirs()
             addOption("-P", outputDir.absolutePath)
             addOption("-P", "temp:" + File(tempDir, task.id).absolutePath)
-            addOption("-o", "%(title).150B [%(id)s].%(ext)s")
+            addOption("-o", outputTemplate(task))
             // One JSON line per finished file; a playlist leaves one per entry.
             addCommands(listOf("--print-to-file", "after_move:%(.{filepath,title,thumbnail,duration,playlist_title})j", pathFile(task).absolutePath))
             // Read metadata from this extraction instead of starting a second process first.

@@ -97,7 +97,7 @@ object Importer {
         return Uri.fromFile(out).toString()
     }
 
-    private fun freeName(dir: File, name: String): File {
+    internal fun freeName(dir: File, name: String): File {
         val base = name.substringBeforeLast('.', name)
         val ext = name.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
         var f = File(dir, name)
@@ -106,7 +106,7 @@ object Importer {
         return f
     }
 
-    private suspend fun scan(context: Context, file: File): Uri? = withTimeoutOrNull(10_000) {
+    internal suspend fun scan(context: Context, file: File): Uri? = withTimeoutOrNull(10_000) {
         suspendCancellableCoroutine { cont ->
             MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { _, uri -> if (cont.isActive) cont.resume(uri) }
         }

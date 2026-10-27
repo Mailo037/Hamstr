@@ -29,6 +29,8 @@
 - A built-in player for video and audio. Swipe it down and it becomes a mini player that floats above the tabs.
 - Background audio with media controls, picture-in-picture, fullscreen, and double-tap to skip 10 s.
 - *Open with…* hands a file to any other app: a video player, a music app, a PDF reader or Word. *Share file* sends the file itself, not the link.
+- Keep a video in several qualities: tap the quality in the player to switch between them at the same spot, fetch another one next to it, or replace the current one once the new file is in.
+- *Save audio* pulls the sound out of a stashed video on the phone, without downloading it again.
 
 **Feel**
 - **Raster** design: calm Slate surfaces with ASCII accents from Glyph.
@@ -41,7 +43,7 @@
 **Updates**
 - Hamstr checks this repository's releases and installs new versions in place, without a browser detour (Settings › About).
 - yt-dlp updates itself once a day, so sites keep working between app releases.
-- Cheek is bundled with Hamstr and updated through app releases. Its installed version is shown in Settings › Engine.
+- Cheek updates itself from [its own releases](https://github.com/Mailo037/cheek/releases) once a day, so a new Cheek doesn't need a new Hamstr. Hamstr takes releases that keep Cheek's command line (same major version, for 0.x the same minor) and falls back to the copy inside the APK.
 
 ## Install
 

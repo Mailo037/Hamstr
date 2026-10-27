@@ -7,8 +7,20 @@ import app.hamstr.ui.components.LocalSettingHighlight
 import app.hamstr.ui.components.SearchField
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -70,6 +82,7 @@ import app.hamstr.data.Settings
 import app.hamstr.data.heightLabel
 import app.hamstr.engine.Engine
 import app.hamstr.engine.Cheek
+import app.hamstr.engine.CheekUpdates
 import app.hamstr.engine.EngineState
 import app.hamstr.engine.EngineVersionCheck
 import app.hamstr.ui.components.AccentPicker
@@ -167,7 +180,7 @@ private fun summary(p: Page, s: Settings, engine: EngineState): String = when (p
     Page.Downloads -> if (s.mode == Mode.Audio) "Audio · ${s.audioFormat}" else "Video · ${heightLabel(s.height)} · ${s.container}"
     Page.Queue -> "${s.parallel} at once · Download/Hamstr"
     Page.Engine -> when (engine) {
-        is EngineState.Ready -> (if (s.engine == DownloadEngine.Cheek) "Cheek ${BuildConfig.CHEEK_VERSION} · yt-dlp " else "yt-dlp ") + engine.version
+        is EngineState.Ready -> (if (s.engine == DownloadEngine.Cheek) "Cheek ${Cheek.active.value} · yt-dlp " else "yt-dlp ") + engine.version
         EngineState.Starting -> "starting …"
         is EngineState.Broken -> "error"
     }
@@ -349,6 +362,49 @@ private fun QueuePage() {
         }
         SettingRow("Save location", subtitle = Engine.outputDir.absolutePath.replace("/storage/emulated/0", "Internal storage"))
     }
+    Spacer(Modifier.height(12.dp))
+    Group { NotificationsRow() }
+}
+
+/**
+ * Mirrors whether Android lets Hamstr post notifications. Turning it on asks again while
+ * Android still allows that, and otherwise opens Hamstr's notification settings.
+ */
+@Composable
+private fun NotificationsRow() {
+    val context = LocalContext.current
+    val activity = LocalActivity.current
+    fun enabled() = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    var on by remember { mutableStateOf(enabled()) }
+    // The switch follows changes made in the system settings while Hamstr was away.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) on = enabled() }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    val openSettings = {
+        context.startActivity(
+            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        on = enabled()
+        if (!granted) openSettings()
+    }
+    val toggle = {
+        val canAsk = Build.VERSION.SDK_INT >= 33 && activity != null &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
+        // Android can't take a permission back from inside the app, so "off" goes to its settings too.
+        if (!on && canAsk) ask.launch(Manifest.permission.POST_NOTIFICATIONS) else openSettings()
+    }
+    SettingRow(
+        "Send notifications",
+        subtitle = if (on) "Progress while downloading, and a note when a file is in" else "Off · downloads still run, you just won't hear about them",
+        onClick = toggle,
+    ) { HSwitch(on, { toggle() }) }
 }
 
 @Composable
@@ -361,8 +417,9 @@ private fun EnginePage() {
     val updating by Engine.updating.collectAsState()
     val versionCheck by Engine.versionCheck.collectAsState()
     var updateMsg by remember { mutableStateOf<String?>(null) }
-    var cheekVersion by remember { mutableStateOf(BuildConfig.CHEEK_VERSION) }
-    var checkingVersion by remember { mutableStateOf(false) }
+    val cheekVersion by Cheek.active.collectAsState()
+    val cheekCheck by CheekUpdates.check.collectAsState()
+    val cheekUpdating by CheekUpdates.updating.collectAsState()
     var cheekMsg by remember { mutableStateOf<String?>(null) }
     Group {
         Block("Download engine") {
@@ -382,27 +439,38 @@ private fun EnginePage() {
         Label("Cheek", Modifier.padding(horizontal = 6.dp))
         Spacer(Modifier.height(8.dp))
         Group {
-            SettingRow("Cheek version", subtitle = "$cheekVersion · included with Hamstr ${BuildConfig.VERSION_NAME}")
+            SettingRow("Cheek version", subtitle = cheekVersion + if (Cheek.updated) " · updated on its own" else " · included with Hamstr ${BuildConfig.VERSION_NAME}")
             Divider()
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Txt("Cheek is included with Hamstr. Manage app updates in About.", style = Hamstr.type.small, color = c.ghost)
+            FxRow("Update Cheek automatically", "Once a day from Cheek's GitHub releases", s.cheekAutoUpdate) { v -> Prefs.edit { it.copy(cheekAutoUpdate = v) } }
+            Column(Modifier.padding(8.dp)) {
+                val available = cheekCheck as? EngineVersionCheck.Available
+                val checking = cheekCheck == EngineVersionCheck.Checking
                 HButton(
-                    if (checkingVersion) "Checking version …" else "Check version",
+                    when {
+                        cheekUpdating -> "Updating …"
+                        checking -> "Checking version …"
+                        available != null -> "Update now"
+                        else -> "Check version"
+                    },
                     onClick = {
-                        checkingVersion = true
-                        scope.launch {
-                            try {
-                                cheekVersion = Cheek.version()
-                                cheekMsg = "Installed Cheek: $cheekVersion"
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                cheekMsg = e.message ?: "Version check failed"
-                            } finally { checkingVersion = false }
+                        if (!cheekUpdating && !checking) scope.launch {
+                            cheekMsg = null
+                            if (available == null) CheekUpdates.checkVersion()
+                            else cheekMsg = CheekUpdates.update().fold({ "Cheek $it is installed" }, { "Update failed: ${it.message}" })
                         }
-                    }, enabled = !checkingVersion,
+                    },
+                    enabled = !cheekUpdating && !checking && Cheek.available,
                 )
-                cheekMsg?.let { Txt(it, style = Hamstr.type.small, color = c.muted) }
+                val message = cheekMsg ?: when (val check = cheekCheck) {
+                    is EngineVersionCheck.Available -> "Version ${check.version} available"
+                    EngineVersionCheck.Current -> "Cheek $cheekVersion is the newest version that fits this Hamstr"
+                    is EngineVersionCheck.Failed -> check.message
+                    else -> null
+                }
+                message?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Txt(it, style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
+                }
             }
         }
     }
@@ -534,10 +602,12 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry("Whole playlists", Page.Downloads, "playlist album"),
     SettingEntry("Parallel downloads", Page.Queue, "parallel concurrent queue at once"),
     SettingEntry("Save location", Page.Queue, "folder storage path speicher ordner"),
+    SettingEntry("Send notifications", Page.Queue, "notifications notification benachrichtigungen permission progress alert"),
     SettingEntry("Download engine", Page.Engine, "cheek rust engine yt-dlp speed fast parallel connections"),
     SettingEntry("Version", Page.Engine, "yt-dlp engine version"),
     SettingEntry("Cheek version", Page.Engine, "cheek engine installed bundled check version"),
     SettingEntry("Update automatically", Page.Engine, "yt-dlp update auto"),
+    SettingEntry("Update Cheek automatically", Page.Engine, "cheek update auto release github"),
     SettingEntry("Source code", Page.About, "github code source"),
     SettingEntry("Check on launch", Page.About, "app update release github"),
     SettingEntry("Licenses", Page.About, "license open source gpl"),

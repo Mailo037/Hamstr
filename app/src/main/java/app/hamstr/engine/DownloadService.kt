@@ -25,7 +25,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.hamstr.MainActivity
 import app.hamstr.R
+import android.util.Log
 import app.hamstr.data.Choice
+import app.hamstr.data.DownloadFiles
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Prefs
@@ -150,9 +152,10 @@ class DownloadService : Service() {
             // A playlist becomes a group: this task keeps the first entry, the rest join it.
             val grouped = entries.size > 1
             val groupTitle = if (grouped) entries.firstNotNullOfOrNull { it.playlist } ?: task.title else null
+            val height = file?.let(DownloadFiles::probeHeight) ?: 0
             DownloadStore.update(task.id) {
                 if (it.status != Status.Running) it else it.copy(status = Status.Done, progress = 1f, filePath = path, contentUri = uri?.toString(),
-                    sizeBytes = file?.length() ?: 0, speed = "", etaSec = -1, finishedAt = System.currentTimeMillis(),
+                    sizeBytes = file?.length() ?: 0, videoHeight = height, speed = "", etaSec = -1, finishedAt = System.currentTimeMillis(),
                     title = if (grouped) main?.title ?: it.title else it.title,
                     thumbnail = if (grouped) main?.thumbnail ?: it.thumbnail else it.thumbnail,
                     group = if (grouped) task.id else null, groupTitle = groupTitle)
@@ -171,6 +174,7 @@ class DownloadService : Service() {
             if (DownloadStore.get(task.id)?.status == Status.Done) {
                 Engine.clearTemporaryFiles(task)
                 notifyDone(task.id)
+                replaceOld(task.id)
             }
         } catch (e: CancellationException) {
             DownloadStore.update(task.id) {
@@ -186,6 +190,15 @@ class DownloadService : Service() {
                 if (DownloadStore.get(task.id)?.status == Status.Failed) notifyFailed(task.id)
             }
         }
+    }
+
+    /** "Replace" drops the old quality only once the new file is safely in. */
+    private suspend fun replaceOld(id: String) {
+        val new = DownloadStore.get(id) ?: return
+        val old = new.replaces?.let(DownloadStore::get) ?: return
+        DownloadStore.update(id) { it.copy(replaces = null) }
+        if (old.status != Status.Done || old.filePath == new.filePath) return
+        DownloadFiles.replace(this, old, new).onFailure { Log.w("HamstrService", "Could not remove the replaced file", it) }
     }
 
     private data class Finished(val path: String, val title: String?, val thumbnail: String?, val duration: Int, val playlist: String?)
@@ -372,6 +385,18 @@ class DownloadService : Service() {
                     source = info?.source,
                     durationSec = info?.durationSec ?: 0,
                     choice = choice,
+                ),
+            )
+            send(context, ACTION_START)
+        }
+
+        /** Queues another quality of [of]; with [replace] the old file goes once the new one is done. */
+        fun stashVersion(context: Context, of: DownloadTask, choice: Choice, replace: Boolean) {
+            DownloadStore.add(
+                DownloadTask(
+                    url = of.url, title = of.title, thumbnail = of.thumbnail, source = of.source,
+                    durationSec = of.durationSec, choice = choice,
+                    versionOf = of.family, replaces = if (replace) of.id else null,
                 ),
             )
             send(context, ACTION_START)

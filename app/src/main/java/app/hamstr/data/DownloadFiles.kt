@@ -1,6 +1,7 @@
 package app.hamstr.data
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.util.Log
 import app.hamstr.player.Playback
@@ -27,4 +28,23 @@ object DownloadFiles {
             }
         }
     }
+
+    /** Swaps [old] for [new]: the player moves over to the new file first, then the old one goes. */
+    suspend fun replace(context: Context, old: DownloadTask, new: DownloadTask): Result<Unit> {
+        withContext(Dispatchers.Main.immediate) {
+            if (Playback.isCurrent(old)) Playback.switchTo(context, new)
+        }
+        return delete(context, old)
+    }
+
+    /** The video's height in pixels, or 0 for audio and files the platform can't read. */
+    fun probeHeight(file: File): Int = runCatching {
+        MediaMetadataRetriever().run {
+            try {
+                setDataSource(file.absolutePath)
+                if (extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") 0
+                else extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            } finally { release() }
+        }
+    }.getOrDefault(0)
 }

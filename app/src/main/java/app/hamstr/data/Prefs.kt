@@ -18,6 +18,8 @@ data class Settings(
     val autoUpdate: Boolean = true,
     val lastUpdateCheck: Long = 0,
     val engine: DownloadEngine = DownloadEngine.Cheek,
+    val cheekAutoUpdate: Boolean = true,
+    val lastCheekCheck: Long = 0,
     // Hamstr's own updates from GitHub Releases
     val appUpdates: Boolean = true,
     val lastAppCheck: Long = 0,
@@ -61,6 +63,8 @@ object Prefs {
             autoUpdate = sp.getBoolean("autoUpdate", true),
             lastUpdateCheck = sp.getLong("lastUpdateCheck", 0),
             engine = runCatching { DownloadEngine.valueOf(sp.getString("engine", null)!!) }.getOrDefault(DownloadEngine.Cheek),
+            cheekAutoUpdate = sp.getBoolean("cheekAutoUpdate", true),
+            lastCheekCheck = sp.getLong("lastCheekCheck", 0),
             appUpdates = sp.getBoolean("appUpdates", true),
             lastAppCheck = sp.getLong("lastAppCheck", 0),
             seenRelease = sp.getString("seenRelease", "")!!,
@@ -92,6 +96,8 @@ object Prefs {
             .putBoolean("autoUpdate", s.autoUpdate)
             .putLong("lastUpdateCheck", s.lastUpdateCheck)
             .putString("engine", s.engine.name)
+            .putBoolean("cheekAutoUpdate", s.cheekAutoUpdate)
+            .putLong("lastCheekCheck", s.lastCheekCheck)
             .putBoolean("appUpdates", s.appUpdates)
             .putLong("lastAppCheck", s.lastAppCheck)
             .putString("seenRelease", s.seenRelease)

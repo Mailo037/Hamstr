@@ -90,6 +90,7 @@ import app.hamstr.ui.components.pressable
 import app.hamstr.ui.components.rememberVelocityStretch
 import app.hamstr.ui.components.stretchX
 import app.hamstr.ui.formatBadge
+import app.hamstr.ui.canHaveVersions
 import app.hamstr.ui.rememberBitmap
 import app.hamstr.ui.theme.Hamstr
 import kotlinx.coroutines.delay
@@ -151,7 +152,7 @@ private data class Box4(val x: Float, val y: Float, val w: Float, val h: Float) 
  */
 @Composable
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit) {
+fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, onQuality: (DownloadTask) -> Unit) {
     val task by Playback.current.collectAsState()
     val controller by Playback.controller.collectAsState()
     if (inPip) {
@@ -297,9 +298,17 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit) {
                 ) {
                     DecodeText(t.title, style = Hamstr.type.section, maxLines = 2)
                     Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         t.source?.let { Badge(it) }
                         Badge(file?.extension ?: formatBadge(t))
+                        // Tap the quality to switch to another one or fetch more.
+                        if (canHaveVersions(t)) Row(
+                            Modifier.clip(RoundedCornerShape(8.dp)).clickable { onQuality(t) }.padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Badge(formatBadge(t), accent = true)
+                            Icon(R.drawable.ic_expand_more, tint = c.accent, size = 16.dp)
+                        }
                     }
                     Spacer(Modifier.height(18.dp))
                     when (kind) {

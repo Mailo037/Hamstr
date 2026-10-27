@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.collapseVersions
 import app.hamstr.data.Mode
 import app.hamstr.data.Status
 import app.hamstr.data.heightLabel
@@ -106,6 +107,7 @@ fun StashScreen(
     val scope = rememberCoroutineScope()
     val active = tasks.filter { it.status != Status.Done && it.status != Status.Canceled }
     val done = tasks.filter { it.status == Status.Done }
+    val shelf = remember(done) { collapseVersions(done) }
     val totalBytes = done.sumOf { it.sizeBytes }
     val running = tasks.count { it.status.active }
     val mark = rememberMarkState()
@@ -227,13 +229,13 @@ fun StashScreen(
                 item(key = "h_done") {
                     SectionHeader("Stashed", trailing = "${done.size}", modifier = Modifier.padding(horizontal = 12.dp).animateItem())
                 }
-                itemsIndexed(done.take(60), key = { _, t -> t.id }) { i, t ->
-                    GroupedItem(i, minOf(done.size, 60)) {
+                itemsIndexed(shelf.take(60), key = { _, e -> e.first.id }) { i, (t, versions) ->
+                    GroupedItem(i, minOf(shelf.size, 60)) {
                         SwipeRow(
                             start = SwipeAction(R.drawable.ic_play_arrow, "Play", c.accent) { onPlay(t) },
-                            end = SwipeAction(R.drawable.ic_close, "Remove", c.red, removes = true) { DownloadStore.remove(t.id) },
+                            end = SwipeAction(R.drawable.ic_close, "Remove", c.red, removes = true) { versions.forEach { DownloadStore.remove(it.id) } },
                         ) {
-                            TaskRow(t, onClick = { onPlay(t) }, onLongClick = { onMenu(t) })
+                            TaskRow(t, versions = versions, onClick = { onPlay(t) }, onLongClick = { onMenu(t) })
                         }
                     }
                 }
@@ -284,7 +286,7 @@ private fun cancelSwipe(t: DownloadTask): SwipeAction {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TaskRow(t: DownloadTask, highlighted: Boolean = false, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun TaskRow(t: DownloadTask, highlighted: Boolean = false, versions: List<DownloadTask> = listOf(t), onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     val bitmap = rememberBitmap(t.thumbnail, 160)
@@ -311,8 +313,8 @@ fun TaskRow(t: DownloadTask, highlighted: Boolean = false, onClick: () -> Unit, 
             if (t.status.active) DecodeText(t.title, style = Hamstr.type.bodyMedium) else Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
             Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Badge(formatBadge(t))
-                Txt(statusLine(t), style = Hamstr.type.small, color = if (t.status == Status.Failed) c.red else c.ghost, maxLines = 1)
+                Badge(versionsBadge(versions))
+                Txt(statusLine(t, versions), style = Hamstr.type.small, color = if (t.status == Status.Failed) c.red else c.ghost, maxLines = 1)
             }
             if (t.status == Status.Running || t.status == Status.Paused || t.status == Status.Queued) {
                 Spacer(Modifier.height(7.dp))
@@ -383,18 +385,23 @@ private fun EmptyState() {
     }
 }
 
+/** All qualities of a link in one badge, best first: [ 1080P · 480P ]. */
+fun versionsBadge(versions: List<DownloadTask>) =
+    versions.sortedWith(compareByDescending<DownloadTask> { it.choice.mode != Mode.Audio }.thenByDescending { it.videoHeight })
+        .map(::formatBadge).distinct().joinToString(" · ")
+
 fun formatBadge(t: DownloadTask) = when (t.choice.mode) {
     Mode.Audio -> t.choice.audioFormat
-    Mode.Video -> heightLabel(t.choice.height)
+    Mode.Video -> heightLabel(t.videoHeight.takeIf { it > 0 } ?: t.choice.height)
     Mode.Custom -> "custom"
 }
 
-private fun statusLine(t: DownloadTask): String = when (t.status) {
+private fun statusLine(t: DownloadTask, versions: List<DownloadTask> = listOf(t)): String = when (t.status) {
     Status.Queued -> if (t.progress > 0f) "queued · ${(t.progress * 100).toInt()} %" else "queued"
     Status.Running -> listOf(t.speed, DownloadService.eta(t.etaSec)).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { t.source ?: "loading" }
     Status.Paused -> "paused · ${(t.progress * 100).toInt()} %"
     Status.Failed -> t.error ?: "failed"
-    Status.Done -> listOfNotNull(t.source, formatBytes(t.sizeBytes).takeIf { t.sizeBytes > 0 }, ago(t.finishedAt)).joinToString(" · ")
+    Status.Done -> listOfNotNull(t.source, versions.sumOf { it.sizeBytes }.takeIf { it > 0 }?.let(::formatBytes), ago(versions.maxOf { it.finishedAt })).joinToString(" · ")
     Status.Canceled -> "canceled"
 }
 

@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.collapseVersions
 import app.hamstr.data.Mode
 import app.hamstr.data.Status
 import app.hamstr.engine.DownloadService
@@ -76,9 +77,10 @@ fun LibraryScreen(tasks: List<DownloadTask>, contentPadding: PaddingValues, onMe
                 Filter.Video -> it.choice.mode != Mode.Audio
                 Filter.Audio -> it.choice.mode == Mode.Audio
             }
-        }
+        }.let { list -> collapseVersions(list).map { it.first } }
     }
     val tiles = remember(done) { shelves(done) }
+    val versions = remember(completed) { completed.groupBy { it.family } }
     val gridState = rememberLazyGridState()
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -156,8 +158,10 @@ fun LibraryScreen(tasks: List<DownloadTask>, contentPadding: PaddingValues, onMe
                 Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2, modifier = Modifier.padding(horizontal = 2.dp))
                 Spacer(Modifier.height(3.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 2.dp)) {
-                    Badge(formatBadge(t))
-                    if (t.sizeBytes > 0) Badge(formatBytes(t.sizeBytes))
+                    // Under Video or Audio, a tile only counts the files of that kind.
+                    val all = versions[t.family].orEmpty().filter { filter == Filter.All || (it.choice.mode == Mode.Audio) == (filter == Filter.Audio) }.ifEmpty { listOf(t) }
+                    Badge(versionsBadge(all))
+                    all.sumOf { it.sizeBytes }.takeIf { it > 0 }?.let { Badge(formatBytes(it)) }
                 }
             }
         }

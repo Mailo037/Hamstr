@@ -103,6 +103,10 @@ import kotlinx.coroutines.launch
 import app.hamstr.ui.LibraryScreen
 import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
+import app.hamstr.ui.QualitySheet
+import app.hamstr.ui.canHaveVersions
+import app.hamstr.ui.canSaveAudio
+import app.hamstr.engine.AudioOut
 import app.hamstr.ui.StashScreen
 import app.hamstr.ui.DownloadPreview
 import app.hamstr.ui.UpdateBanner
@@ -200,6 +204,7 @@ private fun App(inPip: Boolean) {
     var introDone by rememberSaveable { mutableStateOf(!fx.intro || MainActivity.pendingAction.value != null) }
     var sheetUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
+    var qualityFor by remember { mutableStateOf<DownloadTask?>(null) }
     var hint by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     var addSheet by rememberSaveable { mutableStateOf(false) }
@@ -223,6 +228,12 @@ private fun App(inPip: Boolean) {
     }
     val playing by Playback.current.collectAsState()
     val play: (DownloadTask) -> Unit = { t -> scope.launch { Playback.open(context, t) } }
+    val saveAudio: (DownloadTask) -> Unit = { v ->
+        scope.launch {
+            hint = "Saving the audio …"
+            hint = AudioOut.save(context, v).fold({ "Audio saved next to the video" }, { it.message ?: "Couldn't save the audio" })
+        }
+    }
     val settings by Prefs.settings.collectAsState()
     val update by Updater.state.collectAsState()
     var updateSheet by rememberSaveable { mutableStateOf(false) }
@@ -280,7 +291,7 @@ private fun App(inPip: Boolean) {
             }
         }
         TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
-        if (!inPip) PlayerHost(miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it })
+        if (!inPip) PlayerHost(miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it })
 
         AnimatedVisibility(hint != null, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp)) {
             Box(Modifier.clip(RoundedCornerShape(14.dp)).background(c.raised).padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -323,13 +334,23 @@ private fun App(inPip: Boolean) {
             }
         }
         Overlay(visible = menuFor != null, onDismiss = { menuFor = null }) {
-            menuFor?.let { t -> TaskMenu(t, onPlay = play, onClose = { menuFor = null }, onDelete = { selected ->
+            menuFor?.let { t -> TaskMenu(t, onPlay = play, onClose = { menuFor = null }, onQuality = { menuFor = null; qualityFor = it }, onSaveAudio = { menuFor = null; saveAudio(it) }, onDelete = { selected ->
                 scope.launch {
                     val result = DownloadFiles.delete(context, selected)
                     hint = result.fold({ "File deleted" }, { it.message ?: "Couldn't delete the file" })
                 }
                 menuFor = null
             }) }
+        }
+        Overlay(visible = qualityFor != null, onDismiss = { qualityFor = null }) {
+            qualityFor?.let { t ->
+                QualitySheet(
+                    t,
+                    onSwitch = { v -> qualityFor = null; scope.launch { Playback.switchTo(context, v) } },
+                    onSaveAudio = { v -> qualityFor = null; saveAudio(v) },
+                    onDone = { msg -> qualityFor = null; hint = msg },
+                )
+            }
         }
         Overlay(visible = updateSheet, onDismiss = { updateSheet = false }) {
             UpdateSheet(
@@ -340,12 +361,12 @@ private fun App(inPip: Boolean) {
         if (!introDone) Intro(onDone = { introDone = true })
         // Always cover the entire app in PiP, even if playback stops during the transition.
         // Keep the normal UI composed underneath so tabs and scroll positions survive.
-        if (inPip) PlayerHost(miniBottom = 0.dp, inPip = true, onMenu = { menuFor = it })
+        if (inPip) PlayerHost(miniBottom = 0.dp, inPip = true, onMenu = { menuFor = it }, onQuality = { qualityFor = it })
     }
 }
 
 @Composable
-private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit, onDelete: (DownloadTask) -> Unit) {
+private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit, onQuality: (DownloadTask) -> Unit, onSaveAudio: (DownloadTask) -> Unit, onDelete: (DownloadTask) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     // The menu stays open while the download moves on, so it follows the live task.
@@ -379,6 +400,8 @@ private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose
                 if (kind == Kind.Video || kind == Kind.Audio) R.drawable.ic_play_arrow else R.drawable.ic_open_in_new,
                 when (kind) { Kind.Video, Kind.Audio -> "Play in Hamstr"; Kind.Image -> "View in Hamstr"; Kind.Other -> "Details" },
             ) { onPlay(t); onClose() }
+            if (canHaveVersions(t)) MenuRow(R.drawable.ic_movie, "Quality") { onQuality(t) }
+            if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, "Save audio") { onSaveAudio(t) }
             MenuRow(R.drawable.ic_open_in_new, "Open with…") { Playback.openWith(context, t); onClose() }
             MenuRow(R.drawable.ic_share, "Share file") { Playback.shareFile(context, t); onClose() }
             MenuRow(R.drawable.ic_delete, "Delete file", danger = true) { onDelete(t) }

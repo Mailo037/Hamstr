@@ -11,37 +11,65 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runInterruptible
 import java.util.concurrent.TimeUnit
+import app.hamstr.BuildConfig
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * cheek (github.com/Mailo037/cheek), the Rust download engine. yt-dlp still decides which
  * streams a link has; cheek fetches them over many connections at once and merges them.
  * It ships inside the APK as libcheek.so and runs as a plain process, like yt-dlp's Python.
+ * A newer release can replace it later without a new APK (see [CheekUpdates]).
  */
 object Cheek {
     private const val TAG = "HamstrCheek"
-    private lateinit var bin: File
-    private lateinit var ffmpeg: File
-    private lateinit var libraryPath: String
+    private lateinit var bundled: File
+    private lateinit var updates: File
+    // Android 10+ won't exec a file from the app's own storage, but its loader will start it.
+    private val loader = if (android.os.Process.is64Bit()) "/system/bin/linker64" else "/system/bin/linker"
+    private class Installed(val version: String, val file: File)
+    @Volatile private var downloaded: Installed? = null
+    private val _active = MutableStateFlow(BuildConfig.CHEEK_VERSION)
+    /** The version that runs: a downloaded update, or the one inside the APK. */
+    val active: StateFlow<String> = _active.asStateFlow()
+    val updated get() = downloaded != null
+    /** The release asset suffix for this installation's ABI. */
+    lateinit var abi: String
+        private set
+    internal lateinit var ffmpeg: File
+        private set
+    internal lateinit var libraryPath: String
+        private set
     private val processes = ConcurrentHashMap<String, Process>()
 
     fun init(context: Context) {
         val native = File(context.applicationInfo.nativeLibraryDir)
-        bin = File(native, "libcheek.so")
+        bundled = File(native, "libcheek.so")
+        abi = when (native.name) { "arm64" -> "arm64-v8a"; "arm" -> "armeabi-v7a"; else -> native.name }
         ffmpeg = File(native, "libffmpeg.so")
+        updates = File(context.filesDir, "cheek")
+        // An app update can bring a newer Cheek than the last download; the newer one wins.
+        val current = runCatching { File(updates, "current").readText().trim() }.getOrNull()
+        val file = current?.let { File(updates, "$it/cheek") }
+        if (current != null && file!!.isFile && newer(current, BuildConfig.CHEEK_VERSION) && compatible(current)) {
+            downloaded = Installed(current, file)
+            _active.value = current
+        }
         // ffmpeg's shared libraries are unpacked here by youtubedl-android.
         val packages = File(context.noBackupFilesDir, "youtubedl-android/packages")
         libraryPath = listOf("python", "ffmpeg", "aria2c").joinToString(":") { File(packages, "$it/usr/lib").absolutePath }
     }
 
-    val available get() = ::bin.isInitialized && bin.exists()
+    val available get() = ::bundled.isInitialized && (downloaded != null || bundled.exists())
 
-    /** Read the executable actually installed with this APK, without blocking the UI. */
-    suspend fun version(): String = runInterruptible(Dispatchers.IO) {
+    private fun command(): List<String> = downloaded?.let { listOf(loader, it.file.absolutePath) } ?: listOf(bundled.absolutePath)
+
+    /** Asks the executable that runs now for its version, without blocking the UI. */
+    suspend fun version(): String = kotlinx.coroutines.runInterruptible(kotlinx.coroutines.Dispatchers.IO) {
         check(available) { "Cheek is not available in this installation" }
-        val process = ProcessBuilder(bin.absolutePath, "--version").redirectErrorStream(true).start()
+        val process = ProcessBuilder(command() + "--version").redirectErrorStream(true).start()
         try {
             check(process.waitFor(5, TimeUnit.SECONDS)) { "Cheek version check timed out" }
             val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
@@ -52,10 +80,52 @@ object Cheek {
         }
     }
 
+    /**
+     * Hamstr speaks Cheek's command line and JSON events, so it only takes releases that keep
+     * them: the same major version, and for 0.x the same minor, like Cargo's semver rules.
+     */
+    fun compatible(version: String): Boolean {
+        val v = parts(version) ?: return false
+        val own = parts(BuildConfig.CHEEK_VERSION) ?: return false
+        return v[0] == own[0] && (own[0] > 0 || v[1] == own[1])
+    }
+
+    /** A release worth installing: compatible and newer than what runs now. */
+    fun accepts(version: String) = compatible(version) && newer(version, _active.value)
+
+    private fun parts(version: String) = Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(version.trim().removePrefix("v"))?.groupValues?.drop(1)?.map { it.toInt() }
+
+    private fun newer(a: String, b: String): Boolean {
+        val x = parts(a) ?: return false
+        val y = parts(b) ?: return true
+        return (0..2).firstOrNull { x[it] != y[it] }?.let { x[it] > y[it] } ?: false
+    }
+
+    /** Puts a downloaded release in place once it has proven that it starts on this phone. */
+    internal fun install(version: String, bytes: ByteArray) {
+        val dir = File(updates, version).apply { deleteRecursively(); mkdirs() }
+        val file = File(dir, "cheek")
+        file.writeBytes(bytes)
+        check(file.setExecutable(true, true)) { "Couldn't mark Cheek $version as executable" }
+        val process = ProcessBuilder(loader, file.absolutePath, "--version").redirectErrorStream(true).start()
+        try {
+            check(process.waitFor(10, TimeUnit.SECONDS)) { "Cheek $version didn't start" }
+            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            check(process.exitValue() == 0 && output.startsWith("cheek ")) { "Cheek $version doesn't run on this phone" }
+        } finally {
+            if (process.isAlive) process.destroy()
+        }
+        File(updates, "current.tmp").apply { writeText(version) }.renameTo(File(updates, "current"))
+        downloaded = Installed(version, file)
+        _active.value = version
+        // Running downloads keep their open file; new ones start the new version.
+        updates.listFiles()?.filter { it.isDirectory && it.name != version }?.forEach { it.deleteRecursively() }
+    }
+
     /** What cheek can't do yet goes to yt-dlp: playlists, subtitles, a custom format string. */
     fun handles(task: DownloadTask): Boolean {
         val c = task.choice
-        return available && !Prefs.settings.value.playlists && c.mode != Mode.Custom && !(c.mode == Mode.Video && c.subtitles)
+        return available && !Engine.playlists(task) && c.mode != Mode.Custom && !(c.mode == Mode.Video && c.subtitles)
     }
 
     fun destroy(id: String) {
@@ -72,8 +142,9 @@ object Cheek {
         val infoFile = File(work, "cheek-info.json").apply { writeText(info) }
         val c = task.choice
         val cmd = buildList {
-            addAll(listOf(bin.absolutePath, "--info-json", infoFile.absolutePath, "--json"))
-            addAll(listOf("-P", outputDir.absolutePath, "--temp-dir", work.absolutePath, "-o", "%(title).150B [%(id)s].%(ext)s"))
+            addAll(command())
+            addAll(listOf("--info-json", infoFile.absolutePath, "--json"))
+            addAll(listOf("-P", outputDir.absolutePath, "--temp-dir", work.absolutePath, "-o", Engine.outputTemplate(task)))
             // Fewer connections per download when several run at once.
             addAll(listOf("-N", (12 / Prefs.settings.value.parallel.coerceIn(1, 3)).toString()))
             addAll(listOf("--ffmpeg", ffmpeg.absolutePath))
