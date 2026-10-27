@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -48,6 +49,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +67,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -109,6 +112,10 @@ class PlayerUi {
     var duration by mutableLongStateOf(0L)
     var aspect by mutableFloatStateOf(16f / 9f)
     var speed by mutableFloatStateOf(1f)
+    var repeat by mutableIntStateOf(Player.REPEAT_MODE_OFF)
+    var shuffle by mutableStateOf(false)
+    var hasNext by mutableStateOf(false)
+    var hasPrevious by mutableStateOf(false)
 }
 
 @Composable
@@ -123,10 +130,20 @@ fun rememberPlayerUi(player: Player?): PlayerUi {
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { ui.aspect = 16f / 9f }
             override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) { ui.speed = playbackParameters.speed }
+            override fun onRepeatModeChanged(repeatMode: Int) { ui.repeat = repeatMode }
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { ui.shuffle = shuffleModeEnabled }
+            override fun onEvents(player: Player, events: Player.Events) {
+                ui.hasNext = player.hasNextMediaItem()
+                ui.hasPrevious = player.hasPreviousMediaItem()
+            }
         }
         player.addListener(listener)
         ui.isPlaying = player.isPlaying
         ui.speed = player.playbackParameters.speed
+        ui.repeat = player.repeatMode
+        ui.shuffle = player.shuffleModeEnabled
+        ui.hasNext = player.hasNextMediaItem()
+        ui.hasPrevious = player.hasPreviousMediaItem()
         player.videoSize.takeIf { it.width > 0 && it.height > 0 }?.let { ui.aspect = it.width * it.pixelWidthHeightRatio / it.height }
         onDispose { player.removeListener(listener) }
     }
@@ -190,7 +207,12 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
         if (activity != null && window != null) {
             val ctl = WindowCompat.getInsetsController(window, window.decorView)
             if (fullscreen) {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                // Upright videos (Shorts, Reels, TikTok) stay upright; wide ones turn sideways.
+                activity.requestedOrientation = when {
+                    ui.aspect < 0.9f -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    ui.aspect > 1.1f -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
                 ctl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 ctl.hide(WindowInsetsCompat.Type.systemBars())
             } else {
@@ -248,7 +270,8 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
         // Full view: media under a 56 dp top bar.
         val fullMedia = when {
             fullscreen -> Box4(0f, 0f, W, H)
-            kind == Kind.Video -> Box4(0f, top + px(56.dp), W, min(W / ui.aspect, H * 0.55f))
+            // Upright videos get more of the screen; the controls still fit below.
+            kind == Kind.Video -> Box4(0f, top + px(56.dp), W, min(W / ui.aspect, H * if (ui.aspect < 0.9f) 0.6f else 0.55f))
             kind == Kind.Image -> Box4(0f, top + px(56.dp), W, H - top - px(56.dp) - WindowInsets.navigationBars.getBottom(density) - px(150.dp))
             else -> Box4(px(28.dp), top + px(76.dp), W - px(56.dp), W - px(56.dp))
         }
@@ -276,17 +299,17 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(R.drawable.ic_expand_more, "Minimize", { Playback.minimize() }, tint = c.ink)
+                    IconButton(R.drawable.ic_expand_more, stringResource(R.string.player_minimize), { Playback.minimize() }, tint = c.ink)
                     Spacer(Modifier.width(12.dp))
                     Txt(
-                        when (kind) { Kind.Video -> "Video"; Kind.Audio -> "Now playing"; Kind.Image -> "Image"; Kind.Other -> "File" },
+                        stringResource(when (kind) { Kind.Video -> R.string.player_video; Kind.Audio -> R.string.player_now_playing; Kind.Image -> R.string.player_image; Kind.Other -> R.string.player_file }),
                         style = Hamstr.type.bodyMedium, color = c.muted, modifier = Modifier.weight(1f),
                     )
-                    IconButton(R.drawable.ic_open_in_new, "Open with", { Playback.openWith(activity ?: return@IconButton, t) })
+                    IconButton(R.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
                     Spacer(Modifier.width(8.dp))
-                    IconButton(R.drawable.ic_share, "Share file", { Playback.shareFile(activity ?: return@IconButton, t) })
+                    IconButton(R.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(activity ?: return@IconButton, t) })
                     Spacer(Modifier.width(8.dp))
-                    IconButton(R.drawable.ic_more_vert, "More options", { onMenu(t) })
+                    IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
                 }
                 // Info + controls under the media
                 Column(
@@ -317,11 +340,11 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                         }
                         Kind.Image -> {}
                         Kind.Other -> {
-                            Txt("Hamstr can't show .${file?.extension ?: "?"} files itself. Open it in an app that can, or share it.", color = c.muted)
+                            Txt(stringResource(R.string.player_cant_show, file?.extension ?: "?"), color = c.muted)
                             Spacer(Modifier.height(14.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                HButton("Open with…", { activity?.let { Playback.openWith(it, t) } }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = R.drawable.ic_open_in_new)
-                                HButton("Share file", { activity?.let { Playback.shareFile(it, t) } }, Modifier.weight(1f), icon = R.drawable.ic_share)
+                                HButton(stringResource(R.string.menu_open_with), { activity?.let { Playback.openWith(it, t) } }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = R.drawable.ic_open_in_new)
+                                HButton(stringResource(R.string.menu_share_file), { activity?.let { Playback.shareFile(it, t) } }, Modifier.weight(1f), icon = R.drawable.ic_share)
                             }
                         }
                     }
@@ -382,7 +405,8 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                     if (kind == Kind.Video || kind == Kind.Audio) {
                         PlayPause(ui.isPlaying, size = 40.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
                     }
-                    IconButton(R.drawable.ic_close, "Close player", { close() }, background = Color.Transparent)
+                    if (ui.hasNext) IconButton(R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() }, background = Color.Transparent)
+                    IconButton(R.drawable.ic_close, stringResource(R.string.player_close), { close() }, background = Color.Transparent)
                 }
                 if (ui.duration > 0) {
                     Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(ui.position / ui.duration.toFloat()).height(2.dp).background(c.accent))
@@ -411,7 +435,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                 Kind.Other -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(R.drawable.ic_description, tint = c.accent, size = lerp(22f, 64f, ev).dp)
-                        if (ev > 0.5f) Badge(file?.extension ?: "file", accent = true)
+                        if (ev > 0.5f) Badge(file?.extension ?: stringResource(R.string.player_file), accent = true)
                     }
                 }
             }
@@ -457,8 +481,8 @@ private fun VideoSurface(controller: Player?, ui: PlayerUi, expanded: Boolean, f
             val a by animateFloatAsState(if (overlay) 1f else 0f, tween(200), label = "overlay")
             if (a > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = a }.background(Color.Black.copy(alpha = 0.35f))) {
                 Row(Modifier.align(Alignment.TopEnd).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(R.drawable.ic_more_vert, "More options", onMenu, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
-                    IconButton(R.drawable.ic_fullscreen_exit, "Exit fullscreen", onExitFullscreen, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
+                    IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
+                    IconButton(R.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
                 }
                 Box(Modifier.align(Alignment.Center)) { PlayPause(ui.isPlaying, size = 64.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() }) }
                 Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 22.dp)) {
@@ -529,6 +553,7 @@ private fun ImageView(file: File?, zoomable: Boolean) {
 private fun Transport(controller: Player, ui: PlayerUi, video: Boolean, onFullscreen: () -> Unit) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
+    val queue by Playback.queue.collectAsState()
     Scrubber(controller, ui)
     Spacer(Modifier.height(18.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -545,18 +570,81 @@ private fun Transport(controller: Player, ui: PlayerUi, video: Boolean, onFullsc
                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         val next = speeds[(speeds.indexOfFirst { abs(it - ui.speed) < 0.01f } + 1) % speeds.size]
                         controller.setPlaybackSpeed(next)
-                    }, label = "Playback speed")
+                    }, label = stringResource(R.string.player_speed))
+                    .heightIn(min = 40.dp)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
             ) { Txt("${if (ui.speed % 1f == 0f) ui.speed.toInt() else ui.speed}×", style = Hamstr.type.mono) }
         }
-        IconButton(R.drawable.ic_replay_10, "Back 10 seconds", { controller.seekBack() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
-        Spacer(Modifier.width(14.dp))
-        PlayPause(ui.isPlaying, size = 68.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
-        Spacer(Modifier.width(14.dp))
-        IconButton(R.drawable.ic_forward_10, "Forward 10 seconds", { controller.seekForward() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            if (video) IconButton(R.drawable.ic_fullscreen, "Fullscreen", onFullscreen)
+        // In a queue the side buttons skip between files; for one file they jump 10 s.
+        if (queue.size > 1) {
+            IconButton(R.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
+        } else {
+            IconButton(R.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
         }
+        Spacer(Modifier.width(10.dp))
+        PlayPause(ui.isPlaying, size = 68.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
+        Spacer(Modifier.width(10.dp))
+        if (queue.size > 1) {
+            IconButton(R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 48.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
+        } else {
+            IconButton(R.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
+        }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            if (video) IconButton(R.drawable.ic_fullscreen, stringResource(R.string.player_fullscreen), onFullscreen)
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    // Repeat: off, everything, this one. Shuffle only matters for more than one file.
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        val repeatLabel = stringResource(
+            when (ui.repeat) {
+                Player.REPEAT_MODE_ONE -> R.string.player_repeat_one
+                Player.REPEAT_MODE_ALL -> R.string.player_repeat_all
+                else -> R.string.player_repeat_off
+            },
+        )
+        ToggleChip(
+            if (ui.repeat == Player.REPEAT_MODE_ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat,
+            repeatLabel, on = ui.repeat != Player.REPEAT_MODE_OFF,
+        ) {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            controller.repeatMode = when (ui.repeat) {
+                Player.REPEAT_MODE_OFF -> if (queue.size > 1) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_ONE
+                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
+            }
+        }
+        if (queue.size > 1) {
+            Spacer(Modifier.width(8.dp))
+            ToggleChip(R.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle) {
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                controller.shuffleModeEnabled = !ui.shuffle
+            }
+            Spacer(Modifier.width(12.dp))
+            val current by Playback.current.collectAsState()
+            val at = queue.indexOfFirst { it.id == current?.id } + 1
+            Txt("$at / ${queue.size}", style = Hamstr.type.mono, color = c.ghost)
+        }
+    }
+}
+
+/** A small pill that is lit while its mode is on. */
+@Composable
+private fun ToggleChip(icon: Int, label: String, on: Boolean, onClick: () -> Unit) {
+    val c = Hamstr.colors
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (on) c.accent.copy(alpha = 0.18f) else c.surface)
+            .pressable(onClick, label = label)
+            .heightIn(min = 40.dp)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(icon, tint = if (on) c.accent else c.muted, size = 18.dp)
+        Txt(label, style = Hamstr.type.small, color = if (on) c.accent else c.muted)
     }
 }
 
@@ -570,7 +658,7 @@ fun PlayPause(playing: Boolean, size: Dp, onClick: () -> Unit) {
             .size(size)
             .clip(CircleShape)
             .background(c.accent)
-            .pressable({ haptics.performHapticFeedback(HapticFeedbackType.ContextClick); onClick() }, label = if (playing) "Pause" else "Play", pressedScale = 0.9f),
+            .pressable({ haptics.performHapticFeedback(HapticFeedbackType.ContextClick); onClick() }, label = stringResource(if (playing) R.string.player_pause else R.string.player_play), pressedScale = 0.9f),
         contentAlignment = Alignment.Center,
     ) {
         AnimatedContent(

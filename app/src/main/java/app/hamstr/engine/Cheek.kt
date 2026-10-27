@@ -148,6 +148,8 @@ object Cheek {
             // Fewer connections per download when several run at once.
             addAll(listOf("-N", (12 / Prefs.settings.value.parallel.coerceIn(1, 3)).toString()))
             addAll(listOf("--ffmpeg", ffmpeg.absolutePath))
+            // Covers and tags in every file, like yt-dlp's --embed-thumbnail --embed-metadata.
+            addAll(listOf("--embed-thumbnail", "--embed-metadata"))
             when (c.mode) {
                 Mode.Audio -> addAll(listOf("-x", "--audio-format", c.audioFormat))
                 else -> addAll(listOf("--merge-output-format", c.container))
@@ -158,13 +160,15 @@ object Cheek {
             val o = JSONObject(info)
             val meta = JSONObject().put("title", o.optString("title")).put("thumbnail", o.opt("thumbnail"))
                 .put("extractor_key", o.opt("extractor_key")).put("duration", o.opt("duration"))
+                .put("uploader", o.opt("uploader")).put("channel", o.opt("channel")).put("id", o.opt("id"))
             callback?.invoke(0f, -1, Engine.METADATA_PREFIX + meta)
         }
 
         val proc = ProcessBuilder(cmd).apply { environment()["LD_LIBRARY_PATH"] = libraryPath }.start()
         processes[task.id] = proc
         val err = StringBuffer()
-        val errReader = thread(name = "cheek-stderr") { proc.errorStream.bufferedReader().forEachLine { err.appendLine(it) } }
+        // Pausing or losing the network kills the process; its closed pipe must not take the app down.
+        val errReader = thread(name = "cheek-stderr") { runCatching { proc.errorStream.bufferedReader().forEachLine { err.appendLine(it) } } }
         var failure: String? = null
         try {
             proc.inputStream.bufferedReader().forEachLine { line ->
@@ -177,6 +181,7 @@ object Cheek {
                         val line2 = String.format(Locale.ROOT, "[download] %5.1f%% of %s at %s ETA %s", pct, mib(e.optLong("total")), mib(e.optLong("speed")) + "/s", eta)
                         callback?.invoke(pct.toFloat(), eta, line2)
                     }
+                    "stage" -> callback?.invoke(100f, -1, Engine.STAGE_PREFIX + e.optString("stage"))
                     "done" -> {
                         val o = JSONObject(info)
                         pathFile.appendText(

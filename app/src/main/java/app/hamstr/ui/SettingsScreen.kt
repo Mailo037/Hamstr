@@ -51,6 +51,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -106,13 +113,13 @@ import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 
 /** Settings are split into categories, each on its own page (Glyph: never one long page). */
-private enum class Page(val title: String, val icon: Int) {
-    Appearance("Appearance", R.drawable.ic_palette),
-    Motion("Motion & effects", R.drawable.ic_auto_awesome),
-    Downloads("Downloads", R.drawable.ic_download),
-    Queue("Queue & storage", R.drawable.ic_folder_open),
-    Engine("Engine", R.drawable.ic_code),
-    About("About", R.drawable.ic_info),
+private enum class Page(val title: Int, val icon: Int) {
+    Appearance(R.string.page_appearance, R.drawable.ic_palette),
+    Motion(R.string.page_motion, R.drawable.ic_auto_awesome),
+    Downloads(R.string.page_downloads, R.drawable.ic_download),
+    Queue(R.string.page_queue, R.drawable.ic_folder_open),
+    Engine(R.string.page_engine, R.drawable.ic_code),
+    About(R.string.page_about, R.drawable.ic_info),
 }
 
 @Composable
@@ -146,7 +153,8 @@ private fun Root(contentPadding: PaddingValues, open: (Page, String?) -> Unit) {
     val engine by Engine.state.collectAsState()
     val scroll = rememberScrollState()
     var query by rememberSaveable { mutableStateOf("") }
-    val results = remember(query) { searchSettings(query) }
+    val context = LocalContext.current
+    val results = remember(query) { searchSettings(context, query) }
     Column(
         Modifier
             .fillMaxSize()
@@ -155,40 +163,41 @@ private fun Root(contentPadding: PaddingValues, open: (Page, String?) -> Unit) {
             .padding(contentPadding)
             .padding(horizontal = 12.dp),
     ) {
-        DecodeText("Settings", style = Hamstr.type.title, modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp))
+        DecodeText(stringResource(R.string.tab_settings), style = Hamstr.type.title, modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp))
         Spacer(Modifier.height(10.dp))
-        SearchField(query, { query = it }, "Search settings")
+        SearchField(query, { query = it }, stringResource(R.string.set_search))
         Spacer(Modifier.height(12.dp))
         if (query.isNotBlank()) {
             if (results.isEmpty()) {
-                Txt("Nothing matches \u201c${query.trim()}\u201d", color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp))
+                Txt(stringResource(R.string.set_no_match, query.trim()), color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp))
             } else Group {
-                results.forEach { r -> CategoryRow(r.page, r.page.title, title = r.title) { open(r.page, r.title) } }
+                results.forEach { r -> CategoryRow(r.page, stringResource(r.page.title), title = r.title) { open(r.page, r.title) } }
             }
         } else Group {
-            Page.entries.forEach { p -> CategoryRow(p, summary(p, s, engine)) { open(p, null) } }
+            Page.entries.forEach { p -> CategoryRow(p, summary(context, p, s, engine)) { open(p, null) } }
         }
     }
 }
 
-private fun summary(p: Page, s: Settings, engine: EngineState): String = when (p) {
-    Page.Appearance -> "${ACCENTS.firstOrNull { it.argb == s.accent }?.name ?: "Custom"} · ${s.base.label}"
+private fun summary(context: android.content.Context, p: Page, s: Settings, engine: EngineState): String = when (p) {
+    Page.Appearance -> "${ACCENTS.firstOrNull { it.argb == s.accent }?.name ?: context.getString(R.string.set_custom)} · ${s.base.label}"
     Page.Motion -> {
         val on = listOf(s.intro, s.raster, s.asciiThumbs, s.rain, s.decode, s.moods, s.stretch, s.haptics).count { it }
-        "$on of 8 effects on"
+        context.getString(R.string.set_effects_on, on, 8)
     }
-    Page.Downloads -> if (s.mode == Mode.Audio) "Audio · ${s.audioFormat}" else "Video · ${heightLabel(s.height)} · ${s.container}"
-    Page.Queue -> "${s.parallel} at once · Download/Hamstr"
+    Page.Downloads -> if (s.mode == Mode.Audio) "${context.getString(R.string.mode_audio)} · ${s.audioFormat}"
+        else "${context.getString(R.string.mode_video)} · ${heightLabel(s.height)} · ${s.container}"
+    Page.Queue -> context.getString(R.string.set_queue_summary, s.parallel) + if (s.wifiOnly) " · " + context.getString(R.string.set_wifi_short) else ""
     Page.Engine -> when (engine) {
         is EngineState.Ready -> (if (s.engine == DownloadEngine.Cheek) "Cheek ${Cheek.active.value} · yt-dlp " else "yt-dlp ") + engine.version
-        EngineState.Starting -> "starting …"
-        is EngineState.Broken -> "error"
+        EngineState.Starting -> context.getString(R.string.set_starting)
+        is EngineState.Broken -> context.getString(R.string.set_error)
     }
-    Page.About -> "Hamstr ${BuildConfig.VERSION_NAME}" + if (s.appUpdates) " · checks for updates" else ""
+    Page.About -> "Hamstr ${BuildConfig.VERSION_NAME}" + if (s.appUpdates) " · " + context.getString(R.string.set_checks_updates) else ""
 }
 
 @Composable
-private fun CategoryRow(p: Page, summary: String, title: String = p.title, onClick: () -> Unit) {
+private fun CategoryRow(p: Page, summary: String, title: String = stringResource(p.title), onClick: () -> Unit) {
     val c = Hamstr.colors
     Row(
         Modifier
@@ -258,9 +267,9 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
             .padding(horizontal = 12.dp),
     ) {
         Row(Modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(R.drawable.ic_arrow_back, "Back", onBack, tint = Hamstr.colors.ink)
+            IconButton(R.drawable.ic_arrow_back, stringResource(R.string.set_back), onBack, tint = Hamstr.colors.ink)
             Spacer(Modifier.width(12.dp))
-            DecodeText(p.title, style = Hamstr.type.title)
+            DecodeText(stringResource(p.title), style = Hamstr.type.title)
         }
         Spacer(Modifier.height(14.dp))
         when (p) {
@@ -289,67 +298,74 @@ private fun Block(label: String, content: @Composable ColumnScope.() -> Unit) =
 private fun AppearancePage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        Block("Accent colour") {
+        Block(stringResource(R.string.set_accent)) {
             AccentPicker(ACCENTS, s.accent) { a -> Prefs.edit { it.copy(accent = a) } }
         }
-        Block("Background") {
+        Block(stringResource(R.string.set_background)) {
             Segmented(Base.entries.toList(), s.base, { it.label }, { b -> Prefs.edit { it.copy(base = b) } })
         }
     }
     Spacer(Modifier.height(12.dp))
-    Txt("Changes apply right away. The launcher icon keeps its orange cheeks.", style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
+    Txt(stringResource(R.string.set_appearance_note), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
 }
 
 @Composable
 private fun MotionPage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        FxRow("Startup animation", "The hamster assembles itself and waves hello", s.intro) { v -> Prefs.edit { it.copy(intro = v) } }
+        FxRow(stringResource(R.string.set_intro), stringResource(R.string.set_intro_hint), s.intro) { v -> Prefs.edit { it.copy(intro = v) } }
         Divider()
-        FxRow("Hamster moods", "Blinking, winking and munching when something finishes", s.moods) { v -> Prefs.edit { it.copy(moods = v) } }
+        FxRow(stringResource(R.string.set_moods), stringResource(R.string.set_moods_hint), s.moods) { v -> Prefs.edit { it.copy(moods = v) } }
         Divider()
-        FxRow("Stretchy motion", "Pills, switches and sheets deform with their speed", s.stretch) { v -> Prefs.edit { it.copy(stretch = v) } }
+        FxRow(stringResource(R.string.set_stretch), stringResource(R.string.set_stretch_hint), s.stretch) { v -> Prefs.edit { it.copy(stretch = v) } }
         Divider()
-        FxRow("Haptics", "Ticks on drags, swipes and toggles", s.haptics) { v -> Prefs.edit { it.copy(haptics = v) } }
+        FxRow(stringResource(R.string.set_haptics), stringResource(R.string.set_haptics_hint), s.haptics) { v -> Prefs.edit { it.copy(haptics = v) } }
     }
     Spacer(Modifier.height(16.dp))
-    Txt("ASCII", style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
+    Txt(stringResource(R.string.set_ascii), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
     Spacer(Modifier.height(8.dp))
     Group {
-        FxRow("ASCII background", "The drifting character raster at the top", s.raster) { v -> Prefs.edit { it.copy(raster = v) } }
+        FxRow(stringResource(R.string.set_raster), stringResource(R.string.set_raster_hint), s.raster) { v -> Prefs.edit { it.copy(raster = v) } }
         Divider()
-        FxRow("ASCII thumbnails", "Thumbnails resolve from characters while downloading", s.asciiThumbs) { v -> Prefs.edit { it.copy(asciiThumbs = v) } }
+        FxRow(stringResource(R.string.set_ascii_thumbs), stringResource(R.string.set_ascii_thumbs_hint), s.asciiThumbs) { v -> Prefs.edit { it.copy(asciiThumbs = v) } }
         Divider()
-        FxRow("Matrix rain", "Falling characters while a link loads", s.rain) { v -> Prefs.edit { it.copy(rain = v) } }
+        FxRow(stringResource(R.string.set_rain), stringResource(R.string.set_rain_hint), s.rain) { v -> Prefs.edit { it.copy(rain = v) } }
         Divider()
-        FxRow("Decoding text", "Titles arrive out of character noise", s.decode) { v -> Prefs.edit { it.copy(decode = v) } }
+        FxRow(stringResource(R.string.set_decode), stringResource(R.string.set_decode_hint), s.decode) { v -> Prefs.edit { it.copy(decode = v) } }
     }
 }
 
 @Composable
 private fun DownloadsPage() {
     val s by Prefs.settings.collectAsState()
+    val videoLabel = stringResource(R.string.mode_video)
+    val audioLabel = stringResource(R.string.mode_audio)
     Group {
-        Block("Default when sharing") {
-            Segmented(listOf(Mode.Video, Mode.Audio), s.mode, { if (it == Mode.Video) "Video" else "Audio" }, { m -> Prefs.edit { it.copy(mode = m) } })
+        Block(stringResource(R.string.set_default_mode)) {
+            Segmented(listOf(Mode.Video, Mode.Audio), s.mode, { if (it == Mode.Video) videoLabel else audioLabel }, { m -> Prefs.edit { it.copy(mode = m) } })
         }
-        Block("Video quality") {
+        Block(stringResource(R.string.set_video_quality)) {
             Chips(Prefs.heights, s.height, ::heightLabel) { h -> Prefs.edit { it.copy(height = h) } }
         }
-        Block("Video format") {
+        Block(stringResource(R.string.set_video_format)) {
             Chips(Prefs.containers, s.container, { it }) { f -> Prefs.edit { it.copy(container = f) } }
         }
-        Block("Audio format") {
+        Block(stringResource(R.string.share_audio_format)) {
             Chips(Prefs.audioFormats, s.audioFormat, { it }) { f -> Prefs.edit { it.copy(audioFormat = f) } }
         }
     }
     Spacer(Modifier.height(12.dp))
     Group {
-        FxRow("Embed subtitles", "German and English, when available", s.subtitles) { v -> Prefs.edit { it.copy(subtitles = v) } }
+        FxRow(stringResource(R.string.set_subtitles), stringResource(R.string.set_subtitles_hint, s.subtitleLanguages().joinToString(", ") { languageName(it) }), s.subtitles) { v -> Prefs.edit { it.copy(subtitles = v) } }
+        AnimatedVisibility(s.subtitles, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Block(stringResource(R.string.set_sub_langs)) { SubtitleLanguages(s) }
+        }
         Divider()
-        FxRow("Instant stash", "Sharing starts right away with these defaults, no sheet", s.quickStash) { v -> Prefs.edit { it.copy(quickStash = v) } }
+        FxRow(stringResource(R.string.set_clean_names), stringResource(R.string.set_clean_names_hint), s.cleanNames) { v -> Prefs.edit { it.copy(cleanNames = v) } }
         Divider()
-        FxRow("Whole playlists", "Otherwise only the shared video", s.playlists) { v -> Prefs.edit { it.copy(playlists = v) } }
+        FxRow(stringResource(R.string.set_instant), stringResource(R.string.set_instant_hint), s.quickStash) { v -> Prefs.edit { it.copy(quickStash = v) } }
+        Divider()
+        FxRow(stringResource(R.string.set_playlists), stringResource(R.string.set_playlists_hint), s.playlists) { v -> Prefs.edit { it.copy(playlists = v) } }
     }
 }
 
@@ -357,29 +373,33 @@ private fun DownloadsPage() {
 private fun QueuePage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        Block("Parallel downloads") {
+        Block(stringResource(R.string.set_parallel)) {
             Segmented(listOf(1, 2, 3), s.parallel, { it.toString() }, { n -> Prefs.edit { it.copy(parallel = n) } })
         }
-        SettingRow("Save location", subtitle = Engine.outputDir.absolutePath.replace("/storage/emulated/0", "Internal storage"))
+        SettingRow(stringResource(R.string.set_save_location), subtitle = Engine.outputDir.absolutePath.replace("/storage/emulated/0", stringResource(R.string.set_internal_storage)))
+        Divider()
+        FxRow(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_hint), s.wifiOnly) { v -> Prefs.edit { it.copy(wifiOnly = v) } }
     }
     Spacer(Modifier.height(12.dp))
     Group { NotificationsRow() }
 }
 
 /**
- * Mirrors whether Android lets Hamstr post notifications. Turning it on asks again while
- * Android still allows that, and otherwise opens Hamstr's notification settings.
+ * Hamstr's own notification switch. Off just keeps Hamstr quiet, without a trip to Android's
+ * settings. On asks for Android's permission when it is missing, and only goes to the system
+ * settings once Android no longer lets Hamstr ask.
  */
 @Composable
 private fun NotificationsRow() {
     val context = LocalContext.current
     val activity = LocalActivity.current
-    fun enabled() = NotificationManagerCompat.from(context).areNotificationsEnabled()
-    var on by remember { mutableStateOf(enabled()) }
-    // The switch follows changes made in the system settings while Hamstr was away.
+    val s by Prefs.settings.collectAsState()
+    fun allowed() = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    var system by remember { mutableStateOf(allowed()) }
+    // Follows changes made in the system settings while Hamstr was away.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) on = enabled() }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) system = allowed() }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
@@ -389,23 +409,71 @@ private fun NotificationsRow() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        on = enabled()
-        if (!granted) openSettings()
-    }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { system = allowed() }
+    val on = s.notifications && system
     val toggle = {
-        val canAsk = Build.VERSION.SDK_INT >= 33 && activity != null &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
-            activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
-        // Android can't take a permission back from inside the app, so "off" goes to its settings too.
-        if (!on && canAsk) ask.launch(Manifest.permission.POST_NOTIFICATIONS) else openSettings()
+        if (on) {
+            Prefs.edit { it.copy(notifications = false) }
+        } else {
+            Prefs.edit { it.copy(notifications = true) }
+            if (!system) {
+                // Android asks itself until the user said no twice; after that only its settings can.
+                val canAsk = Build.VERSION.SDK_INT >= 33 && activity != null &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+                    (!s.askedNotifications || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))
+                if (canAsk) {
+                    Prefs.edit { it.copy(askedNotifications = true) }
+                    ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else openSettings()
+            }
+        }
     }
     SettingRow(
-        "Send notifications",
-        subtitle = if (on) "Progress while downloading, and a note when a file is in" else "Off · downloads still run, you just won't hear about them",
+        stringResource(R.string.set_notifications),
+        subtitle = stringResource(
+            when {
+                on -> R.string.set_notifications_on
+                !s.notifications -> R.string.set_notifications_off
+                else -> R.string.set_notifications_blocked
+            },
+        ),
         onClick = toggle,
     ) { HSwitch(on, { toggle() }) }
 }
+
+/** Which languages subtitles come in; nothing picked means the phone's language and English. */
+@Composable
+private fun SubtitleLanguages(s: Settings) {
+    val c = Hamstr.colors
+    val picked = s.subtitleLanguages()
+    val system = java.util.Locale.getDefault().language
+    val options = (listOf(system) + SUBTITLE_LANGUAGES).distinct()
+    val scroll = rememberScrollState()
+    Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { code ->
+            val on = code in picked
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (on) c.accent else c.surface)
+                    .clickable {
+                        val next = if (on) picked - code else picked + code
+                        // At least one stays picked.
+                        if (next.isNotEmpty()) Prefs.edit { it.copy(subLangs = next) }
+                    }
+                    .heightIn(min = 40.dp)
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) { Txt(languageName(code), style = Hamstr.type.bodyMedium, color = if (on) c.onAccent else c.ink) }
+        }
+    }
+}
+
+private val SUBTITLE_LANGUAGES = listOf("en", "de", "es", "fr", "it", "pt", "nl", "pl", "tr", "ru", "uk", "ar", "hi", "ja", "ko", "zh")
+
+/** "de" as "Deutsch", in its own language. */
+private fun languageName(code: String): String =
+    java.util.Locale.forLanguageTag(code).let { it.getDisplayLanguage(it) }.replaceFirstChar { it.titlecase() }.ifEmpty { code }
 
 @Composable
 private fun EnginePage() {
@@ -422,13 +490,12 @@ private fun EnginePage() {
     val cheekUpdating by CheekUpdates.updating.collectAsState()
     var cheekMsg by remember { mutableStateOf<String?>(null) }
     Group {
-        Block("Download engine") {
+        Block(stringResource(R.string.set_engine)) {
             Segmented(DownloadEngine.entries.toList(), s.engine, { it.label }, { e -> Prefs.edit { it.copy(engine = e) } })
             Txt(
                 when (s.engine) {
-                    DownloadEngine.YtDlp -> "yt-dlp finds the streams and downloads them, one connection at a time."
-                    DownloadEngine.Cheek -> "yt-dlp finds the streams, Cheek (Rust) fetches them over many connections at once. " +
-                        "Playlists, subtitles and custom formats still go through yt-dlp."
+                    DownloadEngine.YtDlp -> stringResource(R.string.set_engine_ytdlp)
+                    DownloadEngine.Cheek -> stringResource(R.string.set_engine_cheek)
                 },
                 style = Hamstr.type.small, color = c.ghost,
             )
@@ -439,31 +506,31 @@ private fun EnginePage() {
         Label("Cheek", Modifier.padding(horizontal = 6.dp))
         Spacer(Modifier.height(8.dp))
         Group {
-            SettingRow("Cheek version", subtitle = cheekVersion + if (Cheek.updated) " · updated on its own" else " · included with Hamstr ${BuildConfig.VERSION_NAME}")
+            SettingRow(stringResource(R.string.set_cheek_version), subtitle = cheekVersion + " · " + if (Cheek.updated) stringResource(R.string.set_cheek_updated) else stringResource(R.string.set_cheek_bundled, BuildConfig.VERSION_NAME))
             Divider()
-            FxRow("Update Cheek automatically", "Once a day from Cheek's GitHub releases", s.cheekAutoUpdate) { v -> Prefs.edit { it.copy(cheekAutoUpdate = v) } }
+            FxRow(stringResource(R.string.set_cheek_auto), stringResource(R.string.set_cheek_auto_hint), s.cheekAutoUpdate) { v -> Prefs.edit { it.copy(cheekAutoUpdate = v) } }
             Column(Modifier.padding(8.dp)) {
                 val available = cheekCheck as? EngineVersionCheck.Available
                 val checking = cheekCheck == EngineVersionCheck.Checking
                 HButton(
                     when {
-                        cheekUpdating -> "Updating …"
-                        checking -> "Checking version …"
-                        available != null -> "Update now"
-                        else -> "Check version"
+                        cheekUpdating -> stringResource(R.string.set_updating)
+                        checking -> stringResource(R.string.set_checking_version)
+                        available != null -> stringResource(R.string.set_update_now)
+                        else -> stringResource(R.string.set_check_version)
                     },
                     onClick = {
                         if (!cheekUpdating && !checking) scope.launch {
                             cheekMsg = null
                             if (available == null) CheekUpdates.checkVersion()
-                            else cheekMsg = CheekUpdates.update().fold({ "Cheek $it is installed" }, { "Update failed: ${it.message}" })
+                            else cheekMsg = CheekUpdates.update().fold({ context.getString(R.string.set_cheek_installed, it) }, { context.getString(R.string.set_update_failed_why, it.message) })
                         }
                     },
                     enabled = !cheekUpdating && !checking && Cheek.available,
                 )
                 val message = cheekMsg ?: when (val check = cheekCheck) {
-                    is EngineVersionCheck.Available -> "Version ${check.version} available"
-                    EngineVersionCheck.Current -> "Cheek $cheekVersion is the newest version that fits this Hamstr"
+                    is EngineVersionCheck.Available -> stringResource(R.string.set_version_available, check.version)
+                    EngineVersionCheck.Current -> stringResource(R.string.set_cheek_current, cheekVersion)
                     is EngineVersionCheck.Failed -> check.message
                     else -> null
                 }
@@ -475,40 +542,40 @@ private fun EnginePage() {
         }
     }
     Spacer(Modifier.height(12.dp))
-    Label(if (s.engine == DownloadEngine.Cheek) "yt-dlp · link resolver" else "yt-dlp", Modifier.padding(horizontal = 6.dp))
+    Label(if (s.engine == DownloadEngine.Cheek) stringResource(R.string.set_ytdlp_resolver) else "yt-dlp", Modifier.padding(horizontal = 6.dp))
     Spacer(Modifier.height(8.dp))
     Group {
         SettingRow(
-            "Version",
+            stringResource(R.string.set_version),
             subtitle = when (val e = engine) {
                 is EngineState.Ready -> e.version
-                EngineState.Starting -> "starting …"
+                EngineState.Starting -> stringResource(R.string.set_starting)
                 is EngineState.Broken -> e.message
             },
         )
         Divider()
-        FxRow("Update automatically", "Once a day, so sites don't break", s.autoUpdate) { v -> Prefs.edit { it.copy(autoUpdate = v) } }
+        FxRow(stringResource(R.string.set_ytdlp_auto), stringResource(R.string.set_ytdlp_auto_hint), s.autoUpdate) { v -> Prefs.edit { it.copy(autoUpdate = v) } }
         Column(Modifier.padding(8.dp)) {
             val available = versionCheck as? EngineVersionCheck.Available
             val checking = versionCheck == EngineVersionCheck.Checking
             HButton(
                 when {
-                    updating -> "Updating …"
-                    checking -> "Checking version …"
-                    available != null -> "Update now"
-                    else -> "Check version"
+                    updating -> stringResource(R.string.set_updating)
+                    checking -> stringResource(R.string.set_checking_version)
+                    available != null -> stringResource(R.string.set_update_now)
+                    else -> stringResource(R.string.set_check_version)
                 },
                 onClick = {
                     if (!updating && !checking) scope.launch {
                         updateMsg = null
                         if (available == null) Engine.checkVersion()
-                        else updateMsg = Engine.update(context).exceptionOrNull()?.let { "Update failed: ${it.message}" }
+                        else updateMsg = Engine.update(context).exceptionOrNull()?.let { context.getString(R.string.set_update_failed_why, it.message) }
                     }
                 },
                 enabled = !updating && !checking && engine is EngineState.Ready,
             )
             val message = updateMsg ?: when (val check = versionCheck) {
-                is EngineVersionCheck.Available -> "Version ${check.version} available"
+                is EngineVersionCheck.Available -> stringResource(R.string.set_version_available, check.version)
                 is EngineVersionCheck.Failed -> check.message
                 else -> null
             }
@@ -527,41 +594,41 @@ private fun AboutPage(onUpdate: () -> Unit) {
     val s by Prefs.settings.collectAsState()
     val update by Updater.state.collectAsState()
     Group {
-        SettingRow("Hamstr ${BuildConfig.VERSION_NAME}", subtitle = "Everything runs on the device: yt-dlp and ffmpeg are built in, no server.")
+        SettingRow("Hamstr ${BuildConfig.VERSION_NAME}", subtitle = stringResource(R.string.set_about_local))
         Divider()
-        SettingRow("Source code", subtitle = "github.com/${Updater.REPO}", onClick = {
+        SettingRow(stringResource(R.string.set_source), subtitle = "github.com/${Updater.REPO}", onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/${Updater.REPO}")))
         }) { Icon(R.drawable.ic_open_in_new, tint = c.ghost) }
     }
     Spacer(Modifier.height(16.dp))
-    Label("Updates", Modifier.padding(horizontal = 6.dp))
+    Label(stringResource(R.string.set_updates), Modifier.padding(horizontal = 6.dp))
     Spacer(Modifier.height(8.dp))
     Group {
-        FxRow("Check on launch", "Looks for a new release on GitHub when Hamstr starts", s.appUpdates) { v -> Prefs.edit { it.copy(appUpdates = v) } }
+        FxRow(stringResource(R.string.set_app_updates), stringResource(R.string.set_app_updates_hint), s.appUpdates) { v -> Prefs.edit { it.copy(appUpdates = v) } }
         Divider()
         SettingRow(
             when (val u = update) {
-                UpdateState.Checking -> "Checking …"
-                is UpdateState.Available -> "Hamstr ${u.release.version} is out"
-                is UpdateState.Downloading -> "Downloading ${u.release.version} · ${(u.progress * 100).toInt()} %"
-                is UpdateState.Installing -> "Installing ${u.release.version} …"
-                is UpdateState.Failed -> "Update failed"
-                UpdateState.UpToDate -> "You're up to date"
-                UpdateState.Idle -> "Updates"
+                UpdateState.Checking -> stringResource(R.string.set_checking)
+                is UpdateState.Available -> stringResource(R.string.set_update_out, u.release.version)
+                is UpdateState.Downloading -> stringResource(R.string.set_update_downloading, u.release.version, (u.progress * 100).toInt())
+                is UpdateState.Installing -> stringResource(R.string.set_update_installing, u.release.version)
+                is UpdateState.Failed -> stringResource(R.string.set_update_failed)
+                UpdateState.UpToDate -> stringResource(R.string.set_up_to_date)
+                UpdateState.Idle -> stringResource(R.string.set_updates)
             },
             subtitle = when (val u = update) {
                 is UpdateState.Failed -> u.message
-                else -> if (s.lastAppCheck == 0L) "Not checked yet"
-                else "Last checked " + DateUtils.getRelativeTimeSpanString(s.lastAppCheck, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+                else -> if (s.lastAppCheck == 0L) stringResource(R.string.set_not_checked)
+                else stringResource(R.string.set_last_checked) + " " + DateUtils.getRelativeTimeSpanString(s.lastAppCheck, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
             },
         )
         Column(Modifier.padding(8.dp)) {
             val release = update.release
             if (release != null) {
-                HButton("Update to ${release.version}", onUpdate, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download)
+                HButton(stringResource(R.string.set_update_to, release.version), onUpdate, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download)
             } else {
                 HButton(
-                    if (update == UpdateState.Checking) "Checking …" else "Check now",
+                    if (update == UpdateState.Checking) stringResource(R.string.set_checking) else stringResource(R.string.set_check_now),
                     onClick = { Updater.check(context) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = update != UpdateState.Checking,
@@ -571,7 +638,7 @@ private fun AboutPage(onUpdate: () -> Unit) {
     }
     Spacer(Modifier.height(16.dp))
     Group {
-        SettingRow("Licenses", subtitle = "Hamstr (GPL-3.0), yt-dlp (Unlicense), youtubedl-android (GPL-3.0), FFmpeg (LGPL/GPL), Inter & JetBrains Mono (OFL), Material Symbols (Apache-2.0)")
+        SettingRow(stringResource(R.string.set_licenses), subtitle = "Hamstr (GPL-3.0), Cheek (Unlicense), yt-dlp (Unlicense), youtubedl-android (GPL-3.0), FFmpeg (LGPL/GPL), Inter & JetBrains Mono (OFL), Material Symbols & Icons (Apache-2.0)")
     }
 }
 
@@ -580,43 +647,51 @@ private fun FxRow(title: String, subtitle: String, on: Boolean, set: (Boolean) -
     SettingRow(title, subtitle = subtitle, onClick = { set(!on) }) { HSwitch(on, set) }
 }
 
-private class SettingEntry(val title: String, val page: Page, val words: String)
+private class SettingEntry(val title: Int, val page: Page, val words: String)
+
+/** A search hit: the setting's title as shown on its page, so it can be highlighted there. */
+private class Found(val title: String, val page: Page)
 
 private val SETTINGS_INDEX = listOf(
-    SettingEntry("Accent colour", Page.Appearance, "color colour farbe accent hue theme pink orange"),
-    SettingEntry("Background", Page.Appearance, "theme dark oled black cocoa graphite hintergrund"),
-    SettingEntry("Startup animation", Page.Motion, "intro splash start animation"),
-    SettingEntry("Hamster moods", Page.Motion, "blink wink munch hamster mark"),
-    SettingEntry("Stretchy motion", Page.Motion, "stretch deform drag speed animation"),
-    SettingEntry("Haptics", Page.Motion, "vibration haptic vibrate"),
-    SettingEntry("ASCII background", Page.Motion, "raster characters top"),
-    SettingEntry("ASCII thumbnails", Page.Motion, "characters thumbnails images"),
-    SettingEntry("Matrix rain", Page.Motion, "rain falling loading effect"),
-    SettingEntry("Decoding text", Page.Motion, "noise titles text effect"),
-    SettingEntry("Default when sharing", Page.Downloads, "mode video audio default share"),
-    SettingEntry("Video quality", Page.Downloads, "resolution 1080p 4k 720p qualitat qualität"),
-    SettingEntry("Video format", Page.Downloads, "container mp4 mkv webm"),
-    SettingEntry("Audio format", Page.Downloads, "opus m4a mp3 music musik"),
-    SettingEntry("Embed subtitles", Page.Downloads, "subtitles captions untertitel"),
-    SettingEntry("Instant stash", Page.Downloads, "quick instant share sheet direct"),
-    SettingEntry("Whole playlists", Page.Downloads, "playlist album"),
-    SettingEntry("Parallel downloads", Page.Queue, "parallel concurrent queue at once"),
-    SettingEntry("Save location", Page.Queue, "folder storage path speicher ordner"),
-    SettingEntry("Send notifications", Page.Queue, "notifications notification benachrichtigungen permission progress alert"),
-    SettingEntry("Download engine", Page.Engine, "cheek rust engine yt-dlp speed fast parallel connections"),
-    SettingEntry("Version", Page.Engine, "yt-dlp engine version"),
-    SettingEntry("Cheek version", Page.Engine, "cheek engine installed bundled check version"),
-    SettingEntry("Update automatically", Page.Engine, "yt-dlp update auto"),
-    SettingEntry("Update Cheek automatically", Page.Engine, "cheek update auto release github"),
-    SettingEntry("Source code", Page.About, "github code source"),
-    SettingEntry("Check on launch", Page.About, "app update release github"),
-    SettingEntry("Licenses", Page.About, "license open source gpl"),
+    SettingEntry(R.string.set_accent, Page.Appearance, "color colour farbe accent hue theme pink orange"),
+    SettingEntry(R.string.set_background, Page.Appearance, "theme dark oled black cocoa graphite hintergrund"),
+    SettingEntry(R.string.set_intro, Page.Motion, "intro splash start animation"),
+    SettingEntry(R.string.set_moods, Page.Motion, "blink wink munch hamster mark"),
+    SettingEntry(R.string.set_stretch, Page.Motion, "stretch deform drag speed animation"),
+    SettingEntry(R.string.set_haptics, Page.Motion, "vibration haptic vibrate"),
+    SettingEntry(R.string.set_raster, Page.Motion, "raster characters top"),
+    SettingEntry(R.string.set_ascii_thumbs, Page.Motion, "characters thumbnails images"),
+    SettingEntry(R.string.set_rain, Page.Motion, "rain falling loading effect"),
+    SettingEntry(R.string.set_decode, Page.Motion, "noise titles text effect"),
+    SettingEntry(R.string.set_default_mode, Page.Downloads, "mode video audio default share"),
+    SettingEntry(R.string.set_video_quality, Page.Downloads, "resolution 1080p 4k 720p qualitat qualität"),
+    SettingEntry(R.string.set_video_format, Page.Downloads, "container mp4 mkv webm"),
+    SettingEntry(R.string.share_audio_format, Page.Downloads, "opus m4a mp3 music musik"),
+    SettingEntry(R.string.set_subtitles, Page.Downloads, "subtitles captions untertitel"),
+    SettingEntry(R.string.set_sub_langs, Page.Downloads, "subtitles languages sprache untertitel captions"),
+    SettingEntry(R.string.set_clean_names, Page.Downloads, "file name names id brackets dateiname"),
+    SettingEntry(R.string.set_instant, Page.Downloads, "quick instant share sheet direct"),
+    SettingEntry(R.string.set_playlists, Page.Downloads, "playlist album"),
+    SettingEntry(R.string.set_parallel, Page.Queue, "parallel concurrent queue at once"),
+    SettingEntry(R.string.set_save_location, Page.Queue, "folder storage path speicher ordner"),
+    SettingEntry(R.string.set_wifi_only, Page.Queue, "wifi wi-fi wlan mobile data metered cellular"),
+    SettingEntry(R.string.set_notifications, Page.Queue, "notifications notification benachrichtigungen permission progress alert"),
+    SettingEntry(R.string.set_engine, Page.Engine, "cheek rust engine yt-dlp speed fast parallel connections"),
+    SettingEntry(R.string.set_version, Page.Engine, "yt-dlp engine version"),
+    SettingEntry(R.string.set_cheek_version, Page.Engine, "cheek engine installed bundled check version"),
+    SettingEntry(R.string.set_ytdlp_auto, Page.Engine, "yt-dlp update auto"),
+    SettingEntry(R.string.set_cheek_auto, Page.Engine, "cheek update auto release github"),
+    SettingEntry(R.string.set_source, Page.About, "github code source"),
+    SettingEntry(R.string.set_app_updates, Page.About, "app update release github"),
+    SettingEntry(R.string.set_licenses, Page.About, "license open source gpl"),
 )
 
-private fun searchSettings(query: String): List<SettingEntry> {
+private fun searchSettings(context: android.content.Context, query: String): List<Found> {
     val q = query.trim().lowercase()
     if (q.isEmpty()) return emptyList()
     return SETTINGS_INDEX
-        .filter { e -> q.split(' ').all { w -> e.title.lowercase().contains(w) || e.words.contains(w) || e.page.title.lowercase().contains(w) } }
-        .sortedByDescending { it.title.lowercase().startsWith(q) }
+        .map { e -> e to context.getString(e.title) }
+        .filter { (e, title) -> q.split(' ').all { w -> title.lowercase().contains(w) || e.words.contains(w) || context.getString(e.page.title).lowercase().contains(w) } }
+        .sortedByDescending { (_, title) -> title.lowercase().startsWith(q) }
+        .map { (e, title) -> Found(title, e.page) }
 }

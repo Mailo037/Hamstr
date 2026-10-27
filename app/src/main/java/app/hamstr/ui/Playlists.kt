@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.hamstr.R
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Status
@@ -71,7 +73,7 @@ fun shelves(done: List<DownloadTask>): List<Shelf> {
             !seen.add(g) -> null
             else -> {
                 val items = groups.getValue(g).sortedBy { it.createdAt }
-                if (items.size > 1) Shelf.Group(g, t.groupTitle ?: "Playlist", items) else Shelf.One(t)
+                if (items.size > 1) Shelf.Group(g, t.groupTitle ?: "", items) else Shelf.One(t)
             }
         }
     }
@@ -120,12 +122,12 @@ private fun FanThumb(t: DownloadTask, width: Dp, modifier: Modifier, more: Int =
 
 /** Everything in a group, in the order it arrived. */
 @Composable
-fun GroupSheet(groupId: String, onPlay: (DownloadTask) -> Unit, onMenu: (DownloadTask) -> Unit) {
+fun GroupSheet(groupId: String, onPlay: (DownloadTask, List<DownloadTask>) -> Unit, onMenu: (DownloadTask) -> Unit) {
     val c = Hamstr.colors
     val tasks by DownloadStore.tasks.collectAsState()
     val items = tasks.filter { it.group == groupId && it.status == Status.Done }.sortedBy { it.createdAt }
     if (items.isEmpty()) return
-    val title = items.first().groupTitle ?: "Playlist"
+    val title = items.first().groupTitle ?: stringResource(R.string.lib_playlist)
     val list = rememberLazyListState()
     Column(
         Modifier
@@ -145,7 +147,7 @@ fun GroupSheet(groupId: String, onPlay: (DownloadTask) -> Unit, onMenu: (Downloa
                 Txt(title, style = Hamstr.type.section, maxLines = 2)
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Badge("${items.size} files", accent = true)
+                    Badge(stringResource(R.string.lib_files, items.size), accent = true)
                     Badge(formatBytes(items.sumOf { it.sizeBytes }))
                 }
             }
@@ -163,7 +165,7 @@ fun GroupSheet(groupId: String, onPlay: (DownloadTask) -> Unit, onMenu: (Downloa
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(Radii.row))
-                        .combinedClickable(onClick = { onPlay(t) }, onLongClick = { onMenu(t) })
+                        .combinedClickable(onClick = { onPlay(t, items) }, onLongClick = { onMenu(t) })
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

@@ -49,7 +49,11 @@ data class MediaInfo(
     val approxBytes: Long,
     val videoBytes: Map<Int, Long> = emptyMap(), // per height, with the best audio added where needed
     val audioBytes: Long = 0,
+    val id: String? = null,
 ) {
+    /** The same video under any of its links: extractor and ID. */
+    val key get() = if (id != null && source != null) "$source:$id" else null
+
     /** Roughly what "up to [height]" weighs, or 0 when the site doesn't say. */
     fun bytesFor(height: Int?): Long {
         val h = if (height == null) heights.firstOrNull() else heights.firstOrNull { it <= height } ?: heights.lastOrNull()
@@ -71,7 +75,9 @@ sealed interface EngineState {
 object Engine {
     private const val TAG = "HamstrEngine"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val ready = CompletableDeferred<Unit>()
+    // Replaced when a failed start is tried again.
+    @Volatile private var ready = CompletableDeferred<Unit>()
+    private lateinit var app: Context
     private val _state = MutableStateFlow<EngineState>(EngineState.Starting)
     val state: StateFlow<EngineState> = _state.asStateFlow()
     private val _updating = MutableStateFlow(false)
@@ -96,20 +102,19 @@ object Engine {
     private val updateMutex = Mutex()
 
     internal const val METADATA_PREFIX = "HAMSTR_METADATA:"
+    /** Callback lines that carry a [app.hamstr.data.Stage] name instead of yt-dlp output. */
+    internal const val STAGE_PREFIX = "HAMSTR_STAGE:"
     private val expiredMedia = Regex("HTTP Error (401|403|404|410)|(?:URL|signature).*expired|Requested format is not available", RegexOption.IGNORE_CASE)
 
     fun start(context: Context) {
-        val app = context.applicationContext
+        app = context.applicationContext
         outputDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Hamstr")
         tempDir = File(app.cacheDir, "parts").apply { mkdirs() }
         extractorCacheDir = File(app.cacheDir, "yt-dlp").apply { mkdirs() }
         Cheek.init(app)
         scope.launch {
             try {
-                YoutubeDL.getInstance().init(app)
-                FFmpeg.getInstance().init(app)
-                _state.value = EngineState.Ready(YoutubeDL.getInstance().version(app) ?: "?")
-                ready.complete(Unit)
+                boot()
                 // Automatic maintenance should not delay a newly shared download.
                 scope.launch {
                     delay(30_000)
@@ -123,6 +128,28 @@ object Engine {
                 _state.value = EngineState.Broken(e.message ?: e.toString())
                 ready.completeExceptionally(e)
             }
+        }
+    }
+
+    private fun boot() {
+        YoutubeDL.getInstance().init(app)
+        FFmpeg.getInstance().init(app)
+        _state.value = EngineState.Ready(YoutubeDL.getInstance().version(app) ?: "?")
+        ready.complete(Unit)
+    }
+
+    /** After a failed start: unpacks and starts yt-dlp once more. */
+    suspend fun retryStart(): Result<String> = withContext(Dispatchers.IO) {
+        if (_state.value !is EngineState.Broken) return@withContext Result.success((_state.value as? EngineState.Ready)?.version ?: "")
+        _state.value = EngineState.Starting
+        ready = CompletableDeferred()
+        runCatching {
+            boot()
+            (_state.value as EngineState.Ready).version
+        }.onFailure { e ->
+            Log.e(TAG, "init failed again", e)
+            _state.value = EngineState.Broken(e.message ?: e.toString())
+            ready.completeExceptionally(e)
         }
     }
 
@@ -224,14 +251,15 @@ object Engine {
         fun string(key: String) = if (v.isNull(key)) null else v.optString(key).takeIf { it.isNotBlank() }
         val formats = v.optJSONArray("formats")
         val all = (0 until (formats?.length() ?: 0)).mapNotNull { formats?.optJSONObject(it) }
-        fun JSONObject.has(codec: String) = !isNull(codec) && optString(codec) != "none"
+        // Not "has": JSONObject.has(key) is a member and would win over an extension of that name.
+        fun JSONObject.hasCodec(codec: String) = !isNull(codec) && optString(codec) != "none"
         fun JSONObject.bytes() = optLong("filesize").takeIf { it > 0 } ?: optLong("filesize_approx")
-        val video = all.filter { it.has("vcodec") && it.optInt("height") > 0 }
+        val video = all.filter { it.hasCodec("vcodec") && it.optInt("height") > 0 }
         val heights = video.map { it.optInt("height") }.distinct().sortedDescending()
-        val audioBytes = all.filter { !it.has("vcodec") && it.has("acodec") }.maxOfOrNull { it.bytes() } ?: 0
+        val audioBytes = all.filter { !it.hasCodec("vcodec") && it.hasCodec("acodec") }.maxOfOrNull { it.bytes() } ?: 0
         val videoBytes = heights.associateWith { h ->
             video.filter { it.optInt("height") == h && it.bytes() > 0 }
-                .maxOfOrNull { it.bytes() + if (it.has("acodec")) 0 else audioBytes } ?: 0
+                .maxOfOrNull { it.bytes() + if (it.hasCodec("acodec")) 0 else audioBytes } ?: 0
         }
         return MediaInfo(
             url = string("webpage_url") ?: url,
@@ -239,11 +267,12 @@ object Engine {
             thumbnail = string("thumbnail"),
             source = string("extractor_key") ?: string("extractor"),
             durationSec = v.optDouble("duration", 0.0).toInt(),
-            uploader = string("uploader"),
+            uploader = string("uploader") ?: string("channel") ?: string("artist"),
             heights = heights,
             approxBytes = v.optLong("filesize").takeIf { it > 0 } ?: v.optLong("filesize_approx"),
             videoBytes = videoBytes,
             audioBytes = audioBytes,
+            id = string("id"),
         )
     }
 
@@ -342,7 +371,7 @@ object Engine {
             // One JSON line per finished file; a playlist leaves one per entry.
             addCommands(listOf("--print-to-file", "after_move:%(.{filepath,title,thumbnail,duration,playlist_title})j", pathFile(task).absolutePath))
             // Read metadata from this extraction instead of starting a second process first.
-            addOption("--print", "before_dl:$METADATA_PREFIX%(.{title,thumbnail,extractor_key,duration})j")
+            addOption("--print", "before_dl:$METADATA_PREFIX%(.{title,thumbnail,extractor_key,duration,uploader,channel,id})j")
             addOption("--no-simulate")
             addOption("--progress")
             addOption("--newline")
@@ -372,7 +401,7 @@ object Engine {
                     if (c.container != "webm") addOption("--embed-thumbnail")
                     if (c.subtitles) {
                         addOption("--write-subs")
-                        addOption("--sub-langs", "de.*,en.*")
+                        addOption("--sub-langs", Prefs.settings.value.subtitleLanguages().joinToString(",") { "$it.*" })
                         addOption("--embed-subs")
                     }
                 }

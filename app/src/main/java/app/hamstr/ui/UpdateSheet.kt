@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
 import androidx.compose.animation.AnimatedContent
@@ -73,11 +74,11 @@ fun UpdateBanner(release: Release, onOpen: () -> Unit, onDismiss: () -> Unit, mo
         HamstrMark(36.dp, interactive = false)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Txt("Hamstr ${release.version} is out", style = Hamstr.type.bodyMedium, maxLines = 1)
-            Txt("Tap to update, no browser needed", style = Hamstr.type.small, color = c.ghost, maxLines = 1)
+            Txt(stringResource(R.string.set_update_out, release.version), style = Hamstr.type.bodyMedium, maxLines = 1)
+            Txt(stringResource(R.string.upd_tap), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
         }
-        Txt("Update", style = Hamstr.type.button, color = c.accent, modifier = Modifier.padding(horizontal = 8.dp))
-        IconButton(R.drawable.ic_close, "Not now", onDismiss, background = Color.Transparent, size = 34.dp)
+        Txt(stringResource(R.string.upd_update), style = Hamstr.type.button, color = c.accent, modifier = Modifier.padding(horizontal = 8.dp))
+        IconButton(R.drawable.ic_close, stringResource(R.string.notify_ask_later), onDismiss, background = Color.Transparent, size = 34.dp)
     }
 }
 
@@ -108,11 +109,11 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Txt(if (release != null) "Hamstr ${release.version}" else "Hamstr ${BuildConfig.VERSION_NAME}", style = Hamstr.type.section)
-                    if (release != null) Badge("new", accent = true)
+                    if (release != null) Badge(stringResource(R.string.upd_new), accent = true)
                 }
                 Spacer(Modifier.height(2.dp))
                 Txt(
-                    if (release != null) "You have ${BuildConfig.VERSION_NAME} · ${formatBytes(release.size)}" else "You're on the latest version",
+                    if (release != null) stringResource(R.string.upd_you_have, BuildConfig.VERSION_NAME, formatBytes(release.size)) else stringResource(R.string.upd_latest),
                     style = Hamstr.type.small, color = c.ghost,
                 )
             }
@@ -137,11 +138,11 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
                     ProgressLine(s.progress)
                     Spacer(Modifier.height(8.dp))
                     Row {
-                        Txt("Downloading", style = Hamstr.type.small, color = c.muted, modifier = Modifier.weight(1f))
+                        Txt(stringResource(R.string.upd_downloading), style = Hamstr.type.small, color = c.muted, modifier = Modifier.weight(1f))
                         Txt("${(s.progress * 100).toInt()} %", style = Hamstr.type.mono, color = c.ghost)
                     }
                 }
-                is UpdateState.Installing -> Txt("Handing it to Android. Hamstr closes and comes back updated.", style = Hamstr.type.small, color = c.muted)
+                is UpdateState.Installing -> Txt(stringResource(R.string.upd_installing_hint), style = Hamstr.type.small, color = c.muted)
                 is UpdateState.Failed -> Txt(s.message, style = Hamstr.type.small, color = c.red)
                 else -> Spacer(Modifier.height(0.dp))
             }
@@ -149,16 +150,16 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (release == null) {
-                HButton("Close", onClose, Modifier.weight(1f))
+                HButton(stringResource(R.string.upd_close), onClose, Modifier.weight(1f))
             } else {
-                HButton("Later", onLater, Modifier.weight(1f), kind = ButtonKind.Ghost)
+                HButton(stringResource(R.string.upd_later), onLater, Modifier.weight(1f), kind = ButtonKind.Ghost)
                 val busy = state is UpdateState.Downloading || state is UpdateState.Installing
                 HButton(
                     when (state) {
-                        is UpdateState.Downloading -> "Downloading …"
-                        is UpdateState.Installing -> "Installing …"
-                        is UpdateState.Failed -> "Try again"
-                        else -> "Install update"
+                        is UpdateState.Downloading -> stringResource(R.string.upd_downloading_dots)
+                        is UpdateState.Installing -> stringResource(R.string.upd_installing)
+                        is UpdateState.Failed -> stringResource(R.string.err_try_again)
+                        else -> stringResource(R.string.upd_install)
                     },
                     onClick = { Updater.install(context, release) },
                     modifier = Modifier.weight(1.6f),

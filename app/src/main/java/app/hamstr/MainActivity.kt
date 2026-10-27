@@ -14,16 +14,16 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -32,7 +32,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -44,7 +43,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -61,9 +59,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.hamstr.data.DownloadStore
@@ -77,6 +74,8 @@ import app.hamstr.data.DownloadTask
 import app.hamstr.data.Status
 import app.hamstr.engine.DownloadService
 import app.hamstr.engine.Engine
+import app.hamstr.engine.Failures
+import app.hamstr.engine.Fix
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInHorizontally
@@ -84,11 +83,12 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import app.hamstr.ui.NotifyAsk
+import app.hamstr.ui.NotifyPrompt
 import app.hamstr.ui.Overlay
 import app.hamstr.ui.components.DecodeText
 import app.hamstr.ui.components.DragPillRow
 import app.hamstr.ui.components.HamstrMark
-import app.hamstr.ui.components.LocalReduceMotion
 import app.hamstr.ui.components.MarkState
 import kotlinx.coroutines.delay
 import app.hamstr.player.Kind
@@ -114,25 +114,25 @@ import app.hamstr.ui.UpdateSheet
 import app.hamstr.ui.release
 import app.hamstr.update.UpdateState
 import app.hamstr.update.Updater
+import app.hamstr.ui.components.ButtonKind
+import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.RasterBackground
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.LocalFx
 import app.hamstr.ui.theme.HamstrTheme
-import app.hamstr.ui.theme.TravelEasing
+import app.hamstr.ui.theme.Radii
 import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val pip = PipController { params -> runCatching { setPictureInPictureParams(params) } }
-    private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
     private val storagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
-        askPermissions(this, notifPermission::launch, storagePermission::launch)
-        if (DownloadStore.tasks.value.any { it.status == Status.Queued }) DownloadService.send(this, DownloadService.ACTION_START)
+        askStorage(this, storagePermission::launch)
         Updater.checkOnLaunch(this)
         addOnPictureInPictureModeChangedListener { inPip.value = it.isInPictureInPictureMode }
         inPip.value = isInPictureInPictureMode
@@ -141,21 +141,34 @@ class MainActivity : ComponentActivity() {
             combine(Playback.current, Playback.controller) { task, player -> task to player }
                 .collect { (task, player) -> pip.bind(task, player) }
         }
-        if (savedInstanceState == null) pendingAction.value = intent?.action?.takeIf { it in ACTIONS }
+        if (savedInstanceState == null) take(intent)
         setContent { HamstrTheme { App(inPip.value) } }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Back in the foreground: queued downloads (also ones Android paused) go on, gone files show up.
+        if (DownloadStore.tasks.value.any { it.status == Status.Queued }) DownloadService.send(this, DownloadService.ACTION_START)
+        DownloadFiles.refreshMissing()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.action?.takeIf { it in ACTIONS }?.let { pendingAction.value = it }
+        take(intent)
+    }
+
+    private fun take(intent: Intent?) {
+        val action = intent?.action?.takeIf { it in ACTIONS } ?: return
+        pendingAction.value = if (action == ACTION_OPEN) "$ACTION_OPEN:${intent.getStringExtra(DownloadService.EXTRA_ID)}" else action
     }
 
     companion object {
-        // Launcher shortcuts and the widget's buttons.
+        // Launcher shortcuts, the widget's buttons and "Play" in notifications.
         const val ACTION_PASTE = "app.hamstr.action.PASTE"
         const val ACTION_ADD = "app.hamstr.action.ADD"
         const val ACTION_LIBRARY = "app.hamstr.action.LIBRARY"
-        private val ACTIONS = setOf(ACTION_PASTE, ACTION_ADD, ACTION_LIBRARY)
+        const val ACTION_OPEN = "app.hamstr.action.OPEN"
+        private val ACTIONS = setOf(ACTION_PASTE, ACTION_ADD, ACTION_LIBRARY, ACTION_OPEN)
         internal val pendingAction = MutableStateFlow<String?>(null)
     }
 
@@ -175,22 +188,23 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-fun askPermissions(activity: ComponentActivity, notif: (String) -> Unit, storage: (String) -> Unit) {
-    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-        notif(Manifest.permission.POST_NOTIFICATIONS)
-    }
+/** Android 8 and 9 need permission to write to Download/Hamstr; notifications are asked for after the first stash. */
+fun askStorage(activity: ComponentActivity, storage: (String) -> Unit) {
     if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
         storage(Manifest.permission.WRITE_EXTERNAL_STORAGE)
     }
 }
 
-private enum class Tab(val label: String, val icon: Int) {
-    Stash("Stash", R.drawable.ic_download),
-    Library("Library", R.drawable.ic_grid_view),
-    Settings("Settings", R.drawable.ic_settings),
+private enum class Tab(val label: Int, val icon: Int) {
+    Stash(R.string.tab_stash, R.drawable.ic_download),
+    Library(R.string.tab_library, R.drawable.ic_grid_view),
+    Settings(R.string.tab_settings, R.drawable.ic_settings),
 }
 
 private val URL = Regex("""https?://\S+""")
+
+/** A short message at the bottom, optionally with one action (Undo, Open, Retry). */
+private data class Snack(val text: String, val action: String? = null, val id: Long = System.nanoTime(), val run: (() -> Unit)? = null)
 
 @Composable
 private fun App(inPip: Boolean) {
@@ -205,33 +219,82 @@ private fun App(inPip: Boolean) {
     var sheetUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     var qualityFor by remember { mutableStateOf<DownloadTask?>(null) }
-    var hint by remember { mutableStateOf<String?>(null) }
+    var snack by remember { mutableStateOf<Snack?>(null) }
     val scope = rememberCoroutineScope()
     var addSheet by rememberSaveable { mutableStateOf(false) }
     var groupFor by rememberSaveable { mutableStateOf<String?>(null) }
     var clipLink by remember { mutableStateOf<String?>(null) }
+    var notifyAsk by rememberSaveable { mutableStateOf(false) }
+    fun hint(text: String) { snack = Snack(text) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
-            hint = if (uris.size == 1) "Bringing it in …" else "Bringing ${uris.size} files in …"
+            hint(if (uris.size == 1) context.getString(R.string.import_one) else context.getString(R.string.import_many, uris.size))
             val n = Importer.import(context, uris)
-            hint = when {
-                n == uris.size -> if (n == 1) "Added to the stash" else "$n files added"
-                n == 0 -> "Couldn't read that file"
-                else -> "$n of ${uris.size} files added"
-            }
+            hint(
+                when {
+                    n == uris.size -> if (n == 1) context.getString(R.string.import_done_one) else context.getString(R.string.import_done_many, n)
+                    n == 0 -> context.getString(R.string.import_failed)
+                    else -> context.getString(R.string.import_done_some, n, uris.size)
+                },
+            )
         }
     }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifyAsk = false }
     fun clipboardLink(): String? {
         val cm = context.getSystemService(ClipboardManager::class.java)
         val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
         return URL.find(text)?.value
     }
     val playing by Playback.current.collectAsState()
-    val play: (DownloadTask) -> Unit = { t -> scope.launch { Playback.open(context, t) } }
+    val missing by DownloadFiles.missing.collectAsState()
+    fun again(t: DownloadTask) {
+        DownloadService.again(context, t)
+        DownloadStore.remove(t.id)
+        tab = Tab.Stash
+    }
+    // Lists hand in what plays next: other songs after a song, the rest of a playlist after one of its files.
+    val play: (DownloadTask, List<DownloadTask>) -> Unit = { t, from ->
+        scope.launch {
+            if (!Playback.open(context, t, Playback.queueFor(t, from))) {
+                DownloadFiles.refreshMissing()
+                snack = Snack(context.getString(R.string.file_gone), context.getString(R.string.download_again)) { again(t) }
+            }
+        }
+    }
     val saveAudio: (DownloadTask) -> Unit = { v ->
         scope.launch {
-            hint = "Saving the audio …"
-            hint = AudioOut.save(context, v).fold({ "Audio saved next to the video" }, { it.message ?: "Couldn't save the audio" })
+            hint(context.getString(R.string.audio_saving))
+            hint(AudioOut.save(context, v).fold({ context.getString(R.string.audio_saved) }, { it.message ?: context.getString(R.string.audio_failed) }))
+        }
+    }
+    // Hiding keeps the files; deleting waits a moment for Undo before the files go.
+    val hide: (List<DownloadTask>) -> Unit = { list ->
+        val removed = DownloadStore.removeAll(list.map { it.id }.toSet())
+        val files = list.count { it.status == Status.Done }
+        snack = Snack(
+            when {
+                files == 0 -> context.getString(R.string.removed_from_list)
+                list.size == 1 -> context.getString(R.string.hidden_one)
+                else -> context.getString(R.string.hidden_many, list.size)
+            },
+            context.getString(R.string.undo),
+        ) { DownloadStore.restore(removed) }
+    }
+    val delete: (List<DownloadTask>) -> Unit = { list ->
+        val pending = DownloadFiles.deleteLater(context, list)
+        snack = Snack(
+            if (pending.count <= 1) context.getString(R.string.deleted_one) else context.getString(R.string.deleted_many, pending.count),
+            context.getString(R.string.undo),
+        ) { DownloadFiles.undo(context, pending) }
+    }
+    val share: (List<DownloadTask>) -> Unit = { list -> Playback.shareFiles(context, list) }
+    val retryEngine: () -> Unit = {
+        scope.launch {
+            hint(context.getString(R.string.engine_restarting))
+            Engine.retryStart().fold(
+                { hint(context.getString(R.string.engine_restarted)) },
+                { snack = Snack(context.getString(R.string.engine_still_broken), context.getString(R.string.err_copy)) { copy(context, it.message.orEmpty()) } },
+            )
         }
     }
     val settings by Prefs.settings.collectAsState()
@@ -245,20 +308,28 @@ private fun App(inPip: Boolean) {
     // Room for the tab bar, plus the mini player while something is loaded.
     val padding = PaddingValues(top = top + 8.dp, bottom = bottom + 84.dp + if (playing != null) 72.dp else 0.dp)
 
-    LaunchedEffect(hint) { if (hint != null) { kotlinx.coroutines.delay(2600); hint = null } }
+    LaunchedEffect(snack?.id) {
+        val s = snack ?: return@LaunchedEffect
+        delay(if (s.action != null) DownloadFiles.UNDO_MS else 2600)
+        if (snack?.id == s.id) snack = null
+    }
 
     // The clipboard is only readable once the window has focus.
     val action by MainActivity.pendingAction.collectAsState()
     val focused = LocalWindowInfo.current.isWindowFocused
     LaunchedEffect(action, focused) {
-        when (action) {
-            MainActivity.ACTION_LIBRARY -> tab = Tab.Library
-            MainActivity.ACTION_ADD -> if (focused) { tab = Tab.Stash; clipLink = clipboardLink(); addSheet = true } else return@LaunchedEffect
-            MainActivity.ACTION_PASTE -> if (focused) {
+        val a = action ?: return@LaunchedEffect
+        when {
+            a == MainActivity.ACTION_LIBRARY -> tab = Tab.Library
+            a == MainActivity.ACTION_ADD -> if (focused) { tab = Tab.Stash; clipLink = clipboardLink(); addSheet = true } else return@LaunchedEffect
+            a == MainActivity.ACTION_PASTE -> if (focused) {
                 tab = Tab.Stash
                 val url = clipboardLink()
-                if (url != null) sheetUrl = url else { hint = "No link in the clipboard"; clipLink = null; addSheet = true }
+                if (url != null) sheetUrl = url else { hint(context.getString(R.string.no_clipboard_link)); clipLink = null; addSheet = true }
             } else return@LaunchedEffect
+            a.startsWith(MainActivity.ACTION_OPEN) -> DownloadStore.get(a.substringAfter(':'))?.let { t ->
+                play(t, DownloadStore.tasks.value.filter { it.status == Status.Done })
+            }
             else -> return@LaunchedEffect
         }
         MainActivity.pendingAction.value = null
@@ -280,22 +351,48 @@ private fun App(inPip: Boolean) {
                     tasks, engine, padding,
                     onAdd = {
                         val url = clipboardLink()
-                        if (url != null) sheetUrl = url else hint = "No link in the clipboard"
+                        if (url != null) sheetUrl = url else hint(context.getString(R.string.no_clipboard_link))
                     },
                     onOpenAdd = { clipLink = clipboardLink(); addSheet = true },
                     onMenu = { menuFor = it },
                     onPlay = play,
+                    onHide = hide,
+                    onRetryEngine = retryEngine,
+                    onShowAll = { tab = Tab.Library },
                 )
-                Tab.Library -> LibraryScreen(tasks, padding, onMenu = { menuFor = it }, onPlay = play, onGroup = { groupFor = it })
+                Tab.Library -> LibraryScreen(
+                    tasks, padding,
+                    onMenu = { menuFor = it }, onPlay = play, onGroup = { groupFor = it },
+                    onHide = hide, onDelete = delete, onShare = share,
+                )
                 Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true })
             }
         }
         TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
         if (!inPip) PlayerHost(miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it })
 
-        AnimatedVisibility(hint != null, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp)) {
-            Box(Modifier.clip(RoundedCornerShape(14.dp)).background(c.raised).padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Txt(hint.orEmpty(), style = Hamstr.type.small)
+        AnimatedVisibility(
+            snack != null,
+            enter = slideInVertically { it / 2 } + fadeIn(),
+            exit = slideOutVertically { it / 2 } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 96.dp + if (playing != null) 72.dp else 0.dp),
+        ) {
+            var shown by remember { mutableStateOf(snack) }
+            snack?.let { shown = it }
+            shown?.let { s ->
+                Row(
+                    Modifier.clip(RoundedCornerShape(14.dp)).background(c.raised).padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 40.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Txt(s.text, style = Hamstr.type.small, modifier = Modifier.weight(1f, fill = false).padding(end = 10.dp, top = 6.dp, bottom = 6.dp))
+                    if (s.action != null) {
+                        Box(
+                            Modifier.clip(RoundedCornerShape(10.dp)).clickable { s.run?.invoke(); snack = null }
+                                .heightIn(min = 40.dp).padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Txt(s.action, style = Hamstr.type.button, color = c.accent) }
+                    } else Spacer(Modifier.width(10.dp))
+                }
             }
         }
 
@@ -311,7 +408,7 @@ private fun App(inPip: Boolean) {
         }
 
         Overlay(visible = groupFor != null, onDismiss = { groupFor = null }) {
-            groupFor?.let { g -> GroupSheet(g, onPlay = { groupFor = null; play(it) }, onMenu = { menuFor = it }) }
+            groupFor?.let { g -> GroupSheet(g, onPlay = { t, items -> groupFor = null; play(t, items) }, onMenu = { menuFor = it }) }
         }
         Overlay(visible = addSheet, onDismiss = { addSheet = false }) {
             AddSheet(
@@ -320,27 +417,42 @@ private fun App(inPip: Boolean) {
                 onFiles = { addSheet = false; pickFiles.launch(arrayOf("*/*")) },
             )
         }
+        val stashed = {
+            sheetUrl = null
+            tab = Tab.Stash
+            if (NotifyAsk.due(context)) notifyAsk = true
+        }
         Overlay(visible = sheetUrl != null, onDismiss = { sheetUrl = null }) {
             sheetUrl?.let { url ->
                 ShareSheet(
                     url,
-                    onStash = { info, choice ->
-                        DownloadService.stash(context, url, info, choice)
-                        sheetUrl = null
-                        tab = Tab.Stash
-                    },
+                    onStash = { info, choice -> DownloadService.stash(context, url, info, choice); stashed() },
                     onDismiss = { sheetUrl = null },
+                    onOpen = { t -> sheetUrl = null; play(t, DownloadStore.tasks.value.filter { it.status == Status.Done }) },
+                    onStashVersion = { of, choice -> DownloadService.stashVersion(context, of, choice, replace = false); stashed() },
                 )
             }
         }
+        Overlay(visible = notifyAsk, onDismiss = { NotifyAsk.asked(); notifyAsk = false }) {
+            NotifyPrompt(
+                onAllow = { NotifyAsk.asked(); askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                onLater = { NotifyAsk.asked(); notifyAsk = false },
+            )
+        }
         Overlay(visible = menuFor != null, onDismiss = { menuFor = null }) {
-            menuFor?.let { t -> TaskMenu(t, onPlay = play, onClose = { menuFor = null }, onQuality = { menuFor = null; qualityFor = it }, onSaveAudio = { menuFor = null; saveAudio(it) }, onDelete = { selected ->
-                scope.launch {
-                    val result = DownloadFiles.delete(context, selected)
-                    hint = result.fold({ "File deleted" }, { it.message ?: "Couldn't delete the file" })
-                }
-                menuFor = null
-            }) }
+            menuFor?.let { t ->
+                TaskMenu(
+                    t, gone = t.id in missing,
+                    onPlay = { play(it, DownloadStore.tasks.value.filter { d -> d.status == Status.Done }) },
+                    onClose = { menuFor = null },
+                    onQuality = { menuFor = null; qualityFor = it },
+                    onSaveAudio = { menuFor = null; saveAudio(it) },
+                    onHide = { menuFor = null; hide(it) },
+                    onDelete = { menuFor = null; delete(listOf(it)) },
+                    onAgain = { menuFor = null; again(it) },
+                    onCopied = { hint(it) },
+                )
+            }
         }
         Overlay(visible = qualityFor != null, onDismiss = { qualityFor = null }) {
             qualityFor?.let { t ->
@@ -348,7 +460,8 @@ private fun App(inPip: Boolean) {
                     t,
                     onSwitch = { v -> qualityFor = null; scope.launch { Playback.switchTo(context, v) } },
                     onSaveAudio = { v -> qualityFor = null; saveAudio(v) },
-                    onDone = { msg -> qualityFor = null; hint = msg },
+                    onDelete = { v -> delete(listOf(v)) },
+                    onDone = { msg -> qualityFor = null; hint(msg) },
                 )
             }
         }
@@ -365,14 +478,31 @@ private fun App(inPip: Boolean) {
     }
 }
 
+private fun copy(context: android.content.Context, text: String) {
+    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("Hamstr", text))
+}
+
 @Composable
-private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit, onQuality: (DownloadTask) -> Unit, onSaveAudio: (DownloadTask) -> Unit, onDelete: (DownloadTask) -> Unit) {
+private fun TaskMenu(
+    task: DownloadTask,
+    gone: Boolean,
+    onPlay: (DownloadTask) -> Unit,
+    onClose: () -> Unit,
+    onQuality: (DownloadTask) -> Unit,
+    onSaveAudio: (DownloadTask) -> Unit,
+    onHide: (List<DownloadTask>) -> Unit,
+    onDelete: (DownloadTask) -> Unit,
+    onAgain: (DownloadTask) -> Unit,
+    onCopied: (String) -> Unit,
+) {
     val c = Hamstr.colors
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     // The menu stays open while the download moves on, so it follows the live task.
     val tasks by DownloadStore.tasks.collectAsState()
     val t = tasks.firstOrNull { it.id == task.id } ?: task
     val file = t.filePath?.let(::File)?.takeIf { it.exists() }
+    var updating by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -392,49 +522,98 @@ private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose
         }
         Txt(t.title, style = Hamstr.type.section, maxLines = 2, modifier = Modifier.padding(horizontal = 12.dp))
         Spacer(Modifier.height(2.dp))
-        Txt(t.url, style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp))
+        Txt(listOfNotNull(t.uploader, t.url).joinToString(" · "), style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp))
         Spacer(Modifier.height(10.dp))
+        if (t.status == Status.Failed) {
+            // What happened, in plain words, with the engine's own message underneath.
+            val why = Failures.explain(t.error)
+            Column(Modifier.padding(horizontal = 4.dp).fillMaxWidth().clip(RoundedCornerShape(Radii.row)).background(c.surface).padding(12.dp)) {
+                Txt(stringResource(why.title), style = Hamstr.type.bodyMedium, color = c.red)
+                Spacer(Modifier.height(2.dp))
+                Txt(stringResource(why.hint), style = Hamstr.type.small, color = c.muted)
+                t.error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Txt(it, style = Hamstr.type.mono, color = c.ghost)
+                }
+                if (why.fix == Fix.UpdateYtDlp) {
+                    Spacer(Modifier.height(10.dp))
+                    HButton(
+                        stringResource(if (updating) R.string.err_updating else R.string.err_update_retry),
+                        {
+                            if (!updating) scope.launch {
+                                updating = true
+                                Engine.update(context)
+                                updating = false
+                                DownloadService.send(context, DownloadService.ACTION_RESUME, t.id)
+                                onClose()
+                            }
+                        },
+                        Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_refresh, enabled = !updating,
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            t.error?.let { err ->
+                MenuRow(R.drawable.ic_content_paste, stringResource(R.string.err_copy)) { copy(context, err); onCopied(context.getString(R.string.err_copied)) }
+            }
+        }
+        if (gone && t.status == Status.Done) {
+            Txt(stringResource(R.string.file_gone_long), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            MenuRow(R.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) }
+        }
         if (file != null) {
             val kind = kindOf(file)
             MenuRow(
                 if (kind == Kind.Video || kind == Kind.Audio) R.drawable.ic_play_arrow else R.drawable.ic_open_in_new,
-                when (kind) { Kind.Video, Kind.Audio -> "Play in Hamstr"; Kind.Image -> "View in Hamstr"; Kind.Other -> "Details" },
+                stringResource(
+                    when (kind) {
+                        Kind.Video, Kind.Audio -> R.string.menu_play
+                        Kind.Image -> R.string.menu_view
+                        Kind.Other -> R.string.menu_details
+                    },
+                ),
             ) { onPlay(t); onClose() }
-            if (canHaveVersions(t)) MenuRow(R.drawable.ic_movie, "Quality") { onQuality(t) }
-            if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, "Save audio") { onSaveAudio(t) }
-            MenuRow(R.drawable.ic_open_in_new, "Open with…") { Playback.openWith(context, t); onClose() }
-            MenuRow(R.drawable.ic_share, "Share file") { Playback.shareFile(context, t); onClose() }
-            MenuRow(R.drawable.ic_delete, "Delete file", danger = true) { onDelete(t) }
+            if (canHaveVersions(t)) MenuRow(R.drawable.ic_movie, stringResource(R.string.menu_quality)) { onQuality(t) }
+            if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, stringResource(R.string.menu_save_audio)) { onSaveAudio(t) }
+            MenuRow(R.drawable.ic_open_in_new, stringResource(R.string.menu_open_with)) { Playback.openWith(context, t); onClose() }
+            MenuRow(R.drawable.ic_share, stringResource(R.string.menu_share_file)) { Playback.shareFile(context, t); onClose() }
         }
-        MenuRow(R.drawable.ic_link, "Copy link") {
-            context.getSystemService(ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("Link", t.url))
+        MenuRow(R.drawable.ic_link, stringResource(R.string.menu_copy_link)) {
+            copy(context, t.url)
             onClose()
         }
         if (t.status == Status.Failed || t.status == Status.Paused) {
-            MenuRow(R.drawable.ic_refresh, "Try again") { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
+            MenuRow(R.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
         }
-        if (t.status.active) {
-            MenuRow(R.drawable.ic_close, "Cancel") { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
-        } else {
-            MenuRow(R.drawable.ic_close, "Remove from list") { DownloadStore.remove(t.id); onClose() }
+        when {
+            t.status.active -> MenuRow(R.drawable.ic_close, stringResource(R.string.menu_cancel)) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
+            file != null -> {
+                MenuRow(R.drawable.ic_visibility_off, stringResource(R.string.menu_hide), subtitle = stringResource(R.string.menu_hide_hint)) { onHide(listOf(t)) }
+                MenuRow(R.drawable.ic_delete, stringResource(R.string.menu_delete), danger = true) { onDelete(t) }
+            }
+            else -> MenuRow(R.drawable.ic_close, stringResource(R.string.menu_remove)) { onHide(listOf(t)) }
         }
     }
 }
 
 @Composable
-private fun MenuRow(icon: Int, label: String, danger: Boolean = false, onClick: () -> Unit) {
+private fun MenuRow(icon: Int, label: String, danger: Boolean = false, subtitle: String? = null, onClick: () -> Unit) {
     val c = Hamstr.colors
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 13.dp),
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Icon(icon, tint = if (danger) c.red else c.muted)
-        Txt(label, color = if (danger) c.red else c.ink)
+        Column {
+            Txt(label, color = if (danger) c.red else c.ink)
+            if (subtitle != null) Txt(subtitle, style = Hamstr.type.small, color = c.ghost)
+        }
     }
 }
 
@@ -466,7 +645,7 @@ private fun TabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = 
         ) {
             Icon(t.icon, tint = lerp(c.ghost, c.ink, near), size = 22.dp)
             Spacer(Modifier.height(3.dp))
-            Txt(t.label, style = Hamstr.type.small, color = lerp(c.ghost, c.ink, near), maxLines = 1)
+            Txt(stringResource(t.label), style = Hamstr.type.small, color = lerp(c.ghost, c.ink, near), maxLines = 1)
         }
     }
 }

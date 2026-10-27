@@ -67,7 +67,7 @@ object Updater {
 
     fun init(context: Context) {
         context.getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel(CH_UPDATES, "App updates", NotificationManager.IMPORTANCE_DEFAULT))
+            .createNotificationChannel(NotificationChannel(CH_UPDATES, context.getString(R.string.channel_updates), NotificationManager.IMPORTANCE_DEFAULT))
         // An APK left over from an update that already went through.
         scope.launch { dir(context).listFiles()?.forEach { it.delete() } }
     }
@@ -88,7 +88,7 @@ object Updater {
                     Prefs.edit { it.copy(lastAppCheck = System.currentTimeMillis()) }
                     if (r != null && newer(r.version, BuildConfig.VERSION_NAME)) UpdateState.Available(r) else UpdateState.UpToDate
                 },
-                onFailure = { UpdateState.Failed("Couldn't reach GitHub: ${it.message ?: it.javaClass.simpleName}", null) },
+                onFailure = { UpdateState.Failed(context.getString(R.string.upd_no_github, it.message ?: it.javaClass.simpleName), null) },
             )
         }
     }
@@ -188,12 +188,12 @@ object Updater {
     private fun verify(context: Context, apk: File) {
         val pm = context.packageManager
         val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
-        val incoming = pm.getPackageArchiveInfo(apk.path, flags) ?: error("The download isn't a valid APK")
-        if (incoming.packageName != context.packageName) error("The download isn't Hamstr")
+        val incoming = pm.getPackageArchiveInfo(apk.path, flags) ?: error(context.getString(R.string.upd_bad_apk))
+        if (incoming.packageName != context.packageName) error(context.getString(R.string.upd_not_hamstr))
         val installed = pm.getPackageInfo(context.packageName, flags)
         if (signers(incoming) != signers(installed)) {
             apk.delete()
-            error("This copy of Hamstr is signed with a different key (a debug build?). Install the release from GitHub once, after that it updates itself.")
+            error(context.getString(R.string.upd_other_key))
         }
     }
 
@@ -237,10 +237,10 @@ object Updater {
             PackageInstaller.STATUS_SUCCESS -> _state.value = UpdateState.Idle
             else -> {
                 val why = when (status) {
-                    PackageInstaller.STATUS_FAILURE_ABORTED -> "Install cancelled"
-                    PackageInstaller.STATUS_FAILURE_STORAGE -> "Not enough storage"
-                    PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "Android refused the update"
-                    else -> intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Install failed"
+                    PackageInstaller.STATUS_FAILURE_ABORTED -> context.getString(R.string.upd_cancelled)
+                    PackageInstaller.STATUS_FAILURE_STORAGE -> context.getString(R.string.upd_no_storage)
+                    PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> context.getString(R.string.upd_refused)
+                    else -> intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: context.getString(R.string.upd_failed)
                 }
                 _state.value = UpdateState.Failed(why, release)
             }
@@ -256,8 +256,8 @@ object Updater {
         )
         val n = NotificationCompat.Builder(context, CH_UPDATES)
             .setSmallIcon(R.drawable.ic_stat_hamstr)
-            .setContentTitle("Hamstr ${BuildConfig.VERSION_NAME} is installed")
-            .setContentText("Tap to open")
+            .setContentTitle(context.getString(R.string.upd_installed, BuildConfig.VERSION_NAME))
+            .setContentText(context.getString(R.string.upd_tap_open))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

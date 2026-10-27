@@ -12,7 +12,16 @@ data class Settings(
     val container: String = "mp4",
     val audioFormat: String = "opus",
     val subtitles: Boolean = false,
+    // Subtitle language codes; empty means the phone's language plus English.
+    val subLangs: List<String> = emptyList(),
     val parallel: Int = 2,
+    val wifiOnly: Boolean = false,
+    // "Title.mp4" instead of yt-dlp's "Title [id].mp4".
+    val cleanNames: Boolean = true,
+    // Hamstr's own switch; Android's permission is a separate gate.
+    val notifications: Boolean = true,
+    val askedNotifications: Boolean = false,
+    val librarySort: LibrarySort = LibrarySort.Newest,
     val quickStash: Boolean = false, // share -> download immediately, no sheet
     val playlists: Boolean = false,
     val autoUpdate: Boolean = true,
@@ -38,7 +47,14 @@ data class Settings(
     val haptics: Boolean = true,
 ) {
     fun defaultChoice() = Choice(mode, height, container, audioFormat, subtitles)
+
+    /** The languages subtitles are fetched in, e.g. [de, en]. */
+    fun subtitleLanguages(): List<String> = subLangs.ifEmpty {
+        listOf(java.util.Locale.getDefault().language.ifEmpty { "en" }, "en").distinct()
+    }
 }
+
+enum class LibrarySort { Newest, Oldest, Name, Size }
 
 object Prefs {
     private lateinit var sp: SharedPreferences
@@ -57,7 +73,13 @@ object Prefs {
             container = sp.getString("container", "mp4")!!,
             audioFormat = sp.getString("audioFormat", "opus")!!,
             subtitles = sp.getBoolean("subtitles", false),
+            subLangs = sp.getString("subLangs", "")!!.split(',').filter { it.isNotBlank() },
             parallel = sp.getInt("parallel", 2),
+            wifiOnly = sp.getBoolean("wifiOnly", false),
+            cleanNames = sp.getBoolean("cleanNames", true),
+            notifications = sp.getBoolean("notifications", true),
+            askedNotifications = sp.getBoolean("askedNotifications", false),
+            librarySort = runCatching { LibrarySort.valueOf(sp.getString("librarySort", null)!!) }.getOrDefault(LibrarySort.Newest),
             quickStash = sp.getBoolean("quickStash", false),
             playlists = sp.getBoolean("playlists", false),
             autoUpdate = sp.getBoolean("autoUpdate", true),
@@ -90,7 +112,13 @@ object Prefs {
             .putString("container", s.container)
             .putString("audioFormat", s.audioFormat)
             .putBoolean("subtitles", s.subtitles)
+            .putString("subLangs", s.subLangs.joinToString(","))
             .putInt("parallel", s.parallel)
+            .putBoolean("wifiOnly", s.wifiOnly)
+            .putBoolean("cleanNames", s.cleanNames)
+            .putBoolean("notifications", s.notifications)
+            .putBoolean("askedNotifications", s.askedNotifications)
+            .putString("librarySort", s.librarySort.name)
             .putBoolean("quickStash", s.quickStash)
             .putBoolean("playlists", s.playlists)
             .putBoolean("autoUpdate", s.autoUpdate)

@@ -1,5 +1,8 @@
 package app.hamstr.ui.components
 
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+
 import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -281,5 +284,6 @@ fun DecodeText(
             withInfiniteAnimationFrameMillis { }
         }
     }
-    Txt(shown, style = style, color = color, modifier = modifier, maxLines = maxLines)
+    // Screen readers get the real title, not the noise on its way there.
+    Txt(shown, style = style, color = color, modifier = modifier.clearAndSetSemantics { contentDescription = text }, maxLines = maxLines)
 }
