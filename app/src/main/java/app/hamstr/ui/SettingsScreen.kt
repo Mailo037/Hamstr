@@ -25,7 +25,6 @@ import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -51,9 +50,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -109,10 +105,11 @@ import app.hamstr.ui.theme.Hamstr
 import app.hamstr.update.UpdateState
 import app.hamstr.update.Updater
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
-import androidx.compose.ui.graphics.lerp
-import app.hamstr.ui.components.animateSelection
+import app.hamstr.ui.components.Chip
+import app.hamstr.ui.components.ChipRow
+import app.hamstr.ui.components.Chips
+import app.hamstr.ui.components.Specs
 
 /** Settings are split into categories, each on its own page (Glyph: never one long page). */
 private enum class Page(val title: Int, val icon: Int) {
@@ -133,11 +130,11 @@ fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit) {
         targetState = page,
         transitionSpec = {
             if (targetState != null) {
-                (slideInHorizontally(spring(dampingRatio = 0.86f, stiffness = 420f)) { it / 3 } + fadeIn(tween(200))) togetherWith
-                    (slideOutHorizontally(tween(200)) { -it / 8 } + fadeOut(tween(140)))
+                (slideInHorizontally(Specs.enter()) { it / 3 } + fadeIn(tween(200))) togetherWith
+                    (slideOutHorizontally(Specs.leave()) { -it / 8 } + fadeOut(tween(140)))
             } else {
-                (slideInHorizontally(spring(dampingRatio = 0.86f, stiffness = 420f)) { -it / 8 } + fadeIn(tween(200))) togetherWith
-                    (slideOutHorizontally(tween(200)) { it / 3 } + fadeOut(tween(140)))
+                (slideInHorizontally(Specs.enter()) { -it / 8 } + fadeIn(tween(200))) togetherWith
+                    (slideOutHorizontally(Specs.leave()) { it / 3 } + fadeOut(tween(140)))
             }
         },
         label = "settingsPage",
@@ -258,7 +255,7 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
                         if (offset.value > width * 0.3f) {
                             haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
                             onBack()
-                        } else scope.launch { offset.animateTo(0f, spring(dampingRatio = 0.6f, stiffness = 500f)) }
+                        } else scope.launch { offset.animateTo(0f, Specs.settle()) }
                     },
                     onDragCancel = { scope.launch { offset.animateTo(0f) } },
                 )
@@ -368,6 +365,44 @@ private fun DownloadsPage() {
         FxRow(stringResource(R.string.set_instant), stringResource(R.string.set_instant_hint), s.quickStash) { v -> Prefs.edit { it.copy(quickStash = v) } }
         Divider()
         FxRow(stringResource(R.string.set_playlists), stringResource(R.string.set_playlists_hint), s.playlists) { v -> Prefs.edit { it.copy(playlists = v) } }
+        Divider()
+        OpenWhenDoneRow()
+    }
+}
+
+/**
+ * Android only lets an app come forward on its own with "Display over other apps", so
+ * turning this on asks for that; without it the finished notification stays the way in.
+ */
+@Composable
+private fun OpenWhenDoneRow() {
+    val context = LocalContext.current
+    val s by Prefs.settings.collectAsState()
+    fun allowed() = android.provider.Settings.canDrawOverlays(context)
+    var system by remember { mutableStateOf(allowed()) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) system = allowed() }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    val askSystem = {
+        runCatching {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:" + context.packageName))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+    val hint = stringResource(if (s.openWhenDone && !system) R.string.set_open_done_needs else R.string.set_open_done_hint)
+    SettingRow(
+        stringResource(R.string.set_open_done), subtitle = hint,
+        onClick = { if (s.openWhenDone && !system) askSystem() else Prefs.edit { it.copy(openWhenDone = !s.openWhenDone) } },
+    ) {
+        HSwitch(s.openWhenDone, { v ->
+            Prefs.edit { it.copy(openWhenDone = v) }
+            if (v && !system) askSystem()
+        })
     }
 }
 
@@ -378,7 +413,12 @@ private fun QueuePage() {
         Block(stringResource(R.string.set_parallel)) {
             Segmented(listOf(1, 2, 3), s.parallel, { it.toString() }, { n -> Prefs.edit { it.copy(parallel = n) } })
         }
-        SettingRow(stringResource(R.string.set_save_location), subtitle = Engine.outputDir.absolutePath.replace("/storage/emulated/0", stringResource(R.string.set_internal_storage)))
+        val context = LocalContext.current
+        val where = Engine.outputDir.absolutePath.replace("/storage/emulated/0", stringResource(R.string.set_internal_storage))
+        SettingRow(
+            stringResource(R.string.set_save_location), subtitle = where + "\n" + stringResource(R.string.set_open_folder),
+            onClick = { openFolder(context) },
+        ) { Icon(R.drawable.ic_folder_open, tint = Hamstr.colors.muted, size = 20.dp) }
         Divider()
         FxRow(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_hint), s.wifiOnly) { v -> Prefs.edit { it.copy(wifiOnly = v) } }
     }
@@ -446,28 +486,17 @@ private fun NotificationsRow() {
 /** Which languages subtitles come in; nothing picked means the phone's language and English. */
 @Composable
 private fun SubtitleLanguages(s: Settings) {
-    val c = Hamstr.colors
     val picked = s.subtitleLanguages()
     val system = java.util.Locale.getDefault().language
     val options = (listOf(system) + SUBTITLE_LANGUAGES).distinct()
-    val scroll = rememberScrollState()
-    Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    ChipRow {
         options.forEach { code ->
             val on = code in picked
-            val p = animateSelection(on)
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(lerp(c.surface, c.accent, p))
-                    .clickable {
-                        val next = if (on) picked - code else picked + code
-                        // At least one stays picked.
-                        if (next.isNotEmpty()) Prefs.edit { it.copy(subLangs = next) }
-                    }
-                    .heightIn(min = 40.dp)
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.Center,
-            ) { Txt(languageName(code), style = Hamstr.type.bodyMedium, color = lerp(c.ink, c.onAccent, p)) }
+            Chip(languageName(code), on, {
+                val next = if (on) picked - code else picked + code
+                // At least one stays picked.
+                if (next.isNotEmpty()) Prefs.edit { it.copy(subLangs = next) }
+            })
         }
     }
 }
@@ -675,6 +704,7 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry(R.string.set_clean_names, Page.Downloads, "file name names id brackets dateiname"),
     SettingEntry(R.string.set_instant, Page.Downloads, "quick instant share sheet direct"),
     SettingEntry(R.string.set_playlists, Page.Downloads, "playlist album"),
+    SettingEntry(R.string.set_open_done, Page.Downloads, "open play automatic finished done öffnen automatisch fertig"),
     SettingEntry(R.string.set_parallel, Page.Queue, "parallel concurrent queue at once"),
     SettingEntry(R.string.set_save_location, Page.Queue, "folder storage path speicher ordner"),
     SettingEntry(R.string.set_wifi_only, Page.Queue, "wifi wi-fi wlan mobile data metered cellular"),
@@ -697,4 +727,28 @@ private fun searchSettings(context: android.content.Context, query: String): Lis
         .filter { (e, title) -> q.split(' ').all { w -> title.lowercase().contains(w) || e.words.contains(w) || context.getString(e.page.title).lowercase().contains(w) } }
         .sortedByDescending { (_, title) -> title.lowercase().startsWith(q) }
         .map { (e, title) -> Found(title, e.page) }
+}
+
+/**
+ * Download/Hamstr in the system's Files app. Android has no single "show this folder" intent:
+ * the Files app opens a document folder, and otherwise the Downloads list is the closest.
+ */
+private fun openFolder(context: android.content.Context) {
+    Engine.outputDir.mkdirs()
+    val relative = Engine.outputDir.absolutePath.removePrefix(android.os.Environment.getExternalStorageDirectory().absolutePath).trimStart('/')
+    val folder = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:$relative")
+    val tries = listOf(
+        Intent(Intent.ACTION_VIEW).setDataAndType(folder, android.provider.DocumentsContract.Document.MIME_TYPE_DIR)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+        Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS),
+    )
+    for (intent in tries) {
+        try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        } catch (_: android.content.ActivityNotFoundException) {
+        } catch (_: SecurityException) {
+        }
+    }
+    android.widget.Toast.makeText(context, R.string.set_open_folder_failed, android.widget.Toast.LENGTH_SHORT).show()
 }

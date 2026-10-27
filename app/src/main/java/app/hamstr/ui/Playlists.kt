@@ -44,6 +44,7 @@ import app.hamstr.data.DownloadTask
 import app.hamstr.data.Status
 import app.hamstr.ui.components.AsciiImage
 import app.hamstr.ui.components.Badge
+import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.edgeFade
 import app.hamstr.ui.theme.Hamstr
@@ -86,6 +87,15 @@ fun shelves(done: List<DownloadTask>): List<Shelf> {
 @Composable
 fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier.aspectRatio(16f / 9f)) {
+        if (items.isEmpty()) {
+            // A new list: an empty card with the add mark, so it still reads as a playlist.
+            Box(
+                Modifier.align(Alignment.Center).width(maxWidth * 0.53f).aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(10.dp)).border(2.dp, Hamstr.colors.line, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(R.drawable.ic_playlist_add, tint = Hamstr.colors.ghost, size = 22.dp) }
+            return@BoxWithConstraints
+        }
         val w = maxWidth * 0.5f
         // Card centres as fractions of the tile, measured from its middle.
         fun at(x: Float, y: Float) = Modifier.align(Alignment.Center).offset(x = maxWidth * (x - 0.5f), y = maxHeight * (y - 0.5f))
@@ -120,70 +130,3 @@ private fun FanThumb(t: DownloadTask, width: Dp, modifier: Modifier, more: Int =
     }
 }
 
-/** Everything in a group, in the order it arrived. */
-@Composable
-fun GroupSheet(groupId: String, onPlay: (DownloadTask, List<DownloadTask>) -> Unit, onMenu: (DownloadTask) -> Unit) {
-    val c = Hamstr.colors
-    val tasks by DownloadStore.tasks.collectAsState()
-    val items = tasks.filter { it.group == groupId && it.status == Status.Done }.sortedBy { it.createdAt }
-    if (items.isEmpty()) return
-    val title = items.first().groupTitle ?: stringResource(R.string.lib_playlist)
-    val list = rememberLazyListState()
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
-            .background(c.overlay)
-            .clickable(enabled = false) {}
-            .navigationBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-    ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            PlaylistFan(items, Modifier.width(132.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Txt(title, style = Hamstr.type.section, maxLines = 2)
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Badge(stringResource(R.string.lib_files, items.size), accent = true)
-                    Badge(formatBytes(items.sumOf { it.sizeBytes }))
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(
-            Modifier
-                .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.55f).dp)
-                .edgeFade(list, Orientation.Vertical),
-            state = list,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            items(items, key = { it.id }) { t ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(Radii.row))
-                        .combinedClickable(onClick = { onPlay(t, items) }, onLongClick = { onMenu(t) })
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AsciiImage(rememberBitmap(t.thumbnail, 160), reveal = 1f, cell = 5.dp, modifier = Modifier.size(width = 72.dp, height = 42.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
-                        Spacer(Modifier.height(3.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Badge(formatBadge(t))
-                            Txt(
-                                listOfNotNull(formatDuration(t.durationSec).takeIf { t.durationSec > 0 }, formatBytes(t.sizeBytes).takeIf { t.sizeBytes > 0 }).joinToString(" · "),
-                                style = Hamstr.type.small, color = c.ghost,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

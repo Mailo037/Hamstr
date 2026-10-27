@@ -4,4 +4,5 @@ package app.hamstr.engine
 object MediaLinks {
     private val link = Regex("""https?://[^\s"'<>]+|(?:cinesrc|cineby):[^\s"'<>]+""")
     fun find(text: String): String? = link.find(text)?.value?.trimEnd('.', ',', ')', ']')
+    fun needsEpisodeSelection(url: String): Boolean = runCatching { CineSrcTarget.parse(url)?.needsEpisodes == true }.getOrDefault(false)
 }

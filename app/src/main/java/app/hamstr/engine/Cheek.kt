@@ -160,7 +160,7 @@ object Cheek {
      * cheek's own from [resolve]. Progress arrives through [callback] in yt-dlp's own shapes,
      * so the service treats both engines alike.
      */
-    fun execute(task: DownloadTask, info: String, format: String?, tempDir: File, outputDir: File, pathFile: File, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
+    fun execute(task: DownloadTask, info: String, format: String?, tempDir: File, outputDir: File, pathFile: File, callback: ((Float, Long, String) -> Unit)?, mediaFile: Boolean = true): YoutubeDLResponse {
         val started = System.currentTimeMillis()
         val work = File(tempDir, task.id).apply { mkdirs() }
         val infoFile = File(work, "cheek-info.json").apply { writeText(info) }
@@ -172,6 +172,7 @@ object Cheek {
             addAll(listOf("-P", outputDir.absolutePath, "--temp-dir", work.absolutePath, "-o", Engine.outputTemplate(task)))
             // Fewer connections per download when several run at once.
             addAll(listOf("-N", (12 / Prefs.settings.value.parallel.coerceIn(1, 3)).toString()))
+            if (!mediaFile) return@buildList
             addAll(listOf("--ffmpeg", ffmpeg.absolutePath))
             // Covers and tags in every file, like yt-dlp's --embed-thumbnail --embed-metadata.
             addAll(listOf("--embed-thumbnail", "--embed-metadata"))

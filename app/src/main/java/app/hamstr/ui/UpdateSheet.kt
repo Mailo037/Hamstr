@@ -3,13 +3,11 @@ package app.hamstr.ui
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
-import app.hamstr.ui.components.sheetScroll
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,8 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -36,7 +32,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.hamstr.BuildConfig
 import app.hamstr.R
-import app.hamstr.ui.components.Badge
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.HamstrMark
@@ -49,6 +44,9 @@ import app.hamstr.ui.theme.Hamstr
 import app.hamstr.update.Release
 import app.hamstr.update.UpdateState
 import app.hamstr.update.Updater
+import app.hamstr.ui.components.Sheet
+import app.hamstr.ui.components.SheetHeader
+import app.hamstr.ui.theme.Radii
 
 val UpdateState.release: Release?
     get() = when (this) {
@@ -93,40 +91,20 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
     val mark = rememberMarkState()
     LaunchedEffect(state is UpdateState.Installing) { if (state is UpdateState.Installing) mark.munch() }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(c.overlay)
-            .clickable(enabled = false) {}
-            .sheetScroll()
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-    ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
-        Spacer(Modifier.height(18.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            HamstrMark(56.dp, state = mark)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Txt(if (release != null) "Hamstr ${release.version}" else "Hamstr ${BuildConfig.VERSION_NAME}", style = Hamstr.type.section)
-                    if (release != null) Badge(stringResource(R.string.upd_new), accent = true)
-                }
-                Spacer(Modifier.height(2.dp))
-                Txt(
-                    if (release != null) stringResource(R.string.upd_you_have, BuildConfig.VERSION_NAME, formatBytes(release.size)) else stringResource(R.string.upd_latest),
-                    style = Hamstr.type.small, color = c.ghost,
-                )
-            }
-        }
+    // Header, status and buttons stay put; the release notes take the room that is left.
+    Sheet(scroll = false) {
+        SheetHeader(
+            if (release != null) "Hamstr ${release.version}" else "Hamstr ${BuildConfig.VERSION_NAME}",
+            subtitle = if (release != null) stringResource(R.string.upd_you_have, BuildConfig.VERSION_NAME, formatBytes(release.size)) else stringResource(R.string.upd_latest),
+            badge = if (release != null) stringResource(R.string.upd_new) else null,
+            leading = { HamstrMark(56.dp, state = mark) },
+        )
         if (release != null && release.notes.isNotBlank()) {
             Spacer(Modifier.height(16.dp))
             val scroll = rememberScrollState()
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surface)) {
+            Box(Modifier.weight(1f, fill = false).fillMaxWidth().clip(RoundedCornerShape(Radii.row)).background(c.surface)) {
                 Box(
                     Modifier
-                        .heightIn(max = 240.dp)
                         .edgeFade(scroll, Orientation.Vertical, length = 22.dp)
                         .verticalScroll(scroll)
                         .padding(14.dp),
@@ -150,7 +128,7 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
             }
         }
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (release == null) {
                 HButton(stringResource(R.string.upd_close), onClose, Modifier.weight(1f))
             } else {

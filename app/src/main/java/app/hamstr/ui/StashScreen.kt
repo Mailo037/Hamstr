@@ -12,19 +12,12 @@ import app.hamstr.ui.components.edgeFade
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -72,7 +65,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
@@ -104,6 +96,9 @@ import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.LocalFx
 import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.delay
+import app.hamstr.ui.components.PictureLabel
+import app.hamstr.ui.components.Specs
+import app.hamstr.ui.components.iconSwap
 
 /** How many finished downloads the stash lists; the library has all of them. */
 private const val SHELF = 60
@@ -133,6 +128,9 @@ fun StashScreen(
     val moods = LocalFx.current.moods
     val missing by DownloadFiles.missing.collectAsState()
     val positions by Positions.all.collectAsState()
+    // Groups whose waiting downloads are shown too, not just the ones that are moving.
+    var openGroups by remember { mutableStateOf(emptySet<String>()) }
+    val rows = remember(tasks, openGroups) { activeRows(tasks, active, openGroups) }
 
     // Something finished: the hamster stuffs its cheeks and chews.
     var lastDone by remember { mutableIntStateOf(done.size) }
@@ -179,7 +177,7 @@ fun StashScreen(
                     add()
                 }
                 armed = false
-                animate(pull, 0f, animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f)) { v, _ -> pull = v }
+                animate(pull, 0f, animationSpec = Specs.settle()) { v, _ -> pull = v }
                 pull = 0f
                 return available
             }
@@ -246,10 +244,18 @@ fun StashScreen(
                         modifier = Modifier.padding(horizontal = 12.dp).animateItem(),
                     )
                 }
-                itemsIndexed(active, key = { _, t -> t.id }) { i, t ->
-                    GroupedItem(i, active.size) {
-                        SwipeRow(start = primarySwipe(t), end = cancelSwipe(t, onHide)) {
-                            TaskRow(t, highlighted = t.status == Status.Running, onClick = { onMenu(t) }, onLongClick = { onMenu(t) })
+                itemsIndexed(rows, key = { _, r -> r.key }) { i, r ->
+                    GroupedItem(i, rows.size) {
+                        when (r) {
+                            is ActiveRow.Header -> GroupRow(r.title, r.members, expanded = r.group in openGroups) {
+                                openGroups = if (r.group in openGroups) openGroups - r.group else openGroups + r.group
+                            }
+                            is ActiveRow.More -> MoreRow(r.count) { openGroups = openGroups + r.group }
+                            is ActiveRow.Item -> Box(Modifier.padding(start = if (r.nested) 12.dp else 0.dp)) {
+                                SwipeRow(start = primarySwipe(r.task), end = cancelSwipe(r.task, onHide)) {
+                                    TaskRow(r.task, highlighted = r.task.status == Status.Running, onClick = { onMenu(r.task) }, onLongClick = { onMenu(r.task) })
+                                }
+                            }
                         }
                     }
                 }
@@ -285,6 +291,105 @@ fun StashScreen(
     }
 }
 
+/** What the Downloading section lists: single downloads, and playlists as a header over their videos. */
+private sealed interface ActiveRow {
+    val key: String
+
+    data class Item(val task: DownloadTask, val nested: Boolean) : ActiveRow { override val key get() = task.id }
+    data class Header(val group: String, val title: String, val members: List<DownloadTask>) : ActiveRow { override val key get() = "g:$group" }
+    data class More(val group: String, val count: Int) : ActiveRow { override val key get() = "m:$group" }
+}
+
+/**
+ * Downloads that arrived together sit under one header with their overall progress. A closed
+ * group shows only what moves, failed or was paused; the queued rest is one line until opened.
+ */
+private fun activeRows(tasks: List<DownloadTask>, active: List<DownloadTask>, open: Set<String>): List<ActiveRow> {
+    val groups = tasks.filter { it.group != null && it.status != Status.Canceled }.groupBy { it.group!! }.filterValues { it.size > 1 }
+    val seen = HashSet<String>()
+    val out = ArrayList<ActiveRow>()
+    for (t in active) {
+        val g = t.group
+        val members = g?.let(groups::get)
+        if (g == null || members == null) {
+            out += ActiveRow.Item(t, nested = false)
+            continue
+        }
+        if (!seen.add(g)) continue
+        out += ActiveRow.Header(g, t.groupTitle ?: t.title, members)
+        // In playlist order, the order they also start in.
+        val waiting = members.filter { it.status != Status.Done }.sortedBy { it.createdAt }
+        val shown = if (g in open) waiting else waiting.filter { it.status != Status.Queued || it.stage != null }
+        shown.forEach { out += ActiveRow.Item(it, nested = true) }
+        if (shown.size < waiting.size) out += ActiveRow.More(g, waiting.size - shown.size)
+    }
+    return out
+}
+
+/** A playlist on its way: how many are in, one bar for all of it, and pause or resume for the whole group. */
+@Composable
+private fun GroupRow(title: String, members: List<DownloadTask>, expanded: Boolean, onToggle: () -> Unit) {
+    val c = Hamstr.colors
+    val context = LocalContext.current
+    val done = members.count { it.status == Status.Done }
+    val failed = members.count { it.status == Status.Failed }
+    val moving = members.filter { it.status.active }
+    val paused = members.filter { it.status == Status.Paused || it.status == Status.Failed }
+    val overall = (members.sumOf { if (it.status == Status.Done) 1.0 else it.progress.toDouble() } / members.size).toFloat()
+    val progress by animateFloatAsState(overall, Specs.glide(), label = "groupProgress")
+    val turn by animateFloatAsState(if (expanded) 180f else 0f, Specs.blend(), label = "chevron")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Radii.row))
+            .clickable(onClick = onToggle)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.surface),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Txt("$done", style = Hamstr.type.mono, color = c.accent)
+                Txt("/${members.size}", style = Hamstr.type.small, color = c.ghost)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Txt(title, style = Hamstr.type.bodyMedium, maxLines = 1)
+            Spacer(Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Badge(pluralStringResource(R.plurals.share_list_videos, members.size, members.size))
+                Txt(stringResource(R.string.stash_group_count, done, members.size), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
+                if (failed > 0) Txt(stringResource(R.string.stash_group_failed, failed), style = Hamstr.type.small, color = c.red, maxLines = 1)
+            }
+            Spacer(Modifier.height(7.dp))
+            ProgressLine(progress, color = if (moving.isEmpty()) c.ghost else c.accent)
+        }
+        Spacer(Modifier.width(8.dp))
+        Txt("${(overall * 100).toInt()}%", style = Hamstr.type.mono, modifier = Modifier.padding(end = 2.dp))
+        if (moving.isNotEmpty()) {
+            IconButton(R.drawable.ic_pause, stringResource(R.string.stash_group_pause), {
+                moving.forEach { DownloadService.send(context, DownloadService.ACTION_PAUSE, it.id) }
+            }, size = 34.dp)
+        } else if (paused.isNotEmpty()) {
+            IconButton(R.drawable.ic_play_arrow, stringResource(R.string.stash_group_resume), {
+                paused.forEach { DownloadService.send(context, DownloadService.ACTION_RESUME, it.id) }
+            }, size = 34.dp, tint = c.accent)
+        }
+        Icon(R.drawable.ic_expand_more, tint = c.muted, size = 20.dp, modifier = Modifier.graphicsLayer { rotationZ = turn })
+    }
+}
+
+@Composable
+private fun MoreRow(count: Int, onClick: () -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.row)).clickable(onClick = onClick).heightIn(min = 40.dp).padding(start = 76.dp, end = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) { Txt(pluralStringResource(R.plurals.stash_group_waiting, count, count), style = Hamstr.type.small, color = Hamstr.colors.muted) }
+}
+
 /** One row of a rounded group, so each row can be its own animated lazy item. */
 @Composable
 private fun LazyItemScope.GroupedItem(index: Int, count: Int, content: @Composable () -> Unit) {
@@ -293,9 +398,9 @@ private fun LazyItemScope.GroupedItem(index: Int, count: Int, content: @Composab
     Box(
         Modifier
             .animateItem(
-                fadeInSpec = tween(320),
-                placementSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1)),
-                fadeOutSpec = tween(160),
+                fadeInSpec = Specs.listIn(),
+                placementSpec = Specs.place,
+                fadeOutSpec = Specs.listOut(),
             )
             .padding(horizontal = 12.dp)
             .clip(RoundedCornerShape(topStart = if (first) Radii.panel else 0.dp, topEnd = if (first) Radii.panel else 0.dp, bottomStart = if (last) Radii.panel else 0.dp, bottomEnd = if (last) Radii.panel else 0.dp))
@@ -353,7 +458,7 @@ fun TaskRow(
     val context = LocalContext.current
     val bitmap = rememberBitmap(t.thumbnail, 160)
     // Progress glides instead of jumping between yt-dlp's updates.
-    val progress by animateFloatAsState(t.progress, spring(stiffness = Spring.StiffnessLow), label = "progress")
+    val progress by animateFloatAsState(t.progress, Specs.glide(), label = "progress")
     val stage = rememberStageText(t)
     Row(
         Modifier
@@ -404,10 +509,7 @@ fun TaskRow(
         // State changes swap the icon with Slate's 220 ms scale crossfade.
         AnimatedContent(
             targetState = t.status,
-            transitionSpec = {
-                (scaleIn(spring(dampingRatio = 0.5f, stiffness = 600f), initialScale = 0.4f) + fadeIn(tween(160))) togetherWith
-                    (scaleOut(tween(150), targetScale = 0.4f) + fadeOut(tween(120)))
-            },
+            transitionSpec = { iconSwap() },
             label = "statusIcon",
         ) { status ->
             when (status) {
@@ -445,8 +547,9 @@ private fun StageLine(progress: Float, t: DownloadTask) {
 /** The check pops in with a little overshoot. */
 @Composable
 private fun DoneCheck() {
-    val pop = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.38f, stiffness = 520f)) }
+    val reduce = LocalReduceMotion.current
+    val pop = remember { Animatable(if (reduce) 1f else 0f) }
+    if (!reduce) LaunchedEffect(Unit) { pop.animateTo(1f, Specs.pop()) }
     Box(Modifier.size(34.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value; rotationZ = (1f - pop.value) * -40f }, contentAlignment = Alignment.Center) {
         Icon(R.drawable.ic_check, tint = Hamstr.colors.green, size = 20.dp)
     }
@@ -456,9 +559,9 @@ private fun DoneCheck() {
 private fun EmptyState() {
     val c = Hamstr.colors
     val mark = rememberMarkState()
-    // A slow breath while it waits for food.
+    // A slow breath while it waits for food (one of its moods, so off under reduced motion).
     val breath = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
+    if (LocalFx.current.moods) LaunchedEffect(Unit) {
         while (true) {
             breath.animateTo(1f, tween(1800))
             breath.animateTo(0f, tween(1800))
@@ -525,7 +628,7 @@ fun DownloadPreview(t: DownloadTask, modifier: Modifier = Modifier) {
     val c = Hamstr.colors
     val context = LocalContext.current
     val bitmap = rememberBitmap(t.thumbnail, 480)
-    val progress by animateFloatAsState(t.progress, spring(stiffness = Spring.StiffnessLow), label = "previewProgress")
+    val progress by animateFloatAsState(t.progress, Specs.glide(), label = "previewProgress")
     val moving = t.status == Status.Running || t.status == Status.Queued
     val stage = rememberStageText(t)
     Box(modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp))) {
@@ -543,7 +646,7 @@ fun DownloadPreview(t: DownloadTask, modifier: Modifier = Modifier) {
             modifier = Modifier.matchParentSize(),
         )
         Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.78f))))
-        Badge(
+        PictureLabel(
             stringResource(
                 when (t.status) {
                     Status.Queued -> R.string.status_queued
@@ -553,13 +656,9 @@ fun DownloadPreview(t: DownloadTask, modifier: Modifier = Modifier) {
                     else -> R.string.status_canceled
                 },
             ),
+            Modifier.align(Alignment.TopEnd).padding(10.dp),
             accent = t.status == Status.Running,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            badge = true,
         )
         Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 16.dp, vertical = 12.dp)) {
             Txt(

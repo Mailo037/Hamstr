@@ -67,7 +67,7 @@ fun DragPillRow(
         var raw by remember { mutableFloatStateOf(0f) }
         var lastSlot by remember { mutableIntStateOf(selected) }
         val stretch by rememberVelocityStretch({ x.value }, sensitivity = 0.00011f, max = 0.3f)
-        val arrive = spring<Float>(dampingRatio = 0.62f, stiffness = 520f)
+        val arrive = Specs.arrive<Float>()
 
         LaunchedEffect(selected, slot) {
             if (!dragging) if (reduce) x.snapTo(selected * slot) else x.animateTo(selected * slot, arrive)

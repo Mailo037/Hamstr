@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,13 +14,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -32,18 +28,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.ui.components.Badge
-import app.hamstr.ui.components.sheetScroll
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.HamstrMark
 import app.hamstr.ui.components.Icon
-import app.hamstr.ui.components.IconButton
+import app.hamstr.ui.components.Sheet
+import app.hamstr.ui.components.SheetField
+import app.hamstr.ui.components.SheetHeader
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.pressable
 import app.hamstr.ui.theme.Hamstr
@@ -56,68 +54,28 @@ import app.hamstr.ui.theme.Radii
 @Composable
 fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Unit) {
     val c = Hamstr.colors
-    var text by remember { mutableStateOf("") }
-    val link = app.hamstr.engine.MediaLinks.find(text)
+    var text by remember { mutableStateOf(TextFieldValue("")) }
+    val link = app.hamstr.engine.MediaLinks.find(text.text)
     val submit = { if (link != null) onLink(link) }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
-            .background(c.overlay)
-            .clickable(enabled = false) {}
-            .sheetScroll()
-            .navigationBarsPadding()
-            .imePadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
+    Sheet {
+        SheetHeader(stringResource(R.string.add_title), leading = { HamstrMark(36.dp) })
         Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            HamstrMark(36.dp)
-            Spacer(Modifier.width(12.dp))
-            Txt(stringResource(R.string.add_title), style = Hamstr.type.section)
-        }
-        Spacer(Modifier.height(16.dp))
-
-        BasicTextField(
-            value = text,
-            onValueChange = { text = it },
-            singleLine = true,
-            textStyle = Hamstr.type.mono.copy(color = c.ink),
-            cursorBrush = SolidColor(c.accent),
+        SheetField(
+            text, { text = it }, stringResource(R.string.add_hint), R.drawable.ic_link,
+            mono = true,
+            lit = link != null,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),
             keyboardActions = KeyboardActions(onGo = { submit() }),
-            decorationBox = { field ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(Radii.control))
-                        .background(c.surface)
-                        .padding(start = 14.dp, end = 6.dp)
-                        .height(52.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(R.drawable.ic_link, tint = if (link != null) c.accent else c.ghost, size = 18.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Box(Modifier.weight(1f)) {
-                        if (text.isEmpty()) Txt(stringResource(R.string.add_hint), style = Hamstr.type.mono, color = c.ghost, maxLines = 1)
-                        field()
-                    }
-                    if (text.isNotEmpty()) {
-                        IconButton(R.drawable.ic_close, stringResource(R.string.clear), { text = "" }, background = androidx.compose.ui.graphics.Color.Transparent, size = 36.dp)
-                    }
-                }
-            },
         )
 
-        AnimatedVisibility(clipboardLink != null && text.isEmpty(), enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+        AnimatedVisibility(clipboardLink != null && text.text.isEmpty(), enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             Row(
                 Modifier
                     .padding(top = 8.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(Radii.control))
-                    .pressable({ text = clipboardLink.orEmpty() })
+                    .pressable({ clipboardLink?.let { text = TextFieldValue(it, TextRange(it.length)) } })
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -157,6 +115,5 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
             }
             Icon(R.drawable.ic_chevron_right, tint = c.ghost, size = 20.dp)
         }
-        Spacer(Modifier.height(8.dp))
     }
 }

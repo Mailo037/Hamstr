@@ -8,16 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +39,8 @@ import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import app.hamstr.ui.components.Sheet
+import app.hamstr.ui.components.SheetHeader
 
 /** A button at the end of an info line that acts on it, such as renaming from the title. */
 class InfoAction(@DrawableRes val icon: Int, @StringRes val label: Int, val onClick: () -> Unit)
@@ -54,7 +52,6 @@ class InfoAction(@DrawableRes val icon: Int, @StringRes val label: Int, val onCl
  */
 @Composable
 fun InfoSheet(task: DownloadTask, onCopy: (String) -> Unit, actions: Map<Int, InfoAction> = emptyMap()) {
-    val c = Hamstr.colors
     val context = LocalContext.current
     val file = task.filePath?.let(::File)?.takeIf { it.isFile }
     var fromFile by remember(task.id) { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
@@ -76,28 +73,17 @@ fun InfoSheet(task: DownloadTask, onCopy: (String) -> Unit, actions: Map<Int, In
         task.filePath?.let { R.string.info_file to it },
     )
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
-            .background(c.overlay)
-            .clickable(enabled = false) {}
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
-        Spacer(Modifier.height(16.dp))
-        Txt(stringResource(R.string.info_title), style = Hamstr.type.section, modifier = Modifier.padding(horizontal = 4.dp))
-        Txt(stringResource(R.string.info_tap_copy), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+    // The title stays put; the lines take the room that is left and scroll under it.
+    Sheet(scroll = false) {
+        SheetHeader(stringResource(R.string.info_title), subtitle = stringResource(R.string.info_tap_copy))
         Spacer(Modifier.height(12.dp))
         val scroll = rememberScrollState()
         Column(
-            Modifier.heightIn(max = 520.dp).edgeFade(scroll, Orientation.Vertical, length = 22.dp).verticalScroll(scroll),
+            Modifier.weight(1f, fill = false).edgeFade(scroll, Orientation.Vertical, length = 22.dp).verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             (saved + fromFile).forEach { (label, value) -> InfoRow(label, value, actions[label]) { onCopy(value) } }
         }
-        Spacer(Modifier.height(8.dp))
     }
 }
 

@@ -60,6 +60,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 
 @Composable
 fun Txt(
@@ -100,23 +102,28 @@ fun Icon(@DrawableRes res: Int, tint: Color = Hamstr.colors.ink, size: Dp = 20.d
     )
 }
 
-/** Press feedback from Slate: settle by translateY(1px) scale(.97). */
+/**
+ * Press feedback from Slate: settle by translateY(1px) scale(.97). For things that stand on
+ * their own (buttons, tiles, chips, cards); rows inside a panel use `clickable`, which dims.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.pressable(
     onClick: () -> Unit,
     label: String? = null,
     enabled: Boolean = true,
     pressedScale: Float = 0.97f,
+    onLongClick: (() -> Unit)? = null,
 ): Modifier {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) pressedScale else 1f, spring(dampingRatio = 0.55f, stiffness = 900f), label = "press")
+    val scale by animateFloatAsState(if (pressed) pressedScale else 1f, Specs.press(), label = "press")
     val dy by animateDpAsState(if (pressed) 1.dp else 0.dp, tween(90), label = "pressY")
     return this
         .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
         .offset(y = dy)
         .scale(scale)
-        .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+        .combinedClickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onLongClick = onLongClick, onClick = onClick)
 }
 
 enum class ButtonKind { Primary, Neutral, Ghost }
@@ -177,6 +184,24 @@ fun IconButton(
             contentAlignment = Alignment.Center,
         ) { Icon(icon, tint = tint, size = 20.dp) }
     }
+}
+
+/**
+ * A label on a picture (quality, length, state): mono on a dark pill, readable over any
+ * frame. [badge] puts it in brackets like [Badge].
+ */
+@Composable
+fun PictureLabel(text: String, modifier: Modifier = Modifier, accent: Boolean = false, badge: Boolean = false) {
+    Txt(
+        if (badge) "[ ${text.uppercase()} ]" else text,
+        style = Hamstr.type.badge,
+        color = if (accent) Hamstr.colors.accent else Color.White,
+        maxLines = 1,
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color.Black.copy(alpha = 0.65f))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 /** Flat 3dp progress line, accent fill. */

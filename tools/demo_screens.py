@@ -78,8 +78,9 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "build/screens"))
     ap.add_argument("--share", default="https://www.youtube.com/watch?v=hmstrDemo08", help="link the seed resolves for the share sheet")
     ap.add_argument("--play", default="Night Train Through the Alps", help="stashed title to open in the player and file menu")
+    ap.add_argument("--playlist", default="Slow evenings", help="playlist from the seed to open")
     a = ap.parse_args()
-    out = pathlib.Path(a.out)
+    out = pathlib.Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     d = Device(a.serial)
 
@@ -128,6 +129,11 @@ def main():
 
         d.tap("Library")
         d.shot(out / "library.png", settle=4)
+        d.tap(a.playlist)
+        d.find("Shuffle")
+        d.shot(out / "playlist.png")
+        d.sh("input", "keyevent", "BACK")
+        time.sleep(1)
         d.tap("Settings")
         d.shot(out / "settings.png", settle=2.5)
         d.tap("Stash")

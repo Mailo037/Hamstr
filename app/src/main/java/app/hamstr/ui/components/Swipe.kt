@@ -2,8 +2,6 @@ package app.hamstr.ui.components
 
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -69,7 +67,7 @@ fun SwipeRow(
     var armed by remember { mutableStateOf(false) }
     val stretch by rememberVelocityStretch({ offset.value }, sensitivity = 0.00006f, max = 0.12f)
     val pop = remember { Animatable(0f) }
-    val back = spring<Float>(dampingRatio = 0.48f, stiffness = 420f)
+    val back = Specs.settle<Float>()
 
     Box(modifier.onSizeChanged { width = it.width }) {
         val o = offset.value
@@ -132,7 +130,7 @@ fun SwipeRow(
                             if (nowArmed != armed) {
                                 armed = nowArmed
                                 haptics.performHapticFeedback(if (nowArmed) HapticFeedbackType.GestureThresholdActivate else HapticFeedbackType.SegmentTick)
-                                if (nowArmed) scope.launch { pop.snapTo(1f); pop.animateTo(0f, spring(0.4f, 500f)) }
+                                if (nowArmed) scope.launch { pop.snapTo(1f); pop.animateTo(0f, Specs.pop()) }
                             }
                         },
                         onDragEnd = {
@@ -142,7 +140,7 @@ fun SwipeRow(
                             if (fire && act != null) {
                                 haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                                 if (act.removes) scope.launch {
-                                    offset.animateTo(sign(offset.value) * width * 1.15f, tween(180))
+                                    offset.animateTo(sign(offset.value) * width * 1.15f, Specs.leave(180))
                                     act.onTrigger()
                                     offset.snapTo(0f)
                                 } else {

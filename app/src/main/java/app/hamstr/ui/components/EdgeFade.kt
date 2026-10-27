@@ -87,7 +87,7 @@ fun Modifier.edgeFade(
  * Goes after the sheet's background, so only the content fades.
  */
 @Composable
-fun Modifier.sheetScroll(maxFraction: Float = 0.9f): Modifier {
+fun Modifier.sheetScroll(maxFraction: Float = SHEET_MAX): Modifier {
     val state = rememberScrollState()
     return heightIn(max = LocalConfiguration.current.screenHeightDp.dp * maxFraction)
         .edgeFade(state, Orientation.Vertical, length = 22.dp)

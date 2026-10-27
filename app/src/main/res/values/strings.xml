@@ -91,11 +91,33 @@
     <string name="share_subtitles">Subtitles (%1$s)</string>
     <string name="share_audio_format">Audio format</string>
     <string name="share_custom_hint">yt-dlp format selector (-f)</string>
+    <string name="share_custom_placeholder">Format code</string>
     <string name="share_cancel">Cancel</string>
     <string name="share_stash">Stash it</string>
     <string name="share_stash_sized">Stash it · %1$s</string>
     <string name="share_stash_too">Stash %1$s too</string>
     <string name="share_stash_later">Stash when online</string>
+    <plurals name="share_list_videos">
+        <item quantity="one">%1$d video</item>
+        <item quantity="other">%1$d videos</item>
+    </plurals>
+    <string name="share_list_by">by %1$s</string>
+    <string name="share_list_hint">Pick the videos to stash. Each one downloads on its own.</string>
+    <string name="share_list_selected">%1$d of %2$d picked</string>
+    <plurals name="share_list_already">
+        <item quantity="one">%1$d already stashed</item>
+        <item quantity="other">%1$d already stashed</item>
+    </plurals>
+    <string name="share_list_all">Pick all</string>
+    <string name="share_list_none">Clear</string>
+    <string name="share_list_here">Stashed</string>
+    <string name="share_list_unavailable">Unavailable</string>
+    <string name="share_list_empty">This playlist has no videos.</string>
+    <string name="share_list_pick">Pick some videos</string>
+    <plurals name="share_list_stash">
+        <item quantity="one">Stash %1$d video</item>
+        <item quantity="other">Stash %1$d videos</item>
+    </plurals>
 
     <!-- Asking for notifications -->
     <string name="notify_ask_title">Want a ping when it\'s in?</string>
@@ -170,6 +192,8 @@
     <string name="info_tag_genre">Genre</string>
     <string name="info_tracks">Tracks</string>
     <string name="info_open_link">Open link</string>
+    <string name="rename_title">Rename file</string>
+    <string name="rename_hint">File name</string>
     <string name="rename_done">Renamed</string>
     <string name="rename_failed">Couldn\'t rename the file</string>
     <string name="menu_copy_link">Copy link</string>
@@ -220,6 +244,14 @@
     <string name="stash_remove">Remove</string>
     <string name="stash_resume">Resume</string>
     <string name="stash_show_all">Show all %1$d in the library</string>
+    <string name="stash_group_count">%1$d of %2$d done</string>
+    <string name="stash_group_failed">%1$d failed</string>
+    <plurals name="stash_group_waiting">
+        <item quantity="one">%1$d more waiting · tap to show</item>
+        <item quantity="other">%1$d more waiting · tap to show</item>
+    </plurals>
+    <string name="stash_group_pause">Pause all</string>
+    <string name="stash_group_resume">Resume all</string>
     <string name="stash_empty_title">The cheeks are still empty</string>
     <string name="stash_empty_text">Share a link from YouTube, Instagram, TikTok, SoundCloud … to Hamstr, or tap + to paste a link or add files from your phone.</string>
     <string name="status_queued">queued</string>
@@ -247,12 +279,38 @@
     <string name="lib_search_hint">Search titles, channels, sites</string>
     <string name="lib_no_match">Nothing in the stash matches “%1$s”</string>
     <string name="lib_empty">Everything you finish stashing ends up here.</string>
-    <string name="lib_files">%1$d files</string>
+    <plurals name="lib_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
     <string name="lib_gone">file gone</string>
     <string name="lib_playlist">Playlist</string>
     <string name="lib_selected">%1$d selected</string>
     <string name="lib_select_all">Select all</string>
     <string name="lib_select_done">Stop selecting</string>
+    <string name="lib_playlists">Playlists</string>
+    <string name="lib_songs">Songs</string>
+
+    <!-- Playlists -->
+    <string name="pl_new">New playlist</string>
+    <string name="pl_add">Add to playlist</string>
+    <string name="pl_name">Playlist name</string>
+    <string name="pl_create">Create</string>
+    <string name="pl_rename">Rename playlist</string>
+    <string name="pl_save">Save</string>
+    <string name="pl_play">Play</string>
+    <string name="pl_shuffle">Shuffle</string>
+    <string name="pl_remove">Remove from playlist</string>
+    <string name="pl_delete">Delete playlist</string>
+    <string name="pl_delete_confirm">Tap again: the files stay</string>
+    <string name="pl_delete_files">Delete files</string>
+    <string name="pl_empty">Nothing here yet. Add files from their menu, or select some in the library.</string>
+    <string name="pl_downloaded">downloaded</string>
+    <string name="pl_in_list">already in it</string>
+    <string name="pl_added_one">Added to %1$s</string>
+    <string name="pl_added_many">%1$d files added to %2$s</string>
+    <string name="pl_removed">Removed from %1$s</string>
+    <string name="pl_deleted">Playlist deleted, the files stay</string>
 
     <!-- Qualities -->
     <string name="q_on_phone">On this phone</string>
@@ -333,6 +391,9 @@
     <string name="set_instant_hint">Sharing starts right away with these defaults, no sheet</string>
     <string name="set_playlists">Whole playlists</string>
     <string name="set_playlists_hint">Otherwise only the shared video</string>
+    <string name="set_open_done">Open when done</string>
+    <string name="set_open_done_hint">Hamstr comes up and plays the file once the last download is in</string>
+    <string name="set_open_done_needs">Needs “Display over other apps”, tap to allow</string>
     <string name="set_cheek_auto">Update Cheek automatically</string>
     <string name="set_cheek_auto_hint">Once a day from Cheek\'s GitHub releases</string>
     <string name="set_ytdlp_auto">Update automatically</string>
@@ -342,6 +403,8 @@
     <string name="set_ascii">ASCII</string>
     <string name="set_save_location">Save location</string>
     <string name="set_internal_storage">Internal storage</string>
+    <string name="set_open_folder">Tap to open the folder</string>
+    <string name="set_open_folder_failed">No file manager here can open the folder</string>
     <string name="set_engine_ytdlp">yt-dlp finds the streams and downloads them, one connection at a time.</string>
     <string name="set_engine_cheek">yt-dlp finds the streams, Cheek (Rust) fetches them over many connections at once and writes covers and tags into the files. Playlists, subtitles and custom formats still go through yt-dlp.</string>
     <string name="set_cheek_version">Cheek version</string>
@@ -415,4 +478,26 @@
         <item quantity="one">%1$d file · last: %2$s</item>
         <item quantity="other">%1$d files · last: %2$s</item>
     </plurals>
+    <string name="cinesrc_episodes">Episodes</string>
+    <string name="cinesrc_choose_hint">Choose one episode to see its qualities, or select several to download together.</string>
+    <string name="cinesrc_season">Season %1$d</string>
+    <string name="cinesrc_specials">Specials</string>
+    <string name="cinesrc_episode">%1$d · %2$s</string>
+    <string name="cinesrc_select_all">Select all episodes</string>
+    <string name="cinesrc_select_none">Clear selection</string>
+    <string name="cinesrc_continue">Choose quality</string>
+    <string name="cinesrc_download_selected">Download %1$d episodes</string>
+    <string name="cinesrc_max_quality">Preferred video quality</string>
+    <string name="cinesrc_best">Best</string>
+    <string name="cinesrc_loading">Loading episodes…</string>
+    <string name="cinesrc_empty">No episodes are listed for this season.</string>
+    <string name="cinesrc_load_failed">Could not load the episodes.</string>
+    <string name="cinesrc_retry">Try again</string>
+    <string name="cinesrc_season_missing">This season is not listed for this series.</string>
+    <plurals name="cinesrc_episode_count">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
+    <string name="cinesrc_pick">Pick episodes</string>
+    <string name="cinesrc_select_episodes_first">Open this series link and select the episodes to download first.</string>
 </resources>

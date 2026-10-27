@@ -3,7 +3,6 @@ package app.hamstr.ui.components
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,7 +67,7 @@ fun AccentPicker(presets: List<AccentPreset>, accent: Int, onPick: (Int) -> Unit
         ) {
             presets.forEach { p ->
                 val on = p.argb == accent
-                val scale by animateFloatAsState(if (on) 1.12f else 1f, spring(dampingRatio = 0.4f, stiffness = 500f), label = "swatch")
+                val scale by animateFloatAsState(if (on) 1.12f else 1f, Specs.pop(), label = "swatch")
                 Box(
                     Modifier
                         .size(40.dp)
@@ -105,7 +103,7 @@ private fun HueSlider(accent: Int, onPick: (Int) -> Unit) {
         val track = constraints.maxWidth - thumb
         val x = remember { Animatable(hsv[0] / 360f * track) }
         var dragging by remember { mutableStateOf(false) }
-        LaunchedEffect(accent, track) { if (!dragging) x.animateTo(hsv[0] / 360f * track, spring(dampingRatio = 0.6f, stiffness = 500f)) }
+        LaunchedEffect(accent, track) { if (!dragging) x.animateTo(hsv[0] / 360f * track, Specs.settle()) }
         val stretch by rememberVelocityStretch({ x.value }, sensitivity = 0.00016f, max = 0.4f)
 
         fun emit(px: Float) {
@@ -121,7 +119,7 @@ private fun HueSlider(accent: Int, onPick: (Int) -> Unit) {
                 .pointerInput(track) {
                     detectTapGestures { pos ->
                         val px = (pos.x - thumb / 2).coerceIn(0f, track)
-                        scope.launch { x.animateTo(px, spring(dampingRatio = 0.6f, stiffness = 500f)) }
+                        scope.launch { x.animateTo(px, Specs.settle()) }
                         emit(px)
                     }
                 },

@@ -1,11 +1,7 @@
 package app.hamstr.ui
 
-import androidx.compose.foundation.gestures.Orientation
-import app.hamstr.ui.components.edgeFade
-import app.hamstr.ui.components.sheetScroll
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -14,7 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,12 +18,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -36,12 +28,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -54,6 +46,7 @@ import app.hamstr.data.Mode
 import app.hamstr.data.Prefs
 import app.hamstr.data.Status
 import app.hamstr.data.heightLabel
+import app.hamstr.engine.DownloadService
 import app.hamstr.engine.Engine
 import app.hamstr.engine.Failures
 import app.hamstr.engine.Fix
@@ -78,8 +71,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.io.File
-import androidx.compose.ui.graphics.lerp
-import app.hamstr.ui.components.animateSelection
+import app.hamstr.ui.components.Chips
+import app.hamstr.ui.components.Sheet
+import app.hamstr.ui.components.SheetField
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import app.hamstr.ui.components.Specs
 
 sealed interface InfoState {
     data object Loading : InfoState
@@ -112,10 +110,58 @@ private fun sameChoice(t: DownloadTask, choice: Choice) = when (choice.mode) {
 @Composable
 fun ShareSheet(
     url: String,
+    onStash: (String, MediaInfo?, Choice) -> Unit,
+    onDismiss: () -> Unit,
+    onOpen: (DownloadTask) -> Unit,
+    onStashVersion: (DownloadTask, Choice) -> Unit,
+    onBatchQueued: () -> Unit = onDismiss,
+) {
+    val target = remember(url) { runCatching { app.hamstr.engine.CineSrcTarget.parse(url) }.getOrNull()?.takeIf { it.needsEpisodes } }
+    var episodeUrl by remember(url) { mutableStateOf<String?>(null) }
+    if (target != null && episodeUrl == null) {
+        CineSrcSeasonSheet(target, onEpisode = { episodeUrl = it }, onDismiss = onDismiss, onQueued = onBatchQueued)
+    } else {
+        val mediaUrl = episodeUrl ?: url
+        key(mediaUrl) {
+            SingleMediaShareSheet(mediaUrl, { info, choice -> onStash(mediaUrl, info, choice) },
+                onDismiss = { if (episodeUrl != null) episodeUrl = null else onDismiss() }, onOpen = onOpen, onStashVersion = onStashVersion,
+                onBatchQueued = onBatchQueued)
+        }
+    }
+}
+
+@Composable
+private fun SingleMediaShareSheet(
+    url: String,
     onStash: (MediaInfo?, Choice) -> Unit,
     onDismiss: () -> Unit,
     onOpen: (DownloadTask) -> Unit,
     onStashVersion: (DownloadTask, Choice) -> Unit,
+    onBatchQueued: () -> Unit,
+) {
+    // A playlist is known only once yt-dlp has listed it; until then the usual sheet loads.
+    val listed = Engine.cachedInfo(url)?.takeIf { it.entries != null }
+    var playlist by remember(url) { mutableStateOf(listed) }
+    val context = LocalContext.current
+    val p = playlist
+    if (p != null) {
+        PlaylistPickSheet(p, onStash = { entries, choice ->
+            DownloadService.stashEntries(context, p, entries, choice)
+            onBatchQueued()
+        }, onDismiss = onDismiss)
+    } else {
+        MediaSheet(url, onStash, onDismiss, onOpen, onStashVersion, onPlaylist = { playlist = it })
+    }
+}
+
+@Composable
+private fun MediaSheet(
+    url: String,
+    onStash: (MediaInfo?, Choice) -> Unit,
+    onDismiss: () -> Unit,
+    onOpen: (DownloadTask) -> Unit,
+    onStashVersion: (DownloadTask, Choice) -> Unit,
+    onPlaylist: (MediaInfo) -> Unit,
 ) {
     val c = Hamstr.colors
     val context = LocalContext.current
@@ -131,7 +177,7 @@ fun ShareSheet(
     var container by remember { mutableStateOf(defaults.container) }
     var audio by remember { mutableStateOf(defaults.audioFormat) }
     var subs by remember { mutableStateOf(defaults.subtitles) }
-    var custom by remember { mutableStateOf("bv*+ba/b") }
+    var custom by remember { mutableStateOf(TextFieldValue("bv*+ba/b")) }
     var open by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var updating by remember { mutableStateOf(false) }
@@ -156,6 +202,7 @@ fun ShareSheet(
         }
     }
     val info = (state as? InfoState.Loaded)?.info
+    LaunchedEffect(info) { if (info?.entries != null) onPlaylist(info) }
     // Stashed before yt-dlp is done: the first look's title and picture go with the task until yt-dlp's arrive.
     val stashInfo = info ?: peek?.let { MediaInfo(url, it.title ?: url, it.thumbnail, null, 0, null, emptyList(), 0) }
     // Sound-only links (SoundCloud, YouTube Music, a podcast) start in Audio unless picked otherwise.
@@ -193,7 +240,7 @@ fun ShareSheet(
     val here = same.filter { it.status == Status.Done && it.id !in missing && it.filePath?.let { p -> File(p).isFile } == true }
     val coming = same.filter { it.status.active || it.status == Status.Paused }
     val head = here.firstOrNull { it.versionOf == null } ?: here.firstOrNull()
-    val choice = Choice(mode, height, container, audio, subs, custom)
+    val choice = Choice(mode, height, container, audio, subs, custom.text)
     val exact = here.firstOrNull { sameChoice(it, choice) }
 
     val bytes = when (mode) {
@@ -203,19 +250,7 @@ fun ShareSheet(
     }
     val size = if (bytes > 0) "~" + formatBytes(bytes) else null
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
-            .background(c.overlay)
-            .clickable(enabled = false) {}
-            .sheetScroll()
-            .navigationBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 16.dp)
-            .animateContentSize(tween(220)),
-    ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
-        Spacer(Modifier.height(12.dp))
+    Sheet {
         AsciiImage(
             bitmap = bitmap,
             reveal = reveal.value,
@@ -309,7 +344,7 @@ fun ShareSheet(
                 val offered = info?.heights?.takeIf { it.isNotEmpty() }
                 val heights = Prefs.heights.filter { h -> h == null || offered == null || offered.any { it >= h } || h == offered.max() }
                 val sizeOf = { h: Int? -> info?.bytesFor(h)?.takeIf { it > 0 }?.let { "~" + formatBytes(it) } }
-                PickRow(
+                ExpandRow(
                     stringResource(R.string.share_quality),
                     listOfNotNull(heightLabel(height), sizeOf(height)).joinToString(" · "),
                     open == "q", { open = if (open == "q") null else "q" },
@@ -317,7 +352,7 @@ fun ShareSheet(
                     Chips(heights, height, ::heightLabel, sub = sizeOf) { height = it; open = null }
                 }
                 Divider()
-                PickRow(stringResource(R.string.share_format), container, open == "f", { open = if (open == "f") null else "f" }) {
+                ExpandRow(stringResource(R.string.share_format), container, open == "f", { open = if (open == "f") null else "f" }) {
                     Chips(Prefs.containers, container, { it }) { container = it; open = null }
                 }
                 Divider()
@@ -327,7 +362,7 @@ fun ShareSheet(
                 ) { HSwitch(subs, { subs = it }) }
             }
             Mode.Audio -> {
-                PickRow(
+                ExpandRow(
                     stringResource(R.string.share_audio_format),
                     listOfNotNull(audio, size).joinToString(" · "),
                     open == "a", { open = if (open == "a") null else "a" },
@@ -339,17 +374,10 @@ fun ShareSheet(
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Txt(stringResource(R.string.share_custom_hint), style = Hamstr.type.small, color = c.ghost)
                     Spacer(Modifier.height(6.dp))
-                    BasicTextField(
-                        value = custom,
-                        onValueChange = { custom = it },
-                        singleLine = true,
-                        textStyle = Hamstr.type.mono.copy(color = c.ink),
-                        cursorBrush = SolidColor(c.accent),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(c.canvas)
-                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                    SheetField(
+                        custom, { custom = it }, stringResource(R.string.share_custom_placeholder), R.drawable.ic_code,
+                        mono = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                     )
                 }
             }
@@ -403,8 +431,9 @@ fun ShareSheet(
     }
 }
 
+/** A setting that opens in place to show its choices. */
 @Composable
-private fun PickRow(title: String, value: String, expanded: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
+private fun ExpandRow(title: String, value: String, expanded: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
     Column {
         SettingRow(title, onClick = onToggle) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -412,33 +441,8 @@ private fun PickRow(title: String, value: String, expanded: Boolean, onToggle: (
                 Icon(R.drawable.ic_expand_more, tint = Hamstr.colors.muted, size = 18.dp)
             }
         }
-        AnimatedVisibility(expanded, enter = expandVertically(tween(220)) + fadeIn(tween(220)), exit = shrinkVertically(tween(150)) + fadeOut(tween(150))) {
-            Box(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 10.dp)) { content() }
-        }
-    }
-}
-
-/** Pick one; [sub] adds a second, smaller line under a chip (an estimated size). */
-@Composable
-fun <T> Chips(options: List<T>, selected: T, label: (T) -> String, sub: (T) -> String? = { null }, onPick: (T) -> Unit) {
-    val c = Hamstr.colors
-    val scroll = rememberScrollState()
-    Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        options.forEach { o ->
-            val on = o == selected
-            val p = animateSelection(on)
-            val second = sub(o)
-            Column(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(lerp(c.surface, c.accent, p))
-                    .clickable { onPick(o) }
-                    .padding(horizontal = 14.dp, vertical = if (second != null) 6.dp else 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Txt(label(o), style = Hamstr.type.bodyMedium, color = lerp(c.ink, c.onAccent, p))
-                if (second != null) Txt(second, style = Hamstr.type.small, color = lerp(c.ghost, c.onAccent, p))
-            }
+        AnimatedVisibility(expanded, enter = expandVertically(Specs.blend()) + fadeIn(Specs.blend()), exit = shrinkVertically(tween(150)) + fadeOut(tween(150))) {
+            Box(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 4.dp)) { content() }
         }
     }
 }

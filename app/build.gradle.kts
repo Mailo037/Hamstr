@@ -20,7 +20,7 @@ plugins {
 }
 
 // Releases are cut from tags: CI passes v1.2.3 in as -Phamstr.version=1.2.3.
-val appVersion = providers.gradleProperty("hamstr.version").getOrElse("0.4.0")
+val appVersion = providers.gradleProperty("hamstr.version").getOrElse("0.5.0")
 val (major, minor, patch) = appVersion.substringBefore('-').split('.').map(String::toInt)
 
 // The release key lives outside git: signing/keystore.properties next to the .jks, written
@@ -32,7 +32,7 @@ val signingProps = Properties().apply {
 // cheek, the Rust download engine (github.com/Mailo037/cheek), goes into the APK as
 // libcheek.so per ABI. Builds take a pinned release; `cheek.dir` in local.properties points
 // at a local checkout built with cargo-ndk instead.
-val cheekVersion = "0.2.0"
+val cheekVersion = "0.2.1"
 val cheekTargets = mapOf("arm64-v8a" to "aarch64-linux-android", "armeabi-v7a" to "armv7-linux-androideabi", "x86_64" to "x86_64-linux-android")
 val cheekLocal = if (providers.gradleProperty("cheek.useRelease").getOrElse("false").toBoolean()) null else Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
@@ -288,6 +288,8 @@ dependencies {
     implementation("androidx.media3:media3-ui-compose:1.11.1")
 
     testImplementation("junit:junit:4.13.2")
+    // The real org.json, since the one in android.jar only throws in unit tests.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

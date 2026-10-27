@@ -50,6 +50,8 @@ data class MediaInfo(
     val videoBytes: Map<Int, Long> = emptyMap(), // per height, with the best audio added where needed
     val audioBytes: Long = 0,
     val id: String? = null,
+    // A playlist, album or channel: its videos as yt-dlp lists them, without their formats. Null for one video.
+    val entries: List<PlaylistEntry>? = null,
 ) {
     /** The same video under any of its links: extractor and ID. */
     val key get() = if (id != null && source != null) "$source:$id" else null
@@ -60,6 +62,17 @@ data class MediaInfo(
         return h?.let { videoBytes[it] } ?: 0
     }
 }
+
+/** One video of a playlist; [available] is false for private and deleted ones. */
+data class PlaylistEntry(
+    val url: String,
+    val title: String,
+    val thumbnail: String?,
+    val durationSec: Int,
+    val uploader: String?,
+    val key: String?,
+    val available: Boolean = true,
+)
 
 sealed interface EngineState {
     data object Starting : EngineState
@@ -90,7 +103,7 @@ object Engine {
     private lateinit var tempDir: File
     private lateinit var extractorCacheDir: File
     /** [native]: cheek's own JSON from [Cheek.resolve], not yt-dlp's. */
-    private data class Preview(val info: MediaInfo, val json: String, val reusable: Boolean, val native: Boolean = false)
+    private data class Preview(val info: MediaInfo, val json: String, val reusable: Boolean, val native: Boolean = false, val file: Boolean = false)
     private val previews = PreviewCache<Preview>(
         scope = scope,
         weightOf = { it.json.length * 2 },
@@ -251,7 +264,8 @@ object Engine {
     fun remember(info: MediaInfo) = infos.put(info.url, InfoSnapshot(info, reusable = true))
 
     suspend fun info(url: String): MediaInfo = infos.getOrLoad(url) {
-        preview(url).let { InfoSnapshot(it.info, it.reusable) }
+        // A playlist's list holds no stream URLs, so it can be shown again later.
+        preview(url).let { InfoSnapshot(it.info, it.reusable || it.info.entries != null) }
     }.info
 
     /** One resolution per link, shared by the sheet and the download that follows it. */
@@ -270,12 +284,18 @@ object Engine {
             val text = CineSrc.resolve(target)
             return Preview(mediaInfo(url, JSONObject(text)), text, reusable = true)
         }
-        if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.available && readRuntime { WarmYtDlp.extractor(url) } == "Generic") {
-            runInterruptible { Cheek.resolve(url) }?.let { nativePreview(url, it) }?.let { return it }
+        if (readRuntime { WarmYtDlp.extractor(url) }?.equals("Generic", ignoreCase = true) != false) {
+            filePreview(url)?.let { return it }
+            if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.available) {
+                runInterruptible { Cheek.resolve(url) }?.let { nativePreview(url, it) }?.let { return it }
+            }
         }
         val response = YoutubeAccess.run(url) { client ->
             val req = YoutubeDLRequest(url).apply {
-                addOption("--no-playlist")
+                // A video in a playlist is the playlist only when whole playlists are switched on.
+                addOption(if (Prefs.settings.value.playlists) "--yes-playlist" else "--no-playlist")
+                // A playlist lists its videos without extracting each one; a single video is unaffected.
+                addOption("--flat-playlist")
                 addOption("--socket-timeout", 15)
                 addOption("--cache-dir", extractorCacheDir.absolutePath)
                 addOption("--dump-single-json")
@@ -290,6 +310,17 @@ object Engine {
                 json.optString("live_status") !in listOf("is_live", "is_upcoming", "post_live") &&
                 json.optString("_type", "video") == "video",
         )
+    }
+
+    private suspend fun filePreview(url: String): Preview? {
+        val file = try { runInterruptible { GenericFile.probe(url) } }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { Log.d(TAG, "File probe failed for $url", e); null } ?: return null
+        val json = JSONObject().put("id", url.hashCode().toUInt().toString(16))
+            .put("title", file.name.substringBeforeLast('.')).put("ext", file.name.substringAfterLast('.'))
+            .put("url", url).put("webpage_url", url).put("extractor_key", "Generic")
+            .put("filesize", file.size.takeIf { it > 0 }).toString()
+        return Preview(mediaInfo(url, JSONObject(json)), json, reusable = true, file = true)
     }
 
     private fun nativePreview(url: String, text: String): Preview? {
@@ -319,6 +350,7 @@ object Engine {
         fun JSONObject.hasCodec(codec: String) = !isNull(codec) && optString(codec) != "none"
         fun JSONObject.bytes() = optLong("filesize").takeIf { it > 0 } ?: optLong("filesize_approx")
         val video = all.filter { it.hasCodec("vcodec") && it.optInt("height") > 0 }
+        val entries = if (v.optString("_type") == "playlist") playlistEntries(v) else null
         val heights = video.map { it.optInt("height") }.distinct().sortedDescending()
         val audioBytes = all.filter { !it.hasCodec("vcodec") && it.hasCodec("acodec") }.maxOfOrNull { it.bytes() } ?: 0
         val videoBytes = heights.associateWith { h ->
@@ -329,7 +361,8 @@ object Engine {
             url = string("webpage_url") ?: url,
             title = string("title") ?: string("fulltitle") ?: url,
             thumbnail = string("thumbnail"),
-            source = string("extractor_key") ?: string("extractor"),
+            // A playlist's extractor ("YoutubeTab") is not the site its videos come from.
+            source = entries?.firstNotNullOfOrNull { it.key?.substringBefore(':') } ?: string("extractor_key") ?: string("extractor"),
             durationSec = v.optDouble("duration", 0.0).toInt(),
             uploader = string("uploader") ?: string("channel") ?: string("artist"),
             heights = heights,
@@ -337,7 +370,37 @@ object Engine {
             videoBytes = videoBytes,
             audioBytes = audioBytes,
             id = string("id"),
+            entries = entries,
         )
+    }
+
+    private val unavailableTitle = Regex("""^\[(Private|Deleted|Unavailable) video]$""", RegexOption.IGNORE_CASE)
+
+    /** The videos of a flat playlist, in its order. Nested playlists (a channel's tabs) stay links. */
+    internal fun playlistEntries(v: JSONObject): List<PlaylistEntry> {
+        val list = v.optJSONArray("entries") ?: return emptyList()
+        val owner = if (v.isNull("uploader")) v.optString("channel") else v.optString("uploader")
+        return (0 until list.length()).mapNotNull { i ->
+            val e = list.optJSONObject(i) ?: return@mapNotNull null
+            fun string(key: String) = if (e.isNull(key)) null else e.optString(key).takeIf { it.isNotBlank() }
+            val url = string("webpage_url") ?: string("url")?.takeIf { it.startsWith("http") } ?: return@mapNotNull null
+            val id = string("id")
+            val extractor = string("ie_key") ?: string("extractor_key")
+            val title = string("title") ?: url
+            val thumbs = e.optJSONArray("thumbnails")
+            // The smallest picture that is still sharp in a list row.
+            val thumbnail = string("thumbnail") ?: thumbs?.let { a ->
+                val all = (0 until a.length()).mapNotNull { a.optJSONObject(it) }.filter { it.optString("url").startsWith("http") }
+                (all.filter { it.optInt("width") in 240..640 }.minByOrNull { it.optInt("width") } ?: all.lastOrNull())?.optString("url")
+            }
+            PlaylistEntry(
+                url = url, title = title, thumbnail = thumbnail,
+                durationSec = e.optDouble("duration", 0.0).toInt(),
+                uploader = string("uploader") ?: string("channel") ?: owner.takeIf { it.isNotBlank() },
+                key = if (id != null && extractor != null) "$extractor:$id" else null,
+                available = !unavailableTitle.matches(title) && string("availability") != "private",
+            )
+        }.distinctBy { it.key ?: it.url }
     }
 
     /** Another quality of a stashed link gets its own name, so it can't overwrite the first file. */
@@ -349,8 +412,9 @@ object Engine {
         return "%(title).150B [%(id)s]$tag.%(ext)s"
     }
 
-    /** A version is one more file of one video, even when playlists are switched on. */
-    internal fun playlists(task: DownloadTask) = Prefs.settings.value.playlists && task.versionOf == null && CineSrcTarget.parse(task.url) == null
+    /** A version is one more file of one video, even when playlists are switched on, and so is a video picked from a playlist. */
+    internal fun playlists(task: DownloadTask) =
+        Prefs.settings.value.playlists && task.versionOf == null && task.group == null && CineSrcTarget.parse(task.url) == null
 
     fun pathFile(task: DownloadTask) = File(tempDir, "${task.id}.path")
 
@@ -362,6 +426,10 @@ object Engine {
     suspend fun execute(task: DownloadTask, callback: ((Float, Long, String) -> Unit)? = null): YoutubeDLResponse = withContext(Dispatchers.IO) {
         awaitReady()
         val cineSrc = CineSrcTarget.parse(task.url) != null
+        // Instant downloads have no preview yet. Probe generic links before choosing media options.
+        if (!cineSrc && previews.get(task.url) == null && readRuntime { WarmYtDlp.extractor(task.url) }?.equals("Generic", ignoreCase = true) != false) {
+            filePreview(task.url)?.let { previews.put(task.url, it) }
+        }
         if (cineSrc) preview(task.url) // Instant stash also needs WebView resolution before either engine starts.
         if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.handles(task)) {
             val res = executeCheek(task, callback)
@@ -376,8 +444,12 @@ object Engine {
             // Some bundled versions do not reliably re-extract expired info-json URLs.
             // Retry once from the webpage, retaining .part files for resumption.
             if (!initialRequest.hasOption("--load-info-json") || !expiredMedia.containsMatchIn(e.message.orEmpty()) || pathFile(task).exists()) throw e
+            val file = previews.get(task.url)?.file == true
             previews.invalidate(task.url)
-            if (cineSrc) preview(task.url)
+            if (file) {
+                // Losing a file preview must not turn a retry into an audio conversion.
+                previews.put(task.url, filePreview(task.url) ?: throw e)
+            } else if (cineSrc) preview(task.url)
             executeYtDlp(task, request(task, reusePreview = cineSrc), callback)
         }
     }
@@ -404,9 +476,9 @@ object Engine {
     private suspend fun executeCheek(task: DownloadTask, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
         suspend fun download(): YoutubeDLResponse {
             val preview = preview(task.url)
-            val format = if (preview.native) null else formatSelector(task.choice)
+            val format = if (preview.native || preview.file) null else formatSelector(task.choice)
             return runInterruptible {
-                Cheek.execute(task, preview.json, format, tempDir, outputDir, pathFile(task), callback)
+                Cheek.execute(task, preview.json, format, tempDir, outputDir, pathFile(task), callback, mediaFile = !preview.file)
             }
         }
         outputDir.mkdirs()
@@ -435,9 +507,10 @@ object Engine {
 
     fun request(task: DownloadTask, reusePreview: Boolean = true): YoutubeDLRequest {
         val c = task.choice
-        val playlists = playlists(task)
+        val file = previews.get(task.url)?.takeIf { it.file }
+        val playlists = playlists(task) && file == null
         // A playlist preview describes just one video, so it cannot replace a playlist request.
-        val preview = if (playlists || !reusePreview) null else previews.get(task.url)?.takeUnless { it.native }
+        val preview = file ?: if (playlists || !reusePreview) null else previews.get(task.url)?.takeUnless { it.native }
         val infoFile = preview?.let {
             File(File(tempDir, task.id).apply { mkdirs() }, "preview.json").apply { writeText(it.json) }
         }
@@ -461,8 +534,15 @@ object Engine {
             addOption("--buffer-size", "256K")
             if (!playlists) addOption("--no-playlist")
             addOption("--no-mtime")
-            addOption("--embed-metadata")
+            if (file == null) addOption("--embed-metadata")
             addOption("--socket-timeout", 20)
+            if (file != null) {
+                addOption("-f", "b")
+                addOption("--fixup", "never")
+                // This is an explicitly recognised file, which may legitimately be an installer.
+                addOption("--compat-options", "allow-unsafe-ext")
+                return@apply
+            }
             when (c.mode) {
                 Mode.Audio -> {
                     addOption("-f", formatSelector(c))

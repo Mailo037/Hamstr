@@ -43,7 +43,7 @@ class ShareActivity : ComponentActivity() {
             return
         }
         askStorage(this, storagePermission::launch)
-        if (Prefs.settings.value.quickStash) {
+        if (Prefs.settings.value.quickStash && !app.hamstr.engine.MediaLinks.needsEpisodeSelection(url)) {
             DownloadService.stash(this, url, null, Prefs.settings.value.defaultChoice())
             Toast.makeText(this, getString(R.string.share_stashing), Toast.LENGTH_SHORT).show()
             finish()
@@ -64,10 +64,11 @@ class ShareActivity : ComponentActivity() {
                 Overlay(visible = visible && !closing && !asking, onDismiss = { closing = true }) {
                     ShareSheet(
                         url,
-                        onStash = { info, choice ->
-                            DownloadService.stash(this, url, info, choice)
+                        onStash = { link, info, choice ->
+                            DownloadService.stash(this, link, info, choice)
                             stashed()
                         },
+                        onBatchQueued = { stashed() },
                         onDismiss = { closing = true },
                         onOpen = { task ->
                             startActivity(

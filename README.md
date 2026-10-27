@@ -63,8 +63,11 @@ Android asks once whether your browser may install apps. Later updates come thro
 Cineby/CineSrc movie and episode links, including
 `https://cineby.rocks/watch/movie/TMDB_ID`, are resolved on the phone with Android's
 built-in WebView. You can also paste `cinesrc:movie:TMDB_ID` or
-`cinesrc:tv:TMDB_ID:SEASON:EPISODE` (`cineby:` works too). Series require a season
-and episode; season 0 supports specials. Hamstr loads the regular CineSrc player,
+`cinesrc:tv:TMDB_ID:SEASON:EPISODE` (`cineby:` works too). A series or season link,
+such as `https://cineby.rocks/tv/40075?season=2`, opens an episode picker. Select one
+episode to see its available qualities, or select several (including the whole
+season) to queue them together. Instant stash also opens the picker for these
+links. Season 0 supports specials. Hamstr loads the regular CineSrc player,
 checks its HLS playlist without transferring browser cookies, then closes the
 WebView. Cheek or yt-dlp downloads the stream, with the available qualities shown
 in the normal share sheet. No desktop Chrome, remote resolver or extra app is

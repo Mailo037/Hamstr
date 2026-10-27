@@ -2,8 +2,9 @@
 
     python tools/render_release.py <screenshots dir>
 
-Expects menu.png, info.png and library.png (1080x2400) in that folder and writes
-docs/images/releases/v<VERSION>.png.
+Expects the SHOTS (1080x2400, from tools/demo_screens.py) in that folder and writes
+docs/images/releases/v<VERSION>.png. For every release, change VERSION, FEATURES and
+SHOTS to what is new; older pictures stay in docs/images/releases.
 """
 import sys
 import pathlib
@@ -11,14 +12,14 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 FEATURES = [
-    ("FILE INFO", "Every detail of a file, one tap to copy"),
-    ("CINEBY LINKS", "Resolved on the phone in Android's WebView"),
-    ("SIDEWAYS VIDEO", "Full screen with controls on top, screen stays on"),
-    ("YOUTUBE RETRIES", "Other guest clients when YouTube refuses one"),
+    ("PLAYLISTS", "Your own lists to play in order or shuffle"),
+    ("PICK FROM A PLAYLIST", "Share one, tick the videos you want"),
+    ("WHOLE SEASONS", "Cineby series open an episode picker"),
+    ("PLAIN FILES", "Direct links to files download as they are"),
 ]
-SHOTS = [("menu.png", "File menu"), ("info.png", "File info"), ("library.png", "Library")]
+SHOTS = [("library.png", "Library"), ("playlist.png", "Playlist"), ("menu.png", "File menu")]
 
 
 def release(shots):

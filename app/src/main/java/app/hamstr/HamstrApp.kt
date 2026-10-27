@@ -4,6 +4,7 @@ import app.hamstr.widget.Widgets
 import android.app.Application
 import app.hamstr.data.DownloadFiles
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.Playlists
 import app.hamstr.data.Positions
 import app.hamstr.data.Prefs
 import app.hamstr.engine.DownloadService
@@ -17,6 +18,7 @@ class HamstrApp : Application() {
         Prefs.init(this)
         DownloadStore.init(this)
         Positions.init(this)
+        Playlists.init(this)
         Network.init(this)
         DownloadFiles.finishPending(this)
         DownloadService.channels(this)

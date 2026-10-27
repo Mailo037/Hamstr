@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import app.hamstr.ui.components.rememberVelocityStretch
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import app.hamstr.ui.components.Specs
 
 /**
  * Dim backdrop plus a bottom sheet. The sheet springs in, can be dragged down (or flung)
@@ -54,7 +55,7 @@ fun Overlay(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> 
     LaunchedEffect(visible) { if (visible) offset.snapTo(0f) }
 
     Box(Modifier.fillMaxSize()) {
-        AnimatedVisibility(visible, enter = fadeIn(tween(220)), exit = fadeOut(tween(150))) {
+        AnimatedVisibility(visible, enter = fadeIn(Specs.blend()), exit = fadeOut(tween(150))) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -66,8 +67,9 @@ fun Overlay(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> 
         AnimatedVisibility(
             visible,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(spring(dampingRatio = 0.78f, stiffness = 360f)) { it } + fadeIn(tween(160)),
-            exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(160)),
+            // A sheet is heavier than a page: it comes up a little softer than Specs.enter.
+            enter = slideInVertically(spring(dampingRatio = 0.78f, stiffness = 360f)) { it } + fadeIn(Specs.appear()),
+            exit = slideOutVertically(Specs.leave()) { it } + fadeOut(Specs.listOut()),
         ) {
             Box(
                 Modifier
@@ -96,14 +98,14 @@ fun Overlay(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> 
                                 val v = tracker.calculateVelocity().y
                                 if (offset.value > height * 0.28f || v > 1600f) {
                                     scope.launch {
-                                        offset.animateTo(height.toFloat(), tween(170), initialVelocity = v)
+                                        offset.animateTo(height.toFloat(), Specs.leave(170), initialVelocity = v)
                                         dismiss()
                                     }
                                 } else {
-                                    scope.launch { offset.animateTo(0f, spring(dampingRatio = 0.5f, stiffness = 480f), initialVelocity = v) }
+                                    scope.launch { offset.animateTo(0f, Specs.settle(), initialVelocity = v) }
                                 }
                             },
-                            onDragCancel = { scope.launch { offset.animateTo(0f, spring(0.5f, 480f)) } },
+                            onDragCancel = { scope.launch { offset.animateTo(0f, Specs.settle()) } },
                         )
                     },
             ) { content() }

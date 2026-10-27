@@ -37,6 +37,7 @@ internal object CineSrc {
     fun init(context: Context) { this.context = context.applicationContext }
 
     suspend fun resolve(target: CineSrcTarget): String = slot.withLock {
+        check(!target.needsEpisodes) { context.getString(app.hamstr.R.string.cinesrc_select_episodes_first) }
         withTimeoutOrNull(90_000) { resolvePlayer(target) }
             ?: error("CineSrc did not expose an accessible HLS stream within 90 seconds. Check the connection and Android System WebView, then retry.")
     }
@@ -107,6 +108,11 @@ internal object CineSrc {
             info(target, title, url, body, userAgent).toString()
         } finally {
             withContext(NonCancellable + Dispatchers.Main) {
+                if (app.hamstr.BuildConfig.DEBUG && !result.isCompleted && browser != null) {
+                    val state = CompletableDeferred<String>()
+                    browser?.evaluateJavascript("JSON.stringify({text:document.body.innerText.slice(0,1200),playlists:performance.getEntriesByType('resource').filter(e=>e.name.includes('m3u8')).map(e=>({host:new URL(e.name).host,status:e.responseStatus,mime:e.contentType}))})") { state.complete(it) }
+                    Log.w("HamstrCineSrc", "Player state after failed resolution: " + withTimeoutOrNull(1_000) { state.await() })
+                }
                 browser?.apply { stopLoading(); webViewClient = WebViewClient(); webChromeClient = null; destroy() }
             }
         }

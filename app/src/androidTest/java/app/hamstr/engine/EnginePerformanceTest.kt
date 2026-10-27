@@ -84,6 +84,26 @@ class EnginePerformanceTest {
         Log.i("HamstrPerf", "preview: cold=${cold}ms cached=${cached}ms; one extraction for two callers + download")
     }
 
+    @Test fun genericInstallerSkipsMediaProcessingInBothEngines(): Unit = runBlocking {
+        for (engine in DownloadEngine.entries) {
+            Prefs.edit { it.copy(engine = engine) }
+            for (mode in listOf(Mode.Audio, Mode.Video)) {
+                val url = server.url("/installer-$engine-$mode")
+                assertNotNull("Installer headers must identify an ordinary file", GenericFile.probe(url))
+                // Cover both the preview flow and an instant download without a preview.
+                if (mode == Mode.Video) assertTrue(Engine.info(url).title.endsWith("setup"))
+                val task = task(url, mode)
+                val stages = mutableListOf<String>()
+                val result = Engine.execute(task) { _, _, line -> stages += line }
+                assertEquals(result.err, 0, result.exitCode)
+                val output = outputs(task).single()
+                assertEquals("exe", output.extension)
+                assertArrayEquals(server.installer, output.readBytes())
+                assertFalse(stages.any { it.startsWith(Engine.STAGE_PREFIX) || it.startsWith("[Metadata]") || it.startsWith("[ExtractAudio]") })
+            }
+        }
+    }
+
     @Test fun stalePreviewFallsBackToFreshExtraction() = runBlocking {
         val url = server.url("/expires.html")
         Engine.info(url)
@@ -235,6 +255,7 @@ class EnginePerformanceTest {
     }
 
     private class FixtureServer : AutoCloseable {
+        val installer = byteArrayOf(0x4d, 0x5a, 0, 1, 2, 3, 4, 5) + ByteArray(4096) { (it % 251).toByte() }
         private val prefix = UUID.randomUUID().toString()
         private val socket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
         private val executor = Executors.newCachedThreadPool()
@@ -266,6 +287,16 @@ class EnginePerformanceTest {
                             val type: String
                             val body: ByteArray
                             when {
+                                path.startsWith("/installer-") && !path.endsWith(".exe") -> {
+                                    val output = client.getOutputStream()
+                                    output.write("HTTP/1.1 302 Found\r\nLocation: /$prefix-${path.removePrefix("/")}-setup.exe\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                                    output.flush()
+                                    return@use
+                                }
+                                path.startsWith("/installer-") -> {
+                                    type = "application/octet-stream"
+                                    body = installer
+                                }
                                 path == "/formats.html" -> {
                                     type = "text/html"
                                     body = "<html><head><title>Hamstr codecs</title></head><body><audio><source src='/source.m4a' type='audio/mp4'><source src='/source.opus' type='audio/ogg'></audio></body></html>".toByteArray()

@@ -1,22 +1,13 @@
 package app.hamstr.ui
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,23 +39,22 @@ import app.hamstr.player.Kind
 import app.hamstr.player.Playback
 import app.hamstr.player.kindOf
 import app.hamstr.ui.components.Badge
-import app.hamstr.ui.components.sheetScroll
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.IconButton
 import app.hamstr.ui.components.Segmented
 import app.hamstr.ui.components.Txt
-import app.hamstr.ui.components.edgeFade
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import androidx.compose.ui.graphics.lerp
-import app.hamstr.ui.components.animateSelection
+import app.hamstr.ui.components.Chip
+import app.hamstr.ui.components.ChipRow
+import app.hamstr.ui.components.Sheet
+import app.hamstr.ui.components.SheetHeader
 
 /** Only downloaded links can be fetched again, and only single videos and songs. */
 fun canHaveVersions(t: DownloadTask): Boolean {
@@ -129,25 +119,11 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
     var picked by remember { mutableStateOf(emptySet<Pick>()) }
     var replace by remember { mutableStateOf(false) }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
-            .background(c.overlay)
-            .clickable(enabled = false) {}
-            .sheetScroll()
-            .navigationBarsPadding()
-            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp)
-            .animateContentSize(tween(220)),
-    ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
-        Spacer(Modifier.height(12.dp))
-        Txt(stringResource(R.string.menu_quality), style = Hamstr.type.section, modifier = Modifier.padding(horizontal = 8.dp))
-        Spacer(Modifier.height(2.dp))
-        Txt(current.title, style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 8.dp))
+    Sheet {
+        SheetHeader(stringResource(R.string.menu_quality), subtitle = current.title)
         Spacer(Modifier.height(12.dp))
 
-        Txt(stringResource(R.string.q_on_phone), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp))
+        Txt(stringResource(R.string.q_on_phone), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp))
         Spacer(Modifier.height(4.dp))
         versions.forEach { v ->
             val on = playing?.let { Playback.isCurrent(v) } ?: (v.id == current.id)
@@ -203,37 +179,27 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
         }
 
         Spacer(Modifier.height(14.dp))
-        Txt(stringResource(R.string.q_get_another), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp))
+        Txt(stringResource(R.string.q_get_another), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp))
         Spacer(Modifier.height(8.dp))
         when (val s = state) {
-            InfoState.Loading -> Txt(stringResource(R.string.share_sniffing), color = c.muted, modifier = Modifier.padding(horizontal = 8.dp))
-            is InfoState.Failed -> Txt(stringResource(Failures.explain(s.message).title), style = Hamstr.type.small, color = c.red, maxLines = 3, modifier = Modifier.padding(horizontal = 8.dp))
+            InfoState.Loading -> Txt(stringResource(R.string.share_sniffing), color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
+            is InfoState.Failed -> Txt(stringResource(Failures.explain(s.message).title), style = Hamstr.type.small, color = c.red, maxLines = 3, modifier = Modifier.padding(horizontal = 4.dp))
             is InfoState.Loaded -> if (offers.isEmpty()) {
-                Txt(stringResource(R.string.q_all_here), color = c.muted, modifier = Modifier.padding(horizontal = 8.dp))
+                Txt(stringResource(R.string.q_all_here), color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
             } else {
-                val scroll = rememberScrollState()
-                Row(
-                    Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll).padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
+                // Several can be picked at once.
+                ChipRow {
                     offers.forEach { o ->
                         val on = o in picked
-                        val p = animateSelection(on)
                         val bytes = if (o.height == 0) s.info.audioBytes else s.info.videoBytes[o.height] ?: 0
-                        Column(
-                            Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(lerp(c.surface, c.accent, p))
-                                .clickable { picked = if (on) picked - o else picked + o }
-                                .padding(horizontal = 14.dp, vertical = 7.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Txt(if (o.height == 0) stringResource(R.string.mode_audio) else heightLabel(o.height), style = Hamstr.type.bodyMedium, color = lerp(c.ink, c.onAccent, p))
-                            Txt(if (bytes > 0) "~" + formatBytes(bytes) else stringResource(R.string.q_size_unknown), style = Hamstr.type.small, color = lerp(c.ghost, c.onAccent, p))
-                        }
+                        Chip(
+                            if (o.height == 0) stringResource(R.string.mode_audio) else heightLabel(o.height),
+                            on, { picked = if (on) picked - o else picked + o },
+                            sub = if (bytes > 0) "~" + formatBytes(bytes) else stringResource(R.string.q_size_unknown),
+                        )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(6.dp))
                 val replaceLabel = stringResource(R.string.q_replace, formatBadge(current))
                 val keepLabel = stringResource(R.string.q_keep_both)
                 Segmented(
@@ -246,7 +212,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                 Txt(
                     if (replace) stringResource(R.string.q_replace_hint, formatBadge(current))
                     else stringResource(R.string.q_keep_hint, formatBadge(current)),
-                    style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 8.dp),
+                    style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
         }

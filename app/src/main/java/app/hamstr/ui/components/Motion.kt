@@ -2,7 +2,9 @@ package app.hamstr.ui.components
 
 import android.provider.Settings
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,13 +20,73 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import app.hamstr.ui.theme.TravelEasing
 import app.hamstr.ui.theme.LocalFx
 import kotlinx.coroutines.flow.first
 import kotlin.math.abs
 import kotlin.math.sign
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 
 /** True when the system animator scale is 0: decorative motion is skipped, travel snaps. */
 val LocalReduceMotion = staticCompositionLocalOf { false }
+
+/**
+ * The motion that recurs across the app (DESIGN.md, Motion). Entries spring, exits are
+ * short tweens; a spec that is used once stays inline, with a comment saying why.
+ */
+object Specs {
+    /** Press feedback: quick, with a little give. */
+    fun <T> press() = spring<T>(dampingRatio = 0.55f, stiffness = 900f)
+
+    /** A state icon scaling in (play/pause, a download's button). */
+    fun <T> swap() = spring<T>(dampingRatio = 0.5f, stiffness = 600f)
+
+    /** Something arriving with an overshoot: the done check, an armed swipe action. */
+    fun <T> pop() = spring<T>(dampingRatio = 0.4f, stiffness = 500f)
+
+    /** Back to rest after a drag lets go: a short, visible wobble. */
+    fun <T> settle() = spring<T>(dampingRatio = 0.5f, stiffness = 480f)
+
+    /** Values that follow data, such as progress, instead of jumping between updates. */
+    fun <T> glide() = spring<T>(stiffness = Spring.StiffnessLow)
+
+    /** A selection pill arriving at its option, overshooting a little. */
+    fun <T> arrive() = spring<T>(dampingRatio = 0.62f, stiffness = 520f)
+
+    /** A page sliding in, or the pager moving to a tab. */
+    fun <T> enter() = spring<T>(dampingRatio = 0.86f, stiffness = 420f)
+
+    /** Rows moving to their new place in a list. */
+    val place = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset(1, 1))
+
+    /** Rows of a list fading in and out; arriving takes longer than leaving. */
+    fun <T> listIn() = tween<T>(320)
+
+    fun <T> listOut() = tween<T>(160)
+
+    /** Colours and sizes easing over (selection, a sheet changing height, a chevron turning). */
+    fun <T> blend() = tween<T>(220)
+
+    /** Content fading in. */
+    fun <T> appear() = tween<T>(160)
+
+    /** Content fading out: leaving is quicker than arriving. */
+    fun <T> disappear() = tween<T>(120)
+
+    /** Something travelling off screen: a dismissed sheet or page, a row flying out. */
+    fun <T> leave(durationMs: Int = 200) = tween<T>(durationMs, easing = TravelEasing)
+}
+
+/** Slate's scale crossfade for a state icon that changes (play/pause, a download's button). */
+fun iconSwap(): ContentTransform =
+    (scaleIn(Specs.swap(), initialScale = 0.4f) + fadeIn(Specs.appear())) togetherWith
+        (scaleOut(Specs.disappear(), targetScale = 0.4f) + fadeOut(Specs.disappear()))
 
 /**
  * 0 when off, 1 when picked, eased in between, so a pill's colours blend into the
@@ -33,7 +95,7 @@ val LocalReduceMotion = staticCompositionLocalOf { false }
 @Composable
 fun animateSelection(on: Boolean): Float {
     val reduce = LocalReduceMotion.current
-    val p by animateFloatAsState(if (on) 1f else 0f, if (reduce) snap() else tween(220), label = "selection")
+    val p by animateFloatAsState(if (on) 1f else 0f, if (reduce) snap() else Specs.blend(), label = "selection")
     return p
 }
 

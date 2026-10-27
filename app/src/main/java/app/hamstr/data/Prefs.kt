@@ -24,6 +24,8 @@ data class Settings(
     val librarySort: LibrarySort = LibrarySort.Newest,
     val quickStash: Boolean = false, // share -> download immediately, no sheet
     val playlists: Boolean = false,
+    // Bring Hamstr up with the file playing once the last download is in.
+    val openWhenDone: Boolean = false,
     val autoUpdate: Boolean = true,
     val lastUpdateCheck: Long = 0,
     val engine: DownloadEngine = DownloadEngine.Cheek,
@@ -82,6 +84,7 @@ object Prefs {
             librarySort = runCatching { LibrarySort.valueOf(sp.getString("librarySort", null)!!) }.getOrDefault(LibrarySort.Newest),
             quickStash = sp.getBoolean("quickStash", false),
             playlists = sp.getBoolean("playlists", false),
+            openWhenDone = sp.getBoolean("openWhenDone", false),
             autoUpdate = sp.getBoolean("autoUpdate", true),
             lastUpdateCheck = sp.getLong("lastUpdateCheck", 0),
             engine = runCatching { DownloadEngine.valueOf(sp.getString("engine", null)!!) }.getOrDefault(DownloadEngine.Cheek),
@@ -121,6 +124,7 @@ object Prefs {
             .putString("librarySort", s.librarySort.name)
             .putBoolean("quickStash", s.quickStash)
             .putBoolean("playlists", s.playlists)
+            .putBoolean("openWhenDone", s.openWhenDone)
             .putBoolean("autoUpdate", s.autoUpdate)
             .putLong("lastUpdateCheck", s.lastUpdateCheck)
             .putString("engine", s.engine.name)

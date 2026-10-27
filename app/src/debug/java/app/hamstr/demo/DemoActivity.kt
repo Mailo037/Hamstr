@@ -17,6 +17,8 @@ import android.widget.Toast
 import app.hamstr.MainActivity
 import app.hamstr.data.Choice
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.Playlists
+import app.hamstr.data.UserList
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Mode
 import app.hamstr.data.Status
@@ -69,6 +71,7 @@ class DemoActivity : Activity() {
     }
 
     private val backup get() = File(filesDir, "downloads.real.json")
+    private val listsBackup get() = File(filesDir, "playlists.real.json")
     private val media get() = File(getExternalFilesDir(null), "demo")
 
     private suspend fun start(seed: String): String {
@@ -80,6 +83,8 @@ class DemoActivity : Activity() {
         if (!backup.exists()) {
             val live = File(filesDir, "downloads.json")
             if (live.exists()) live.copyTo(backup) else backup.writeText("[]")
+            val lists = File(filesDir, "playlists.json")
+            if (lists.exists()) lists.copyTo(listsBackup, overwrite = true) else listsBackup.writeText("[]")
         }
         media.deleteRecursively()
         media.mkdirs()
@@ -87,6 +92,13 @@ class DemoActivity : Activity() {
         val now = System.currentTimeMillis()
         val tasks = (0 until items.length()).flatMap { i -> tasks(items.getJSONObject(i), i, now) }
         DownloadStore.replace(tasks)
+        // Entries with a "playlist" name go into that list, in seed order. A demo started
+        // before playlists existed has no copy of them, so they stay as they are.
+        val lists = (0 until items.length()).mapNotNull { i -> items.getJSONObject(i).optString("playlist").ifEmpty { null }?.let { it to "demo-$i" } }
+            .filter { (_, id) -> tasks.any { it.id == id } }
+            .groupBy({ it.first }, { it.second })
+            .entries.mapIndexed { i, (name, ids) -> UserList("demo-list-$i", name, ids, now - i) }
+        if (listsBackup.exists()) Playlists.replace(lists)
         // tools/demo_screens.py waits for this before it starts taking pictures.
         File(media, ".ready").writeText(tasks.size.toString())
         return "Demo mode: ${tasks.size} entries"
@@ -96,6 +108,8 @@ class DemoActivity : Activity() {
         if (!backup.exists()) return "Demo mode is off"
         DownloadStore.replace(DownloadStore.decode(backup.readText()))
         backup.delete()
+        if (listsBackup.exists()) Playlists.replace(Playlists.decode(listsBackup.readText()))
+        listsBackup.delete()
         media.deleteRecursively()
         return "Demo mode off, your list is back"
     }

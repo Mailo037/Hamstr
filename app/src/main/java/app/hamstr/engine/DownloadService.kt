@@ -233,7 +233,7 @@ class DownloadService : Service() {
                     sizeBytes = file?.length() ?: 0, videoHeight = height, speed = "", etaSec = -1, finishedAt = System.currentTimeMillis(),
                     title = if (grouped) main?.title ?: it.title else it.title,
                     thumbnail = if (grouped) main?.thumbnail ?: it.thumbnail else it.thumbnail,
-                    group = if (grouped) task.id else null, groupTitle = groupTitle, stage = null, attempts = 0)
+                    group = if (grouped) task.id else it.group, groupTitle = if (grouped) groupTitle else it.groupTitle, stage = null, attempts = 0)
             }
             if (grouped && DownloadStore.get(task.id)?.status == Status.Done) {
                 val base = DownloadStore.get(task.id) ?: task
@@ -250,6 +250,7 @@ class DownloadService : Service() {
                 Engine.clearTemporaryFiles(task)
                 notifyDone(task.id)
                 replaceOld(task.id)
+                openWhenDone(task.id)
             }
         } catch (e: CancellationException) {
             DownloadStore.update(task.id) {
@@ -378,7 +379,7 @@ class DownloadService : Service() {
         if (canNotify()) {
             val n = NotificationCompat.Builder(this, CH_DONE)
                 .setSmallIcon(R.drawable.ic_stat_hamstr)
-                .setColor(0xFFFF9A3C.toInt())
+                .setColor(Prefs.settings.value.accent)
                 .setContentTitle(getString(R.string.notif_timeout_title))
                 .setContentText(getString(R.string.notif_timeout_text))
                 .setStyle(NotificationCompat.BigTextStyle().bigText(getString(R.string.notif_timeout_text)))
@@ -413,7 +414,7 @@ class DownloadService : Service() {
         val queued = tasks.filter { it.status == Status.Queued }
         val b = NotificationCompat.Builder(this, if (Prefs.settings.value.notifications) CH_PROGRESS else CH_QUIET)
             .setSmallIcon(R.drawable.ic_stat_hamstr)
-            .setColor(0xFFFF9A3C.toInt())
+            .setColor(Prefs.settings.value.accent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -450,12 +451,29 @@ class DownloadService : Service() {
         return b.build()
     }
 
+    /**
+     * "Open when done": once the last download is in, Hamstr comes up playing it. From the
+     * background Android only allows that with "Display over other apps"; otherwise it
+     * quietly stays with the notification.
+     */
+    private fun openWhenDone(id: String) {
+        if (!Prefs.settings.value.openWhenDone) return
+        if (!getSystemService(android.os.PowerManager::class.java).isInteractive) return
+        if (DownloadStore.tasks.value.any { it.status.active && it.id != id }) return
+        runCatching {
+            startActivity(
+                Intent(this, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN).putExtra(EXTRA_ID, id)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+        }
+    }
+
     private suspend fun notifyDone(id: String) {
         val t = DownloadStore.get(id) ?: return
         if (!canNotify()) return
         val b = NotificationCompat.Builder(this, CH_DONE)
             .setSmallIcon(R.drawable.ic_stat_hamstr)
-            .setColor(0xFFFF9A3C.toInt())
+            .setColor(Prefs.settings.value.accent)
             .setContentTitle(getString(R.string.notif_done))
             .setContentText(t.title)
             .setAutoCancel(true)
@@ -564,6 +582,24 @@ class DownloadService : Service() {
                     mediaKey = info?.key,
                 ),
             )
+            send(context, ACTION_START)
+        }
+
+        /** Queues the picked videos of a playlist, each its own download, together as one group. */
+        fun stashEntries(context: Context, playlist: MediaInfo, entries: List<PlaylistEntry>, choice: Choice) {
+            if (entries.isEmpty()) return
+            val group = if (entries.size > 1) UUID.randomUUID().toString() else null
+            val now = System.currentTimeMillis()
+            entries.forEachIndexed { i, e ->
+                DownloadStore.add(
+                    DownloadTask(
+                        url = e.url, title = e.title, thumbnail = e.thumbnail, source = playlist.source, durationSec = e.durationSec,
+                        choice = choice, uploader = e.uploader, mediaKey = e.key,
+                        // Kept in playlist order, which is also the order they start in.
+                        createdAt = now + i, group = group, groupTitle = group?.let { playlist.title },
+                    ),
+                )
+            }
             send(context, ACTION_START)
         }
 

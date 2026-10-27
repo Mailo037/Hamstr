@@ -8,11 +8,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -115,6 +110,8 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.lerp
 import app.hamstr.ui.components.animateSelection
+import app.hamstr.ui.components.Specs
+import app.hamstr.ui.components.iconSwap
 
 /** Live player facts the UI draws from. */
 @Stable
@@ -177,11 +174,19 @@ private data class Box4(val x: Float, val y: Float, val w: Float, val h: Float) 
  * The player. One surface morphs between a full-screen view and a floating mini player
  * above the tab bar: swipe the big player up or down to shrink it, tap or swipe the mini
  * player up to bring it back, swipe it sideways to stop. Videos also go fullscreen
- * (landscape) and picture-in-picture when the app is left.
+ * (landscape) and picture-in-picture when the app is left. With [miniWidth] set (the side
+ * bar in landscape) the mini player is a narrower card with its buttons on a second row.
  */
 @Composable
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, onQuality: (DownloadTask) -> Unit) {
+fun PlayerHost(
+    miniBottom: Dp,
+    inPip: Boolean,
+    onMenu: (DownloadTask) -> Unit,
+    onQuality: (DownloadTask) -> Unit,
+    miniStart: Dp = 12.dp,
+    miniWidth: Dp? = null,
+) {
     val task by Playback.current.collectAsState()
     val controller by Playback.controller.collectAsState()
     if (inPip) {
@@ -285,11 +290,15 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
         val top = WindowInsets.statusBars.getTop(density).toFloat()
         val bottomBar = px(miniBottom)
 
-        // Mini player: a 64 dp bar floating above the tab bar.
-        val miniH = px(64.dp)
-        val mini = Box4(px(12.dp), H - bottomBar - miniH - px(8.dp), W - px(24.dp), miniH)
-        val miniMediaW = if (kind == Kind.Video) px(56.dp) * 16f / 9f else px(56.dp)
-        val miniMedia = Box4(mini.x + px(4.dp), mini.y + px(4.dp), miniMediaW, px(56.dp))
+        // Mini player: a 64 dp bar floating above the tab bar, or the foot of the side bar's
+        // panel (progress line, picture and title, then the buttons).
+        val side = miniWidth != null
+        val miniH = px(if (side) 114.dp else 64.dp)
+        val mini = Box4(px(miniStart), H - bottomBar - miniH - px(8.dp), miniWidth?.let { px(it) } ?: (W - px(24.dp)), miniH)
+        val inset = px(if (side) 8.dp else 4.dp)
+        val miniMediaH = px(if (side) 48.dp else 56.dp)
+        val miniMediaW = if (kind == Kind.Video) miniMediaH * 16f / 9f else miniMediaH
+        val miniMedia = Box4(mini.x + inset, mini.y + if (side) px(12.dp) else inset, miniMediaW, miniMediaH)
         // Full view: media under a 56 dp top bar; in landscape it sits left of the info.
         val navBottom = WindowInsets.navigationBars.getBottom(density).toFloat()
         val landscape = W > H
@@ -336,9 +345,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                         style = Hamstr.type.bodyMedium, color = c.muted, modifier = Modifier.weight(1f),
                     )
                     IconButton(R.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
-                    Spacer(Modifier.width(8.dp))
                     IconButton(R.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(activity ?: return@IconButton, t) })
-                    Spacer(Modifier.width(8.dp))
                     IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
                 }
                 // Info + controls under the media (beside it in landscape). They scroll only when
@@ -395,13 +402,13 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                 Modifier
                     .offset { IntOffset((mini.x + dismissX.value).roundToInt(), (mini.y + ev * px(40.dp)).roundToInt()) }
                     .width(with(density) { mini.w.toDp() })
-                    .height(64.dp)
+                    .height(with(density) { mini.h.toDp() })
                     .graphicsLayer {
                         alpha = (1f - ev * 2f).coerceIn(0f, 1f) * (1f - abs(dismissX.value) / W).coerceIn(0f, 1f)
                         rotationZ = dismissX.value / W * 6f
                     }
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(c.raised)
+                    .clip(RoundedCornerShape(if (side) 17.dp else 18.dp))
+                    .background(if (side) Color.Transparent else c.raised)
                     .clickable(remember { MutableInteractionSource() }, null) { Playback.expand() }
                     .pointerInput(Unit) {
                         detectDragGestures(
@@ -412,13 +419,13 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                                     abs(dismissX.value) > W * 0.35f -> {
                                         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                                         scope.launch {
-                                            dismissX.animateTo(if (dismissX.value > 0) W else -W, tween(180))
+                                            dismissX.animateTo(if (dismissX.value > 0) W else -W, Specs.leave(180))
                                             close()
                                         }
                                     }
                                     e.value > 0.2f -> { Playback.expand(); scope.launch { e.animateTo(1f, settle) } }
                                     else -> scope.launch {
-                                        launch { dismissX.animateTo(0f, spring(0.5f, 500f)) }
+                                        launch { dismissX.animateTo(0f, Specs.settle()) }
                                         e.animateTo(0f, settle)
                                     }
                                 }
@@ -433,21 +440,37 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                         }
                     },
             ) {
-                Row(Modifier.fillMaxSize().padding(start = with(density) { (miniMediaW + px(16.dp)).toDp() }, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                val textStart = with(density) { (miniMediaW + inset + px(12.dp)).toDp() }
+                val playable = kind == Kind.Video || kind == Kind.Audio
+                if (side) Column(Modifier.fillMaxSize()) {
+                    // The progress line doubles as the divider between the tabs and the player.
+                    Box(Modifier.padding(horizontal = 8.dp).fillMaxWidth().height(2.dp).clip(CircleShape).background(c.line)) {
+                        if (ui.duration > 0) Box(Modifier.fillMaxWidth(ui.position / ui.duration.toFloat()).fillMaxSize().clip(CircleShape).background(c.accent))
+                    }
+                    Box(Modifier.fillMaxWidth().height(66.dp).padding(start = textStart, end = 10.dp, top = 8.dp), contentAlignment = Alignment.CenterStart) {
+                        Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2)
+                    }
+                    Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(R.drawable.ic_close, stringResource(R.string.player_close), { close() }, tint = c.muted, background = Color.Transparent)
+                        if (playable) PlayPause(ui.isPlaying, size = 44.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
+                        IconButton(
+                            R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() },
+                            tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent,
+                        )
+                    }
+                } else Row(Modifier.fillMaxSize().padding(start = textStart, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
                         Spacer(Modifier.height(2.dp))
                         Txt(if (ui.duration > 0) "${fmt(ui.position)} / ${fmt(ui.duration)}" else t.source ?: "", style = Hamstr.type.mono, color = c.ghost, maxLines = 1)
                     }
-                    if (kind == Kind.Video || kind == Kind.Audio) {
-                        PlayPause(ui.isPlaying, size = 40.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
-                    }
+                    if (playable) PlayPause(ui.isPlaying, size = 40.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
                     if (ui.hasNext) IconButton(R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() }, background = Color.Transparent)
                     IconButton(R.drawable.ic_close, stringResource(R.string.player_close), { close() }, background = Color.Transparent)
                 }
                 // Concentric with the bar's 18 dp corners (the media sits 4 dp in, at 14 dp);
                 // the progress line stays on the straight part of the bottom edge.
-                if (ui.duration > 0) {
+                if (!side && ui.duration > 0) {
                     Box(
                         Modifier.align(Alignment.BottomStart).padding(horizontal = 18.dp)
                             .fillMaxWidth(ui.position / ui.duration.toFloat()).height(2.dp).clip(CircleShape).background(c.accent),
@@ -766,10 +789,7 @@ fun PlayPause(playing: Boolean, size: Dp, onClick: () -> Unit) {
     ) {
         AnimatedContent(
             targetState = playing,
-            transitionSpec = {
-                (scaleIn(spring(dampingRatio = 0.5f, stiffness = 600f), initialScale = 0.4f) + fadeIn(tween(140))) togetherWith
-                    (scaleOut(tween(140), targetScale = 0.4f) + fadeOut(tween(110)))
-            },
+            transitionSpec = { iconSwap() },
             label = "playPause",
         ) { p -> Icon(if (p) R.drawable.ic_pause else R.drawable.ic_play_arrow, tint = c.onAccent, size = size * 0.45f) }
     }
