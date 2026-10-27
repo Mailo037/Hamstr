@@ -16,6 +16,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -43,6 +47,8 @@ fun mimeOf(file: File): String = when (val ext = file.extension.lowercase()) {
 
 /** The in-app player's state: what is loaded and whether it is shown big or as the mini player. */
 object Playback {
+    private val connectionMutex = Mutex()
+    private var openGeneration = 0L
     private val _current = MutableStateFlow<DownloadTask?>(null)
     val current: StateFlow<DownloadTask?> = _current.asStateFlow()
     private val _expanded = MutableStateFlow(false)
@@ -50,8 +56,8 @@ object Playback {
     private val _controller = MutableStateFlow<MediaController?>(null)
     val controller: StateFlow<MediaController?> = _controller.asStateFlow()
 
-    private suspend fun connect(context: Context): MediaController {
-        _controller.value?.takeIf { it.isConnected }?.let { return it }
+    private suspend fun connect(context: Context): MediaController = connectionMutex.withLock {
+        _controller.value?.takeIf { it.isConnected }?.let { return@withLock it }
         val app = context.applicationContext
         val token = SessionToken(app, ComponentName(app, PlaybackService::class.java))
         val future = MediaController.Builder(app, token).buildAsync()
@@ -62,20 +68,27 @@ object Playback {
             cont.invokeOnCancellation { MediaController.releaseFuture(future) }
         }
         _controller.value = controller
-        return controller
+        controller
     }
 
     /** Opens a stashed file in the player (video and audio) or the viewer (images, others). */
-    suspend fun open(context: Context, task: DownloadTask) {
-        val file = task.filePath?.let(::File) ?: return
+    suspend fun open(context: Context, task: DownloadTask) = withContext(Dispatchers.Main.immediate) {
+        val request = ++openGeneration
+        val file = task.filePath?.let(::File)?.takeIf { it.isFile } ?: return@withContext
         _current.value = task
         _expanded.value = true
         val kind = kindOf(file)
         if (kind != Kind.Video && kind != Kind.Audio) {
             _controller.value?.pause()
-            return
+            return@withContext
         }
         val c = connect(context)
+        // A close/delete or another selection can happen while the controller connects.
+        if (request != openGeneration || _current.value?.id != task.id) return@withContext
+        if (!file.isFile) {
+            close()
+            return@withContext
+        }
         val item = MediaItem.Builder()
             .setMediaId(task.id)
             .setUri(Uri.fromFile(file))
@@ -99,9 +112,18 @@ object Playback {
     fun minimize() { if (_current.value != null) _expanded.value = false }
 
     fun close() {
-        _controller.value?.run { stop(); clearMediaItems() }
+        openGeneration++
         _current.value = null
         _expanded.value = false
+        _controller.value?.takeIf { it.isConnected }?.run { pause(); stop(); clearMediaItems() }
+    }
+
+    /** Different history entries can point at the same downloaded file. */
+    fun closeIfCurrent(task: DownloadTask) {
+        val current = _current.value ?: return
+        val sameFile = current.filePath != null && task.filePath != null &&
+            File(current.filePath).absoluteFile.normalize() == File(task.filePath).absoluteFile.normalize()
+        if (current.id == task.id || sameFile) close()
     }
 
     // ---- leaving the app with the file ------------------------------------------------

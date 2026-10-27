@@ -82,7 +82,7 @@ fun ShareSheet(
     val c = Hamstr.colors
     val context = LocalContext.current
     val defaults = remember { Prefs.settings.value }
-    var state by remember { mutableStateOf<InfoState>(InfoState.Loading) }
+    var state by remember(url) { mutableStateOf<InfoState>(InfoState.Loading) }
     var mode by remember { mutableStateOf(defaults.mode) }
     var height by remember { mutableStateOf(defaults.height) }
     var container by remember { mutableStateOf(defaults.container) }
@@ -102,14 +102,17 @@ fun ShareSheet(
     val bitmap: Bitmap? = rememberBitmap(info?.thumbnail)
 
     // rain 1 -> 0 once the thumbnail is in, then the image wipes in from the top.
-    val rain = remember { Animatable(1f) }
-    val reveal = remember { Animatable(0f) }
+    val rain = remember(url) { Animatable(1f) }
+    val reveal = remember(url) { Animatable(0f) }
     LaunchedEffect(bitmap, state) {
-        if (bitmap != null) {
+        if (state is InfoState.Failed) {
+            rain.snapTo(0.5f)
+            reveal.snapTo(0f)
+        } else if (bitmap != null) {
             delay(250)
             rain.animateTo(0f, tween(600))
             reveal.animateTo(1f, tween(900))
-        } else if (state is InfoState.Failed || (state is InfoState.Loaded && info?.thumbnail == null)) {
+        } else if (state is InfoState.Loaded && info?.thumbnail == null) {
             rain.animateTo(0.5f, tween(400))
         }
     }
@@ -130,7 +133,7 @@ fun ShareSheet(
             bitmap = bitmap,
             reveal = reveal.value,
             rain = rain.value,
-            animate = rain.value > 0f,
+            animate = rain.value > 0f && (state is InfoState.Loading || (state is InfoState.Loaded && bitmap != null)),
             modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)),
         )
         Spacer(Modifier.height(10.dp))

@@ -67,6 +67,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.DownloadFiles
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalConfiguration
 import app.hamstr.data.Prefs
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Status
@@ -275,7 +280,7 @@ private fun App(inPip: Boolean) {
             }
         }
         TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
-        if (!inPip) PlayerHost(miniBottom = bottom + 78.dp, inPip = false)
+        if (!inPip) PlayerHost(miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it })
 
         AnimatedVisibility(hint != null, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp)) {
             Box(Modifier.clip(RoundedCornerShape(14.dp)).background(c.raised).padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -318,7 +323,13 @@ private fun App(inPip: Boolean) {
             }
         }
         Overlay(visible = menuFor != null, onDismiss = { menuFor = null }) {
-            menuFor?.let { t -> TaskMenu(t, onPlay = play, onClose = { menuFor = null }) }
+            menuFor?.let { t -> TaskMenu(t, onPlay = play, onClose = { menuFor = null }, onDelete = { selected ->
+                scope.launch {
+                    val result = DownloadFiles.delete(context, selected)
+                    hint = result.fold({ "File deleted" }, { it.message ?: "Couldn't delete the file" })
+                }
+                menuFor = null
+            }) }
         }
         Overlay(visible = updateSheet, onDismiss = { updateSheet = false }) {
             UpdateSheet(
@@ -329,12 +340,12 @@ private fun App(inPip: Boolean) {
         if (!introDone) Intro(onDone = { introDone = true })
         // Always cover the entire app in PiP, even if playback stops during the transition.
         // Keep the normal UI composed underneath so tabs and scroll positions survive.
-        if (inPip) PlayerHost(miniBottom = 0.dp, inPip = true)
+        if (inPip) PlayerHost(miniBottom = 0.dp, inPip = true, onMenu = { menuFor = it })
     }
 }
 
 @Composable
-private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit) {
+private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit, onDelete: (DownloadTask) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     // The menu stays open while the download moves on, so it follows the live task.
@@ -347,6 +358,8 @@ private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(c.overlay)
             .clickable(enabled = false) {}
+            .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.9f)
+            .verticalScroll(rememberScrollState())
             .navigationBarsPadding()
             .padding(12.dp),
     ) {
@@ -368,6 +381,7 @@ private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose
             ) { onPlay(t); onClose() }
             MenuRow(R.drawable.ic_open_in_new, "Open with…") { Playback.openWith(context, t); onClose() }
             MenuRow(R.drawable.ic_share, "Share file") { Playback.shareFile(context, t); onClose() }
+            MenuRow(R.drawable.ic_delete, "Delete file", danger = true) { onDelete(t) }
         }
         MenuRow(R.drawable.ic_link, "Copy link") {
             context.getSystemService(ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("Link", t.url))
@@ -380,14 +394,6 @@ private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose
             MenuRow(R.drawable.ic_close, "Cancel") { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
         } else {
             MenuRow(R.drawable.ic_close, "Remove from list") { DownloadStore.remove(t.id); onClose() }
-        }
-        if (file != null) {
-            MenuRow(R.drawable.ic_delete, "Delete file", danger = true) {
-                file.delete()
-                android.media.MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null, null)
-                DownloadStore.remove(t.id)
-                onClose()
-            }
         }
     }
 }

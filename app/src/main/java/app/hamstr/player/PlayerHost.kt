@@ -151,7 +151,7 @@ private data class Box4(val x: Float, val y: Float, val w: Float, val h: Float) 
  */
 @Composable
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
+fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit) {
     val task by Playback.current.collectAsState()
     val controller by Playback.controller.collectAsState()
     if (inPip) {
@@ -284,6 +284,8 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
                     IconButton(R.drawable.ic_open_in_new, "Open with", { Playback.openWith(activity ?: return@IconButton, t) })
                     Spacer(Modifier.width(8.dp))
                     IconButton(R.drawable.ic_share, "Share file", { Playback.shareFile(activity ?: return@IconButton, t) })
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(R.drawable.ic_more_vert, "More options", { onMenu(t) })
                 }
                 // Info + controls under the media
                 Column(
@@ -394,7 +396,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
                 .background(if (kind == Kind.Video) Color.Black else c.black),
         ) {
             when (kind) {
-                Kind.Video -> VideoSurface(controller, ui, expanded = ev > 0.98f, fullscreen = fullscreen, onExitFullscreen = { fullscreen = false }, onTapMini = { Playback.expand() })
+                Kind.Video -> VideoSurface(controller, ui, expanded = ev > 0.98f, fullscreen = fullscreen, onExitFullscreen = { fullscreen = false }, onTapMini = { Playback.expand() }, onMenu = { fullscreen = false; onMenu(t) })
                 Kind.Audio -> Cover(t, ev)
                 Kind.Image -> ImageView(file, zoomable = ev > 0.98f)
                 Kind.Other -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -410,7 +412,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean) {
 
 @Composable
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private fun VideoSurface(controller: Player?, ui: PlayerUi, expanded: Boolean, fullscreen: Boolean, onExitFullscreen: () -> Unit, onTapMini: () -> Unit) {
+private fun VideoSurface(controller: Player?, ui: PlayerUi, expanded: Boolean, fullscreen: Boolean, onExitFullscreen: () -> Unit, onTapMini: () -> Unit, onMenu: () -> Unit) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     var seekLabel by remember { mutableStateOf<String?>(null) }
@@ -445,7 +447,10 @@ private fun VideoSurface(controller: Player?, ui: PlayerUi, expanded: Boolean, f
         if (fullscreen && controller != null) {
             val a by animateFloatAsState(if (overlay) 1f else 0f, tween(200), label = "overlay")
             if (a > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = a }.background(Color.Black.copy(alpha = 0.35f))) {
-                IconButton(R.drawable.ic_fullscreen_exit, "Exit fullscreen", onExitFullscreen, Modifier.align(Alignment.TopEnd).padding(20.dp), tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
+                Row(Modifier.align(Alignment.TopEnd).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconButton(R.drawable.ic_more_vert, "More options", onMenu, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
+                    IconButton(R.drawable.ic_fullscreen_exit, "Exit fullscreen", onExitFullscreen, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
+                }
                 Box(Modifier.align(Alignment.Center)) { PlayPause(ui.isPlaying, size = 64.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() }) }
                 Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 22.dp)) {
                     Scrubber(controller, ui)

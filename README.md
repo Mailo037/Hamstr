@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Mailo037/Hamstr?style=flat-square&color=AAAAAA&labelColor=1E1E1E" alt="GPL-3.0"></a>
 </p>
 
-**Hamstr** stashes videos and music the way a hamster stashes food: share a link from any app, and the file lands on your phone. [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [FFmpeg](https://ffmpeg.org) run right on the device, so there is no server in between, no account and no tracking. It works like [Seal](https://github.com/JunkFood02/Seal) or [YTDLnis](https://github.com/deniscerri/ytdlnis), but has a design of its own instead of Material.
+**Hamstr** stashes videos and music the way a hamster stashes food: share a link from any app, and the file lands on your phone. [Cheek](https://github.com/Mailo037/cheek) is the default download engine, with [yt-dlp](https://github.com/yt-dlp/yt-dlp) resolving media links and [FFmpeg](https://ffmpeg.org) handling merging and conversion. All three run right on the device, so there is no server in between, no account and no tracking. It works like [Seal](https://github.com/JunkFood02/Seal) or [YTDLnis](https://github.com/deniscerri/ytdlnis), but has a design of its own instead of Material.
 
 <p align="center">
   <img src="docs/images/screens.png" alt="Stash, share sheet, player, library and settings" width="100%">
@@ -21,6 +21,7 @@
 - Share from YouTube, Instagram, TikTok, SoundCloud, Reddit, X, Twitch and the [1,800+ other sites yt-dlp knows](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 - Choose video (up to 4K; mp4, mkv or webm), audio (opus, m4a or mp3) or your own yt-dlp format string. Subtitles and whole playlists are optional.
 - Downloads run in a queue with progress notifications. You can pause, resume and retry them, and run up to three at once.
+- Cheek fetches supported files and HLS/DASH fragments over parallel connections. Settings › Engine lets you switch to yt-dlp.
 - Files go to `Download/Hamstr` and show up in every gallery and music app.
 - With *Instant stash* on, sharing starts the download straight away, without the sheet.
 
@@ -40,6 +41,7 @@
 **Updates**
 - Hamstr checks this repository's releases and installs new versions in place, without a browser detour (Settings › About).
 - yt-dlp updates itself once a day, so sites keep working between app releases.
+- Cheek is bundled with Hamstr and updated through app releases. Its installed version is shown in Settings › Engine.
 
 ## Install
 
@@ -59,7 +61,7 @@ Android asks once whether your browser may install apps. Later updates come thro
 ```
  share link ──► ShareActivity ──► share sheet ──► DownloadService (foreground, queue)
                                        │                    │
-                       yt-dlp metadata             yt-dlp + ffmpeg (on device)
+                       yt-dlp metadata             Cheek + ffmpeg (on device)
                        (title, thumbnail, size)             │
                                                    Download/Hamstr + MediaStore
                                                             │
@@ -68,7 +70,9 @@ Android asks once whether your browser may install apps. Later updates come thro
  Settings › About ──► GitHub Releases API ──► APK for this ABI ──► PackageInstaller
 ```
 
-- `engine/`: yt-dlp and FFmpeg through [youtubedl-android](https://github.com/JunkFood02/youtubedl-android), the download queue and its notifications.
+yt-dlp resolves links and selects the streams; Cheek downloads them by default. Playlists, subtitles, custom formats and unsupported download protocols fall back to yt-dlp. FFmpeg merges streams and converts audio when needed.
+
+- `engine/`: the Cheek bridge, yt-dlp and FFmpeg through [youtubedl-android](https://github.com/JunkFood02/youtubedl-android), the download queue and its notifications.
 - `player/`: a Media3 ExoPlayer behind a `MediaSession`, plus the mini player, picture-in-picture and fullscreen.
 - `update/`: the self-updater, built on GitHub Releases and `PackageInstaller` sessions.
 - `ui/`: Compose Foundation only, no Material components. The tokens live in `ui/theme`, the motion helpers in `ui/components`.
@@ -103,6 +107,7 @@ The key comes from four repository secrets: `HAMSTR_KEYSTORE_B64`, `HAMSTR_KEYST
 Hamstr is licensed under the [GPL-3.0](LICENSE), like youtubedl-android, which it builds on. Bundled third-party work:
 
 - yt-dlp ([Unlicense](https://github.com/yt-dlp/yt-dlp/blob/master/LICENSE))
+- Cheek ([Unlicense](https://github.com/Mailo037/cheek/blob/main/LICENSE))
 - youtubedl-android ([GPL-3.0](https://github.com/JunkFood02/youtubedl-android/blob/master/LICENSE))
 - FFmpeg (LGPL/GPL)
 - Inter and JetBrains Mono ([OFL-1.1](licenses/))

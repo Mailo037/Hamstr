@@ -116,6 +116,15 @@ object DownloadStore {
         save()
     }
 
+    /** Deleting a physical file also removes duplicate entries that reference it. */
+    fun removeFile(file: File) {
+        val path = file.absoluteFile.normalize()
+        _tasks.update { list -> list.filterNot { task ->
+            task.filePath?.let { File(it).absoluteFile.normalize() == path } == true
+        } }
+        save()
+    }
+
     private fun save() {
         if (!::file.isInitialized) return
         saves.trySend(Unit)
