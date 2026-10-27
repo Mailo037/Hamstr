@@ -8,7 +8,7 @@ plugins {
 }
 
 // Releases are cut from tags: CI passes v1.2.3 in as -Phamstr.version=1.2.3.
-val appVersion = providers.gradleProperty("hamstr.version").getOrElse("0.2.2")
+val appVersion = providers.gradleProperty("hamstr.version").getOrElse("0.3.0")
 val (major, minor, patch) = appVersion.substringBefore('-').split('.').map(String::toInt)
 
 // The release key lives outside git: signing/keystore.properties next to the .jks, written
