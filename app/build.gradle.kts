@@ -114,7 +114,14 @@ android {
 
     // youtubedl-android runs bundled executables (python, ffmpeg) straight from the
     // native library dir, so they must be extracted at install time.
-    packaging { jniLibs { useLegacyPackaging = true } }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            // Cheek's release executables are already stripped. Keep their published
+            // bytes intact so the embedded binaries match the verified release hashes.
+            keepDebugSymbols += "**/libcheek.so"
+        }
+    }
 }
 
 dependencies {
