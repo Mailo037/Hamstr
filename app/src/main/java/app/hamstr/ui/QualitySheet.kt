@@ -48,6 +48,7 @@ import app.hamstr.player.Kind
 import app.hamstr.player.Playback
 import app.hamstr.player.kindOf
 import app.hamstr.ui.components.Badge
+import app.hamstr.ui.components.sheetScroll
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
@@ -134,6 +135,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
             .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
             .background(c.overlay)
             .clickable(enabled = false) {}
+            .sheetScroll()
             .navigationBarsPadding()
             .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp)
             .animateContentSize(tween(220)),

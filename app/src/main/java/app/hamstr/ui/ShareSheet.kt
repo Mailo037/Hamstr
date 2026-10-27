@@ -2,6 +2,7 @@ package app.hamstr.ui
 
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
+import app.hamstr.ui.components.sheetScroll
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -208,6 +209,7 @@ fun ShareSheet(
             .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
             .background(c.overlay)
             .clickable(enabled = false) {}
+            .sheetScroll()
             .navigationBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 16.dp)
             .animateContentSize(tween(220)),

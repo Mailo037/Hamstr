@@ -169,6 +169,7 @@
     <string name="info_tag_date">Date</string>
     <string name="info_tag_genre">Genre</string>
     <string name="info_tracks">Tracks</string>
+    <string name="info_open_link">Open link</string>
     <string name="rename_done">Renamed</string>
     <string name="rename_failed">Couldn\'t rename the file</string>
     <string name="menu_copy_link">Copy link</string>

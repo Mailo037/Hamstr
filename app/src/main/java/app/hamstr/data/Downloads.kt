@@ -119,8 +119,7 @@ object DownloadStore {
         if (::file.isInitialized) return
         file = File(context.filesDir, "downloads.json")
         val atomic = AtomicFile(file)
-        val loaded = runCatching { JSONArray(atomic.openRead().bufferedReader().use { it.readText() }).let { a -> List(a.length()) { fromJson(a.getJSONObject(it)) } } }
-            .getOrDefault(emptyList())
+        val loaded = runCatching { decode(atomic.openRead().bufferedReader().use { it.readText() }) }.getOrDefault(emptyList())
         // A process death interrupts running work; it resumes as queued (yt-dlp continues .part files).
         _tasks.value = loaded.map { if (it.status == Status.Running) it.copy(status = Status.Queued, speed = "", etaSec = -1) else it }
         scope.launch {
@@ -202,6 +201,15 @@ object DownloadStore {
         } }
         save()
     }
+
+    /** Swaps the whole list at once; the debug build's demo mode uses it to stage and restore data. */
+    fun replace(tasks: List<DownloadTask>) {
+        _tasks.value = tasks
+        save()
+    }
+
+    /** The saved list, as read from downloads.json or a copy of it. */
+    internal fun decode(text: String): List<DownloadTask> = JSONArray(text).let { a -> List(a.length()) { fromJson(a.getJSONObject(it)) } }
 
     private fun save() {
         if (!::file.isInitialized) return

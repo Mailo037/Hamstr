@@ -247,6 +247,9 @@ object Engine {
 
     fun cachedInfo(url: String): MediaInfo? = infos.get(url)?.info ?: previews.get(url)?.info
 
+    /** Puts a finished look-up in place, as if [MediaInfo.url] had just been resolved. The debug build's demo mode uses it. */
+    fun remember(info: MediaInfo) = infos.put(info.url, InfoSnapshot(info, reusable = true))
+
     suspend fun info(url: String): MediaInfo = infos.getOrLoad(url) {
         preview(url).let { InfoSnapshot(it.info, it.reusable) }
     }.info

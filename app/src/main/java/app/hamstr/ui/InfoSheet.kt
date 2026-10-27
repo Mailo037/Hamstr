@@ -2,6 +2,7 @@ package app.hamstr.ui
 
 import android.media.MediaMetadataRetriever
 import android.text.format.DateUtils
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.data.DownloadTask
+import app.hamstr.ui.components.IconButton
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.edgeFade
 import app.hamstr.ui.theme.Hamstr
@@ -41,12 +44,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** A button at the end of an info line that acts on it, such as renaming from the title. */
+class InfoAction(@DrawableRes val icon: Int, @StringRes val label: Int, val onClick: () -> Unit)
+
 /**
  * Everything known about a stashed file: what Hamstr saved when it was downloaded, and
- * what the file itself says (resolution, bitrate, embedded tags). Tap a line to copy it.
+ * what the file itself says (resolution, bitrate, embedded tags). Tap a line to copy it;
+ * lines in [actions] also get a button that changes or opens what they show.
  */
 @Composable
-fun InfoSheet(task: DownloadTask, onCopy: (String) -> Unit) {
+fun InfoSheet(task: DownloadTask, onCopy: (String) -> Unit, actions: Map<Int, InfoAction> = emptyMap()) {
     val c = Hamstr.colors
     val context = LocalContext.current
     val file = task.filePath?.let(::File)?.takeIf { it.isFile }
@@ -88,27 +95,31 @@ fun InfoSheet(task: DownloadTask, onCopy: (String) -> Unit) {
             Modifier.heightIn(max = 520.dp).edgeFade(scroll, Orientation.Vertical, length = 22.dp).verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            (saved + fromFile).forEach { (label, value) -> InfoRow(label, value) { onCopy(value) } }
+            (saved + fromFile).forEach { (label, value) -> InfoRow(label, value, actions[label]) { onCopy(value) } }
         }
         Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
-private fun InfoRow(@StringRes label: Int, value: String, onClick: () -> Unit) {
+private fun InfoRow(@StringRes label: Int, value: String, action: InfoAction?, onClick: () -> Unit) {
     val c = Hamstr.colors
-    Column(
+    Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Radii.row))
             // Each line on its own card, so neighbouring values don't run together.
             .background(c.surface)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(start = 14.dp, end = if (action != null) 2.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Txt(stringResource(label), style = Hamstr.type.badge, color = c.ghost)
-        Spacer(Modifier.height(2.dp))
-        Txt(value, style = Hamstr.type.mono, color = c.ink)
+        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+            Txt(stringResource(label), style = Hamstr.type.badge, color = c.ghost)
+            Spacer(Modifier.height(2.dp))
+            Txt(value, style = Hamstr.type.mono, color = c.ink)
+        }
+        if (action != null) IconButton(action.icon, stringResource(action.label), action.onClick, background = c.overlay, size = 34.dp)
     }
 }
 

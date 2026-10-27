@@ -5,6 +5,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -73,4 +78,18 @@ fun Modifier.edgeFade(
                 band(end, extent, 1f - forward, 1f - forward)
             }
         }
+}
+
+/**
+ * A bottom sheet's body: at most [maxFraction] of the screen tall, scrolling with faded
+ * edges when it doesn't fit (landscape, large text). Scrolling only switches on when the
+ * content overflows, so a drag on a sheet that fits still pulls the sheet down.
+ * Goes after the sheet's background, so only the content fades.
+ */
+@Composable
+fun Modifier.sheetScroll(maxFraction: Float = 0.9f): Modifier {
+    val state = rememberScrollState()
+    return heightIn(max = LocalConfiguration.current.screenHeightDp.dp * maxFraction)
+        .edgeFade(state, Orientation.Vertical, length = 22.dp)
+        .verticalScroll(state, enabled = state.maxValue in 1 until Int.MAX_VALUE)
 }

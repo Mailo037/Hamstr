@@ -3,6 +3,7 @@ package app.hamstr.ui
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
+import app.hamstr.ui.components.sheetScroll
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -98,6 +99,7 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(c.overlay)
             .clickable(enabled = false) {}
+            .sheetScroll()
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {

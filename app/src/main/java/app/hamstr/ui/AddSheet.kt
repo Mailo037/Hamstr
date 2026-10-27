@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.ui.components.Badge
+import app.hamstr.ui.components.sheetScroll
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.HamstrMark
@@ -65,6 +66,7 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
             .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
             .background(c.overlay)
             .clickable(enabled = false) {}
+            .sheetScroll()
             .navigationBarsPadding()
             .imePadding()
             .padding(horizontal = 16.dp, vertical = 12.dp),

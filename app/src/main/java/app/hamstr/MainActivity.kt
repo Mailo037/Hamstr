@@ -9,6 +9,7 @@ import app.hamstr.ui.AddSheet
 import android.Manifest
 import android.content.ClipboardManager
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -109,6 +110,7 @@ import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.QualitySheet
 import app.hamstr.ui.RenameSheet
 import app.hamstr.ui.InfoSheet
+import app.hamstr.ui.InfoAction
 import app.hamstr.ui.formatBytes
 import app.hamstr.ui.formatBadge
 import app.hamstr.ui.rememberBitmap
@@ -133,8 +135,7 @@ import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.RasterBackground
 import app.hamstr.ui.components.Txt
-import app.hamstr.ui.components.edgeFade
-import androidx.compose.foundation.gestures.Orientation
+import app.hamstr.ui.components.sheetScroll
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.LocalFx
 import app.hamstr.ui.theme.HamstrTheme
@@ -480,7 +481,22 @@ private fun App(inPip: Boolean) {
             }
         }
         Overlay(visible = infoFor != null, onDismiss = { infoFor = null }) {
-            infoFor?.let { t -> InfoSheet(t, onCopy = { copy(context, it); hint(context.getString(R.string.info_copied)) }) }
+            infoFor?.let { t ->
+                val present = t.filePath?.let(::File)?.isFile == true
+                InfoSheet(
+                    t,
+                    onCopy = { copy(context, it); hint(context.getString(R.string.info_copied)) },
+                    // The same changes the file menu offers, right where the value is shown.
+                    actions = buildMap {
+                        if (present) put(R.string.info_name, InfoAction(R.drawable.ic_edit, R.string.menu_rename) { infoFor = null; renameFor = t })
+                        if (present && canHaveVersions(t)) put(R.string.info_quality, InfoAction(R.drawable.ic_movie, R.string.menu_quality) { infoFor = null; qualityFor = t })
+                        if (t.url.startsWith("http")) put(R.string.info_link, InfoAction(R.drawable.ic_open_in_new, R.string.info_open_link) {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(t.url))) }
+                        })
+                        if (present) put(R.string.info_file, InfoAction(R.drawable.ic_open_in_new, R.string.menu_open_with) { Playback.openWith(context, t) })
+                    },
+                )
+            }
         }
         Overlay(visible = qualityFor != null, onDismiss = { qualityFor = null }) {
             qualityFor?.let { t ->
@@ -533,17 +549,13 @@ private fun TaskMenu(
     val t = tasks.firstOrNull { it.id == task.id } ?: task
     val file = t.filePath?.let(::File)?.takeIf { it.exists() }
     var updating by remember { mutableStateOf(false) }
-    val scroll = rememberScrollState()
     Column(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(c.overlay)
             .clickable(enabled = false) {}
-            .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.9f)
-            // After the background, so only the menu's content fades and the sheet stays solid.
-            .edgeFade(scroll, Orientation.Vertical, length = 22.dp)
-            .verticalScroll(scroll)
+            .sheetScroll()
             .navigationBarsPadding()
             .padding(12.dp),
     ) {

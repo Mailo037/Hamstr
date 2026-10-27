@@ -15,8 +15,8 @@ VERSION = "0.4.0"
 FEATURES = [
     ("FILE INFO", "Every detail of a file, one tap to copy"),
     ("CINEBY LINKS", "Resolved on the phone in Android's WebView"),
+    ("SIDEWAYS VIDEO", "Full screen with controls on top, screen stays on"),
     ("YOUTUBE RETRIES", "Other guest clients when YouTube refuses one"),
-    ("CLEAN STOPS", "Pause and cancel end FFmpeg too"),
 ]
 SHOTS = [("menu.png", "File menu"), ("info.png", "File info"), ("library.png", "Library")]
 

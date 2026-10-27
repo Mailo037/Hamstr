@@ -38,6 +38,7 @@ import app.hamstr.R
 import app.hamstr.data.DownloadFiles
 import app.hamstr.data.DownloadTask
 import app.hamstr.ui.components.ButtonKind
+import app.hamstr.ui.components.sheetScroll
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.IconButton
@@ -64,6 +65,7 @@ fun RenameSheet(task: DownloadTask, onRename: (String) -> Unit) {
             .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
             .background(c.overlay)
             .clickable(enabled = false) {}
+            .sheetScroll()
             .navigationBarsPadding()
             .imePadding()
             .padding(horizontal = 16.dp, vertical = 12.dp),

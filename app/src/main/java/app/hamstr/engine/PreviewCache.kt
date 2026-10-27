@@ -27,6 +27,12 @@ internal class PreviewCache<T>(
 
     fun invalidate(key: String) = synchronized(lock) { entries.remove(key); Unit }
 
+    /** Stores a result that didn't come from [getOrLoad], as if it had just been loaded. */
+    fun put(key: String, value: T) = synchronized(lock) {
+        entries[key] = Entry(value, now() + ttlMillis, weightOf(value))
+        prune()
+    }
+
     suspend fun getOrLoad(key: String, load: suspend () -> T): T {
         val deferred = synchronized(lock) {
             prune()

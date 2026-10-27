@@ -33,6 +33,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.graphics.Brush
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.Orientation
+import app.hamstr.ui.components.edgeFade
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -203,24 +213,35 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
         dismissX.snapTo(0f)
         if (!dragging) e.animateTo(if (expandedTarget) 1f else 0f, settle)
     }
-    // Fullscreen = landscape without system bars; leaving it restores both.
+    // A playing video keeps the screen awake, in the app as in picture-in-picture.
+    val view = LocalView.current
+    DisposableEffect(view, kind, ui.isPlaying) {
+        view.keepScreenOn = kind == Kind.Video && ui.isPlaying
+        onDispose { view.keepScreenOn = false }
+    }
+    // Fullscreen turns the phone: upright videos (Shorts, Reels, TikTok) stay upright,
+    // wide ones go sideways. Leaving it lets the sensor decide again.
     DisposableEffect(fullscreen) {
+        activity?.requestedOrientation = when {
+            !fullscreen -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            ui.aspect < 0.9f -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            ui.aspect > 1.1f -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        onDispose { }
+    }
+    // A video open on a sideways phone fills the screen the same way, with its controls
+    // laid over it. Either way the system bars step aside until it ends.
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val immersive = fullscreen || (landscape && kind == Kind.Video && expandedTarget)
+    DisposableEffect(immersive) {
         val window = activity?.window
-        if (activity != null && window != null) {
+        if (window != null) {
             val ctl = WindowCompat.getInsetsController(window, window.decorView)
-            if (fullscreen) {
-                // Upright videos (Shorts, Reels, TikTok) stay upright; wide ones turn sideways.
-                activity.requestedOrientation = when {
-                    ui.aspect < 0.9f -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                    ui.aspect > 1.1f -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                    else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                }
+            if (immersive) {
                 ctl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 ctl.hide(WindowInsetsCompat.Type.systemBars())
-            } else {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                ctl.show(WindowInsetsCompat.Type.systemBars())
-            }
+            } else ctl.show(WindowInsetsCompat.Type.systemBars())
         }
         onDispose { }
     }
@@ -256,7 +277,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
     }
 
     // Only the expanded player claims the whole screen; the mini player leaves the list usable.
-    val expandedNow = e.value > 0.001f && !fullscreen
+    val expandedNow = e.value > 0.001f && !immersive
     BoxWithConstraints(Modifier.fillMaxSize().then(if (expandedNow) shrinkDrag else Modifier)) {
         val W = constraints.maxWidth.toFloat()
         val H = constraints.maxHeight.toFloat()
@@ -269,9 +290,16 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
         val mini = Box4(px(12.dp), H - bottomBar - miniH - px(8.dp), W - px(24.dp), miniH)
         val miniMediaW = if (kind == Kind.Video) px(56.dp) * 16f / 9f else px(56.dp)
         val miniMedia = Box4(mini.x + px(4.dp), mini.y + px(4.dp), miniMediaW, px(56.dp))
-        // Full view: media under a 56 dp top bar.
+        // Full view: media under a 56 dp top bar; in landscape it sits left of the info.
+        val navBottom = WindowInsets.navigationBars.getBottom(density).toFloat()
+        val landscape = W > H
         val fullMedia = when {
-            fullscreen -> Box4(0f, 0f, W, H)
+            immersive -> Box4(0f, 0f, W, H)
+            landscape -> {
+                val aspect = when (kind) { Kind.Video -> ui.aspect; Kind.Image -> 16f / 9f; else -> 1f }
+                val w = min(W * 0.55f, (H - top - px(56.dp) - navBottom - px(16.dp)) * aspect)
+                Box4(px(20.dp), top + px(56.dp), w, w / aspect)
+            }
             // Upright videos get more of the screen; the controls still fit below.
             kind == Kind.Video -> Box4(0f, top + px(56.dp), W, min(W / ui.aspect, H * if (ui.aspect < 0.9f) 0.6f else 0.55f))
             kind == Kind.Image -> Box4(0f, top + px(56.dp), W, H - top - px(56.dp) - WindowInsets.navigationBars.getBottom(density) - px(150.dp))
@@ -287,10 +315,10 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = ev }
-                    .background(if (fullscreen) Color.Black else c.canvas)
+                    .background(if (immersive) Color.Black else c.canvas)
                     .pointerInput(Unit) { detectTapGestures { } }, // keep taps off the list below
             )
-            if (!fullscreen) {
+            if (!immersive) {
                 // Top bar
                 Row(
                     Modifier
@@ -313,12 +341,19 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                     Spacer(Modifier.width(8.dp))
                     IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
                 }
-                // Info + controls under the media
+                // Info + controls under the media (beside it in landscape). They scroll only when
+                // the screen is too short; otherwise a drag here still shrinks the player.
+                val infoX = if (landscape) fullMedia.x + fullMedia.w + px(4.dp) else 0f
+                val infoY = if (landscape) fullMedia.y else fullMedia.y + fullMedia.h + px(20.dp)
+                val infoScroll = rememberScrollState()
                 Column(
                     Modifier
-                        .offset { IntOffset(0, (fullMedia.y + fullMedia.h + px(20.dp) + (1f - ev) * px(60.dp)).roundToInt()) }
-                        .fillMaxWidth()
+                        .offset { IntOffset(infoX.roundToInt(), (infoY + (1f - ev) * px(60.dp)).roundToInt()) }
+                        .width(with(density) { (W - infoX).toDp() })
+                        .height(with(density) { (H - infoY - navBottom).coerceAtLeast(0f).toDp() })
                         .graphicsLayer { alpha = ((ev - 0.4f) / 0.6f).coerceIn(0f, 1f) }
+                        .edgeFade(infoScroll, Orientation.Vertical, length = 22.dp)
+                        .verticalScroll(infoScroll, enabled = infoScroll.maxValue in 1 until Int.MAX_VALUE)
                         .padding(horizontal = 20.dp),
                 ) {
                     DecodeText(t.title, style = Hamstr.type.section, maxLines = 2)
@@ -432,11 +467,18 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                     alpha = if (ev < 0.5f) (1f - abs(dismissX.value) / W).coerceIn(0f, 1f) else 1f
                     scaleY = 1f + abs(stretch)
                 }
-                .clip(RoundedCornerShape(if (fullscreen) 0.dp else lerp(14f, if (kind == Kind.Video || kind == Kind.Image) 0f else 22f, ev).dp))
+                .clip(RoundedCornerShape(if (immersive) 0.dp else lerp(14f, if (kind == Kind.Video || kind == Kind.Image) 0f else 22f, ev).dp))
                 .background(if (kind == Kind.Video) Color.Black else c.black),
         ) {
             when (kind) {
-                Kind.Video -> VideoSurface(controller, ui, expanded = ev > 0.98f, fullscreen = fullscreen, onExitFullscreen = { fullscreen = false }, onTapMini = { Playback.expand() }, onMenu = { fullscreen = false; onMenu(t) })
+                Kind.Video -> VideoSurface(
+                    controller, ui, t, expanded = ev > 0.98f, immersive = immersive, forced = fullscreen,
+                    onExitFullscreen = { fullscreen = false },
+                    onTapMini = { Playback.expand() },
+                    onMinimize = { fullscreen = false; Playback.minimize() },
+                    onMenu = { fullscreen = false; onMenu(t) },
+                    onQuality = if (canHaveVersions(t)) ({ fullscreen = false; onQuality(t) }) else null,
+                )
                 Kind.Audio -> Cover(t, ev)
                 Kind.Image -> ImageView(file, zoomable = ev > 0.98f)
                 Kind.Other -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -452,19 +494,32 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
 
 @Composable
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private fun VideoSurface(controller: Player?, ui: PlayerUi, expanded: Boolean, fullscreen: Boolean, onExitFullscreen: () -> Unit, onTapMini: () -> Unit, onMenu: () -> Unit) {
+private fun VideoSurface(
+    controller: Player?,
+    ui: PlayerUi,
+    t: DownloadTask,
+    expanded: Boolean,
+    immersive: Boolean,
+    forced: Boolean,
+    onExitFullscreen: () -> Unit,
+    onTapMini: () -> Unit,
+    onMinimize: () -> Unit,
+    onMenu: () -> Unit,
+    onQuality: (() -> Unit)?,
+) {
+    val context = LocalContext.current
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     var seekLabel by remember { mutableStateOf<String?>(null) }
     var overlay by remember { mutableStateOf(true) }
     LaunchedEffect(seekLabel) { if (seekLabel != null) { delay(650); seekLabel = null } }
-    LaunchedEffect(overlay, fullscreen, ui.isPlaying) { if (fullscreen && overlay && ui.isPlaying) { delay(2600); overlay = false } }
+    LaunchedEffect(overlay, immersive, ui.isPlaying) { if (immersive && overlay && ui.isPlaying) { delay(2600); overlay = false } }
     Box(
         Modifier
             .fillMaxSize()
-            .pointerInput(expanded, fullscreen) {
+            .pointerInput(expanded, immersive) {
                 detectTapGestures(
-                    onTap = { if (!expanded) onTapMini() else if (fullscreen) overlay = !overlay },
+                    onTap = { if (!expanded) onTapMini() else if (immersive) overlay = !overlay },
                     onDoubleTap = { pos ->
                         if (!expanded || controller == null) return@detectTapGestures
                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
@@ -484,15 +539,55 @@ private fun VideoSurface(controller: Player?, ui: PlayerUi, expanded: Boolean, f
                 Txt(it, style = Hamstr.type.mono, color = Color.White)
             }
         }
-        if (fullscreen && controller != null) {
+        if (immersive && controller != null) {
             val a by animateFloatAsState(if (overlay) 1f else 0f, tween(200), label = "overlay")
-            if (a > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = a }.background(Color.Black.copy(alpha = 0.35f))) {
-                Row(Modifier.align(Alignment.TopEnd).padding(20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
-                    IconButton(R.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = Color.Black.copy(alpha = 0.4f))
+            // As in a video app held sideways: what plays top left, actions top right,
+            // play in the middle and the timeline along the bottom, over soft scrims.
+            if (a > 0f) Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = a }
+                    .background(Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.72f), 0.3f to Color.Black.copy(alpha = 0.18f),
+                        0.65f to Color.Black.copy(alpha = 0.18f), 1f to Color.Black.copy(alpha = 0.78f),
+                    ))
+                    .windowInsetsPadding(WindowInsets.displayCutout),
+            ) {
+                Row(
+                    Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(R.drawable.ic_expand_more, stringResource(R.string.player_minimize), onMinimize, tint = Color.White, background = Color.Transparent)
+                    Spacer(Modifier.width(4.dp))
+                    Column(Modifier.weight(1f)) {
+                        Txt(t.title, style = Hamstr.type.bodyMedium, color = Color.White, maxLines = 1)
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            t.source?.let { Badge(it) }
+                            if (onQuality != null) Row(
+                                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onQuality).padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Badge(formatBadge(t), accent = true)
+                                Icon(R.drawable.ic_expand_more, tint = c.accent, size = 16.dp)
+                            } else Badge(formatBadge(t))
+                        }
+                    }
+                    // One pill for the actions, so they read as a group rather than loose buttons.
+                    Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.35f))) {
+                        val none = Color.Transparent
+                        IconButton(R.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(context, t) }, tint = Color.White, background = none)
+                        IconButton(R.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(context, t) }, tint = Color.White, background = none)
+                        IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = none)
+                        if (forced) IconButton(R.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = none)
+                    }
                 }
-                Box(Modifier.align(Alignment.Center)) { PlayPause(ui.isPlaying, size = 64.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() }) }
-                Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 22.dp)) {
+                Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(R.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
+                    PlayPause(ui.isPlaying, size = 64.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
+                    IconButton(R.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
+                }
+                Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 14.dp)) {
                     Scrubber(controller, ui)
                 }
             }
