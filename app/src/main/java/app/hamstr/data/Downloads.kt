@@ -144,6 +144,17 @@ object DownloadStore {
         save()
     }
 
+    /** A renamed file: every entry that pointed at [from] now points at [to] and carries its name. */
+    fun moveFile(from: File, to: File, title: String, contentUri: String?) {
+        val path = from.absoluteFile.normalize()
+        _tasks.update { list -> list.map { task ->
+            if (task.filePath?.let { File(it).absoluteFile.normalize() == path } == true)
+                task.copy(filePath = to.absolutePath, title = title, contentUri = contentUri)
+            else task
+        } }
+        save()
+    }
+
     private fun save() {
         if (!::file.isInitialized) return
         saves.trySend(Unit)

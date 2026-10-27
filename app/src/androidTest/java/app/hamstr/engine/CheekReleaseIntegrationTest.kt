@@ -76,7 +76,7 @@ class CheekReleaseIntegrationTest {
                 choice = Choice(Mode.Audio, null, "mp4", "m4a", false),
             )
             val paths = File(root, "paths.jsonl")
-            val response = Cheek.execute(task, info.toString(), root, root, paths, null)
+            val response = Cheek.execute(task, info.toString(), Engine.formatSelector(task.choice), root, root, paths, null)
             assertEquals(response.err, 0, response.exitCode)
             val output = File(JSONObject(paths.readLines().single()).getString("filepath"))
             assertArrayEquals(parts.reduce { a, b -> a + b }, output.readBytes())

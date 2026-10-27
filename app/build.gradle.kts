@@ -32,7 +32,7 @@ val signingProps = Properties().apply {
 // cheek, the Rust download engine (github.com/Mailo037/cheek), goes into the APK as
 // libcheek.so per ABI. Builds take a pinned release; `cheek.dir` in local.properties points
 // at a local checkout built with cargo-ndk instead.
-val cheekVersion = "0.1.1"
+val cheekVersion = "0.2.0"
 val cheekTargets = mapOf("arm64-v8a" to "aarch64-linux-android", "armeabi-v7a" to "armv7-linux-androideabi", "x86_64" to "x86_64-linux-android")
 val cheekLocal = if (providers.gradleProperty("cheek.useRelease").getOrElse("false").toBoolean()) null else Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)

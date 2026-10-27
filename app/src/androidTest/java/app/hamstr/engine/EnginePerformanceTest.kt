@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -55,7 +56,7 @@ class EnginePerformanceTest {
     @After fun tearDown() {
         server.close()
         tasks.forEach { task ->
-            Engine.pathFile(task).takeIf { it.exists() }?.readLines()?.forEach { File(it).delete() }
+            if (Engine.pathFile(task).exists()) outputs(task).forEach { it.delete() }
             DownloadStore.get(task.id)?.filePath?.let { File(it).delete() }
             Engine.clearTemporaryFiles(task)
             DownloadStore.remove(task.id)
@@ -153,7 +154,7 @@ class EnginePerformanceTest {
             val response = YoutubeDL.getInstance().execute(request, task.id)
             assertEquals(0, response.exitCode)
             assertOutput(task)
-            val output = File(Engine.pathFile(task).readLines().last { it.isNotBlank() })
+            val output = outputs(task).last()
             assertEquals(format, output.extension)
             // Container remuxing can drop priming packets, so byte hashes are not
             // reliable here. Check every actual FFmpeg invocation uses stream copy.
@@ -162,7 +163,7 @@ class EnginePerformanceTest {
             assertTrue("Missing FFmpeg diagnostics for $format", commands.isNotEmpty())
             commands.forEach { command -> assertTrue(command, Regex("(?:-c|-c:a|-acodec)\\s+copy(?:\\s|$)").containsMatchIn(command)) }
             // Reuse the same preview with a different choice; format selection must run again.
-            Engine.pathFile(task).readLines().forEach { File(it).delete() }
+            outputs(task).forEach { it.delete() }
             Engine.clearTemporaryFiles(task)
         }
     }
@@ -201,9 +202,13 @@ class EnginePerformanceTest {
         choice = Choice(mode, 1080, "mp4", "opus", false, "b"),
     ).also { tasks += it }
 
+    /** One JSON line per finished file, from --print-to-file or cheek's done event. */
+    private fun outputs(task: DownloadTask) =
+        Engine.pathFile(task).readLines().filter { it.isNotBlank() }.map { File(JSONObject(it).getString("filepath")) }
+
     private fun assertOutput(task: DownloadTask) {
-        val path = Engine.pathFile(task).readLines().last { it.isNotBlank() }
-        assertTrue("Output missing or empty: $path", File(path).length() > 0)
+        val output = outputs(task).last()
+        assertTrue("Output missing or empty: $output", output.length() > 0)
     }
 
     private fun makeAac() = makeAudio("aac", "aac")

@@ -83,7 +83,8 @@ object Engine {
         private set
     private lateinit var tempDir: File
     private lateinit var extractorCacheDir: File
-    private data class Preview(val info: MediaInfo, val json: String, val reusable: Boolean)
+    /** [native]: cheek's own JSON from [Cheek.resolve], not yt-dlp's. */
+    private data class Preview(val info: MediaInfo, val json: String, val reusable: Boolean, val native: Boolean = false)
     private val previews = PreviewCache<Preview>(
         scope = scope,
         weightOf = { it.json.length * 2 },
@@ -108,6 +109,7 @@ object Engine {
             try {
                 YoutubeDL.getInstance().init(app)
                 FFmpeg.getInstance().init(app)
+                runCatching { WarmYtDlp.init(app) }.onFailure { Log.w(TAG, "no warm yt-dlp", it) }
                 _state.value = EngineState.Ready(YoutubeDL.getInstance().version(app) ?: "?")
                 ready.complete(Unit)
                 // Automatic maintenance should not delay a newly shared download.
@@ -127,6 +129,11 @@ object Engine {
     }
 
     suspend fun awaitReady() = ready.await()
+
+    /** Gets yt-dlp going before a link arrives, when one is likely to come soon. */
+    fun warmUp() {
+        scope.launch { runCatching { awaitReady(); WarmYtDlp.warm() } }
+    }
 
     /** Compare versions without calling the updater or changing the installed archive. */
     suspend fun checkVersion() = checkVersion { latestStableVersion() }
@@ -174,6 +181,8 @@ object Engine {
                 val lock = runtimeLock.writeLock()
                 lock.lockInterruptibly()
                 try {
+                    // The warm process reads from the archive that is about to be replaced.
+                    WarmYtDlp.stop()
                     YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel._STABLE)
                     YoutubeDL.getInstance().version(context) ?: "?"
                 } finally { lock.unlock() }
@@ -198,26 +207,56 @@ object Engine {
         try { block() } finally { lock.unlock() }
     }
 
-    suspend fun info(url: String): MediaInfo = withContext(Dispatchers.IO) {
+    suspend fun info(url: String): MediaInfo = preview(url).info
+
+    /** One resolution per link, shared by the sheet and the download that follows it. */
+    private suspend fun preview(url: String): Preview = withContext(Dispatchers.IO) {
         awaitReady()
-        previews.getOrLoad(url) {
-            previewSlots.withPermit {
-                val req = YoutubeDLRequest(url).apply {
-                    addOption("--no-playlist")
-                    addOption("--socket-timeout", 15)
-                    addOption("--cache-dir", extractorCacheDir.absolutePath)
-                    addOption("--dump-single-json")
-                }
-                val response = readRuntime { YoutubeDL.getInstance().execute(req) }
-                val json = JSONObject(response.out)
-                Preview(
-                    mediaInfo(url, json), response.out,
-                    !json.optBoolean("is_live") && !json.optBoolean("is_upcoming") &&
-                        json.optString("live_status") !in listOf("is_live", "is_upcoming", "post_live") &&
-                        json.optString("_type", "video") == "video",
-                )
-            }
-        }.info
+        previews.getOrLoad(url) { previewSlots.withPermit { resolve(url) } }
+    }
+
+    /**
+     * Links no yt-dlp site extractor knows (files, HLS playlists, plain pages) go to cheek
+     * first, which needs no Python at all. Everything else, and what cheek can't read, goes
+     * to yt-dlp, warm when it can be.
+     */
+    private suspend fun resolve(url: String): Preview {
+        if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.available && readRuntime { WarmYtDlp.extractor(url) } == "Generic") {
+            runInterruptible { Cheek.resolve(url) }?.let { nativePreview(url, it) }?.let { return it }
+        }
+        val req = YoutubeDLRequest(url).apply {
+            addOption("--no-playlist")
+            addOption("--socket-timeout", 15)
+            addOption("--cache-dir", extractorCacheDir.absolutePath)
+            addOption("--dump-single-json")
+        }
+        val response = readRuntime { WarmYtDlp.execute(req) ?: YoutubeDL.getInstance().execute(req) }
+        val json = JSONObject(response.out)
+        return Preview(
+            mediaInfo(url, json), response.out,
+            !json.optBoolean("is_live") && !json.optBoolean("is_upcoming") &&
+                json.optString("live_status") !in listOf("is_live", "is_upcoming", "post_live") &&
+                json.optString("_type", "video") == "video",
+        )
+    }
+
+    private fun nativePreview(url: String, text: String): Preview? {
+        val m = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        val streams = m.optJSONArray("streams")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty()
+        if (streams.isEmpty()) return null
+        fun string(key: String) = if (m.isNull(key)) null else m.optString(key).takeIf { it.isNotBlank() }
+        val info = MediaInfo(
+            url = string("webpage_url") ?: url,
+            title = string("title") ?: url,
+            thumbnail = string("thumbnail"),
+            source = string("extractor"),
+            durationSec = m.optDouble("duration", 0.0).toInt(),
+            uploader = string("uploader"),
+            heights = streams.map { it.optInt("height") }.filter { it > 0 }.distinct().sortedDescending(),
+            approxBytes = streams.sumOf { it.optLong("size") },
+            audioBytes = streams.filter { it.optString("kind") == "audio" }.sumOf { it.optLong("size") },
+        )
+        return Preview(info, text, reusable = true, native = true)
     }
 
     private fun mediaInfo(url: String, v: JSONObject): MediaInfo {
@@ -286,27 +325,22 @@ object Engine {
         }
     }
 
-    /** yt-dlp picks the formats and prints them as JSON; cheek downloads them. */
+    /**
+     * The link's preview JSON goes to cheek, which picks the formats from it itself and
+     * downloads them, so yt-dlp runs once per link, not once for the sheet and again here.
+     */
     private suspend fun executeCheek(task: DownloadTask, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
-        suspend fun resolve(reusePreview: Boolean): String {
-            val preview = if (reusePreview) previews.get(task.url) else null
-            val infoFile = preview?.let { File(File(tempDir, task.id).apply { mkdirs() }, "preview.json").apply { writeText(it.json) } }
-            val req = (if (infoFile == null) YoutubeDLRequest(task.url) else YoutubeDLRequest(emptyList())).apply {
-                if (infoFile != null) addOption("--load-info-json", infoFile.absolutePath)
-                addOption("-J")
-                addOption("--no-playlist")
-                addOption("--cache-dir", extractorCacheDir.absolutePath)
-                addOption("--socket-timeout", 20)
-                addOption("-f", formatSelector(task.choice))
-            }
-            return readRuntime { YoutubeDL.getInstance().execute(req, task.id, null) }.out
+        suspend fun download(): YoutubeDLResponse {
+            val preview = preview(task.url)
+            val format = if (preview.native) null else formatSelector(task.choice)
+            return Cheek.execute(task, preview.json, format, tempDir, outputDir, pathFile(task), callback)
         }
         outputDir.mkdirs()
-        val first = Cheek.execute(task, resolve(reusePreview = true), tempDir, outputDir, pathFile(task), callback)
+        val first = download()
         // A preview's stream URLs can expire; resolve once more from the page.
         if (first.exitCode != 0 && expiredMedia.containsMatchIn(first.err) && !pathFile(task).exists()) {
             previews.invalidate(task.url)
-            return Cheek.execute(task, resolve(reusePreview = false), tempDir, outputDir, pathFile(task), callback)
+            return download()
         }
         return first
     }
@@ -329,7 +363,7 @@ object Engine {
         val c = task.choice
         val playlists = playlists(task)
         // A playlist preview describes just one video, so it cannot replace a playlist request.
-        val preview = if (playlists || !reusePreview) null else previews.get(task.url)
+        val preview = if (playlists || !reusePreview) null else previews.get(task.url)?.takeUnless { it.native }
         val infoFile = preview?.let {
             File(File(tempDir, task.id).apply { mkdirs() }, "preview.json").apply { writeText(it.json) }
         }

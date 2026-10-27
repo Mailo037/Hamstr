@@ -72,7 +72,7 @@ Android asks once whether your browser may install apps. Later updates come thro
  Settings › About ──► GitHub Releases API ──► APK for this ABI ──► PackageInstaller
 ```
 
-yt-dlp resolves links and selects the streams; Cheek downloads them by default. Playlists, subtitles, custom formats and unsupported download protocols fall back to yt-dlp. FFmpeg merges streams and converts audio when needed.
+yt-dlp resolves links once, in a Python process that stays running for a few minutes so the next link skips its start. Cheek picks the streams from that JSON by yt-dlp's rules and downloads them by default; direct files, HLS playlists and plain pages that no yt-dlp extractor knows, Cheek resolves itself, without Python. Playlists, subtitles, custom formats and unsupported download protocols fall back to yt-dlp. FFmpeg merges streams and converts audio when needed.
 
 - `engine/`: the Cheek bridge, yt-dlp and FFmpeg through [youtubedl-android](https://github.com/JunkFood02/youtubedl-android), the download queue and its notifications.
 - `player/`: a Media3 ExoPlayer behind a `MediaSession`, plus the mini player, picture-in-picture and fullscreen.

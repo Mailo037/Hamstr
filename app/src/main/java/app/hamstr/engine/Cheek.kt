@@ -133,10 +133,34 @@ object Cheek {
     }
 
     /**
-     * Downloads [info] (yt-dlp's JSON with its chosen formats). Progress arrives through
-     * [callback] in yt-dlp's own shapes, so the service treats both engines alike.
+     * Resolves [url] without yt-dlp: a direct file, an HLS playlist or a page that names its
+     * media. Returns cheek's own JSON, or null when cheek finds nothing there.
      */
-    fun execute(task: DownloadTask, info: String, tempDir: File, outputDir: File, pathFile: File, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
+    fun resolve(url: String): String? {
+        if (!available) return null
+        val proc = ProcessBuilder(command() + listOf("-J", "--resolver", "native", "--", url)).start()
+        val out = StringBuffer()
+        val reader = thread(name = "cheek-resolve") { out.append(proc.inputStream.bufferedReader().readText()) }
+        try {
+            if (!proc.waitFor(30, TimeUnit.SECONDS)) return null
+            reader.join(2000)
+            return out.toString().takeIf { proc.exitValue() == 0 && it.isNotBlank() }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "cheek couldn't resolve $url", e)
+            return null
+        } finally {
+            if (proc.isAlive) proc.destroy()
+        }
+    }
+
+    /**
+     * Downloads [info]: yt-dlp's JSON, from which cheek picks [format] itself when given, or
+     * cheek's own from [resolve]. Progress arrives through [callback] in yt-dlp's own shapes,
+     * so the service treats both engines alike.
+     */
+    fun execute(task: DownloadTask, info: String, format: String?, tempDir: File, outputDir: File, pathFile: File, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
         val started = System.currentTimeMillis()
         val work = File(tempDir, task.id).apply { mkdirs() }
         val infoFile = File(work, "cheek-info.json").apply { writeText(info) }
@@ -144,6 +168,7 @@ object Cheek {
         val cmd = buildList {
             addAll(command())
             addAll(listOf("--info-json", infoFile.absolutePath, "--json"))
+            format?.let { addAll(listOf("-f", it)) }
             addAll(listOf("-P", outputDir.absolutePath, "--temp-dir", work.absolutePath, "-o", Engine.outputTemplate(task)))
             // Fewer connections per download when several run at once.
             addAll(listOf("-N", (12 / Prefs.settings.value.parallel.coerceIn(1, 3)).toString()))

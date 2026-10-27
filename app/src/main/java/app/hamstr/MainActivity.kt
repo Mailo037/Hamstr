@@ -104,6 +104,7 @@ import app.hamstr.ui.LibraryScreen
 import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.QualitySheet
+import app.hamstr.ui.RenameSheet
 import app.hamstr.ui.canHaveVersions
 import app.hamstr.ui.canSaveAudio
 import app.hamstr.engine.AudioOut
@@ -132,6 +133,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         askPermissions(this, notifPermission::launch, storagePermission::launch)
+        Engine.warmUp()
         if (DownloadStore.tasks.value.any { it.status == Status.Queued }) DownloadService.send(this, DownloadService.ACTION_START)
         Updater.checkOnLaunch(this)
         addOnPictureInPictureModeChangedListener { inPip.value = it.isInPictureInPictureMode }
@@ -205,6 +207,7 @@ private fun App(inPip: Boolean) {
     var sheetUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     var qualityFor by remember { mutableStateOf<DownloadTask?>(null) }
+    var renameFor by remember { mutableStateOf<DownloadTask?>(null) }
     var hint by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     var addSheet by rememberSaveable { mutableStateOf(false) }
@@ -334,13 +337,23 @@ private fun App(inPip: Boolean) {
             }
         }
         Overlay(visible = menuFor != null, onDismiss = { menuFor = null }) {
-            menuFor?.let { t -> TaskMenu(t, onPlay = play, onClose = { menuFor = null }, onQuality = { menuFor = null; qualityFor = it }, onSaveAudio = { menuFor = null; saveAudio(it) }, onDelete = { selected ->
+            menuFor?.let { t -> TaskMenu(t, onPlay = play, onClose = { menuFor = null }, onQuality = { menuFor = null; qualityFor = it }, onSaveAudio = { menuFor = null; saveAudio(it) }, onRename = { menuFor = null; renameFor = it }, onDelete = { selected ->
                 scope.launch {
                     val result = DownloadFiles.delete(context, selected)
                     hint = result.fold({ "File deleted" }, { it.message ?: "Couldn't delete the file" })
                 }
                 menuFor = null
             }) }
+        }
+        Overlay(visible = renameFor != null, onDismiss = { renameFor = null }) {
+            renameFor?.let { t ->
+                RenameSheet(t, onRename = { name ->
+                    renameFor = null
+                    scope.launch {
+                        hint = DownloadFiles.rename(context, t, name).fold({ "Renamed" }, { it.message ?: "Couldn't rename the file" })
+                    }
+                })
+            }
         }
         Overlay(visible = qualityFor != null, onDismiss = { qualityFor = null }) {
             qualityFor?.let { t ->
@@ -366,7 +379,7 @@ private fun App(inPip: Boolean) {
 }
 
 @Composable
-private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit, onQuality: (DownloadTask) -> Unit, onSaveAudio: (DownloadTask) -> Unit, onDelete: (DownloadTask) -> Unit) {
+private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit, onQuality: (DownloadTask) -> Unit, onSaveAudio: (DownloadTask) -> Unit, onRename: (DownloadTask) -> Unit, onDelete: (DownloadTask) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     // The menu stays open while the download moves on, so it follows the live task.
@@ -404,6 +417,7 @@ private fun TaskMenu(task: DownloadTask, onPlay: (DownloadTask) -> Unit, onClose
             if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, "Save audio") { onSaveAudio(t) }
             MenuRow(R.drawable.ic_open_in_new, "Open with…") { Playback.openWith(context, t); onClose() }
             MenuRow(R.drawable.ic_share, "Share file") { Playback.shareFile(context, t); onClose() }
+            MenuRow(R.drawable.ic_edit, "Rename") { onRename(t) }
             MenuRow(R.drawable.ic_delete, "Delete file", danger = true) { onDelete(t) }
         }
         MenuRow(R.drawable.ic_link, "Copy link") {
