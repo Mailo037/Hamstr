@@ -1,9 +1,13 @@
 package app.hamstr.ui.components
 
 import android.provider.Settings
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -21,6 +25,17 @@ import kotlin.math.sign
 
 /** True when the system animator scale is 0: decorative motion is skipped, travel snaps. */
 val LocalReduceMotion = staticCompositionLocalOf { false }
+
+/**
+ * 0 when off, 1 when picked, eased in between, so a pill's colours blend into the
+ * accent instead of jumping. Lerp the colours with it.
+ */
+@Composable
+fun animateSelection(on: Boolean): Float {
+    val reduce = LocalReduceMotion.current
+    val p by animateFloatAsState(if (on) 1f else 0f, if (reduce) snap() else tween(220), label = "selection")
+    return p
+}
 
 @Composable
 fun systemReducesMotion(): Boolean {

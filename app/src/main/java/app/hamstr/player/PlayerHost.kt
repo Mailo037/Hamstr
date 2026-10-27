@@ -103,6 +103,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.lerp
+import app.hamstr.ui.components.animateSelection
 
 /** Live player facts the UI draws from. */
 @Stable
@@ -408,8 +410,13 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                     if (ui.hasNext) IconButton(R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() }, background = Color.Transparent)
                     IconButton(R.drawable.ic_close, stringResource(R.string.player_close), { close() }, background = Color.Transparent)
                 }
+                // Concentric with the bar's 18 dp corners (the media sits 4 dp in, at 14 dp);
+                // the progress line stays on the straight part of the bottom edge.
                 if (ui.duration > 0) {
-                    Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(ui.position / ui.duration.toFloat()).height(2.dp).background(c.accent))
+                    Box(
+                        Modifier.align(Alignment.BottomStart).padding(horizontal = 18.dp)
+                            .fillMaxWidth(ui.position / ui.duration.toFloat()).height(2.dp).clip(CircleShape).background(c.accent),
+                    )
                 }
             }
         }
@@ -425,7 +432,7 @@ fun PlayerHost(miniBottom: Dp, inPip: Boolean, onMenu: (DownloadTask) -> Unit, o
                     alpha = if (ev < 0.5f) (1f - abs(dismissX.value) / W).coerceIn(0f, 1f) else 1f
                     scaleY = 1f + abs(stretch)
                 }
-                .clip(RoundedCornerShape(if (fullscreen) 0.dp else lerp(10f, if (kind == Kind.Video || kind == Kind.Image) 0f else 22f, ev).dp))
+                .clip(RoundedCornerShape(if (fullscreen) 0.dp else lerp(14f, if (kind == Kind.Video || kind == Kind.Image) 0f else 22f, ev).dp))
                 .background(if (kind == Kind.Video) Color.Black else c.black),
         ) {
             when (kind) {
@@ -633,18 +640,19 @@ private fun Transport(controller: Player, ui: PlayerUi, video: Boolean, onFullsc
 @Composable
 private fun ToggleChip(icon: Int, label: String, on: Boolean, onClick: () -> Unit) {
     val c = Hamstr.colors
+    val p = animateSelection(on)
     Row(
         Modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (on) c.accent.copy(alpha = 0.18f) else c.surface)
+            .background(lerp(c.surface, c.accent.copy(alpha = 0.18f), p))
             .pressable(onClick, label = label)
             .heightIn(min = 40.dp)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, tint = if (on) c.accent else c.muted, size = 18.dp)
-        Txt(label, style = Hamstr.type.small, color = if (on) c.accent else c.muted)
+        Icon(icon, tint = lerp(c.muted, c.accent, p), size = 18.dp)
+        Txt(label, style = Hamstr.type.small, color = lerp(c.muted, c.accent, p))
     }
 }
 

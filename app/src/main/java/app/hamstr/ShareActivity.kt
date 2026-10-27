@@ -93,8 +93,6 @@ class ShareActivity : ComponentActivity() {
     }
 
     companion object {
-        private val URL = Regex("""https?://[^\s"'<>]+""")
-
         fun extractUrl(intent: Intent?): String? {
             intent ?: return null
             val candidates = listOfNotNull(
@@ -102,7 +100,7 @@ class ShareActivity : ComponentActivity() {
                 intent.getStringExtra(Intent.EXTRA_TEXT),
                 intent.getStringExtra(Intent.EXTRA_SUBJECT),
             )
-            return candidates.firstNotNullOfOrNull { URL.find(it)?.value?.trimEnd('.', ',', ')', ']') }
+            return candidates.firstNotNullOfOrNull(app.hamstr.engine.MediaLinks::find)
         }
     }
 }

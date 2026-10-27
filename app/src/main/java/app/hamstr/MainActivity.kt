@@ -18,6 +18,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -105,6 +108,16 @@ import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.QualitySheet
 import app.hamstr.ui.RenameSheet
+import app.hamstr.ui.InfoSheet
+import app.hamstr.ui.formatBytes
+import app.hamstr.ui.formatBadge
+import app.hamstr.ui.rememberBitmap
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
 import app.hamstr.ui.canHaveVersions
 import app.hamstr.ui.canSaveAudio
 import app.hamstr.engine.AudioOut
@@ -203,8 +216,6 @@ private enum class Tab(val label: Int, val icon: Int) {
     Settings(R.string.tab_settings, R.drawable.ic_settings),
 }
 
-private val URL = Regex("""https?://\S+""")
-
 /** A short message at the bottom, optionally with one action (Undo, Open, Retry). */
 private data class Snack(val text: String, val action: String? = null, val id: Long = System.nanoTime(), val run: (() -> Unit)? = null)
 
@@ -222,6 +233,7 @@ private fun App(inPip: Boolean) {
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     var qualityFor by remember { mutableStateOf<DownloadTask?>(null) }
     var renameFor by remember { mutableStateOf<DownloadTask?>(null) }
+    var infoFor by remember { mutableStateOf<DownloadTask?>(null) }
     var snack by remember { mutableStateOf<Snack?>(null) }
     val scope = rememberCoroutineScope()
     var addSheet by rememberSaveable { mutableStateOf(false) }
@@ -246,7 +258,7 @@ private fun App(inPip: Boolean) {
     fun clipboardLink(): String? {
         val cm = context.getSystemService(ClipboardManager::class.java)
         val text = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-        return URL.find(text)?.value
+        return app.hamstr.engine.MediaLinks.find(text)
     }
     val playing by Playback.current.collectAsState()
     val missing by DownloadFiles.missing.collectAsState()
@@ -340,16 +352,12 @@ private fun App(inPip: Boolean) {
 
     Box(Modifier.fillMaxSize().background(c.canvas)) {
         RasterBackground(Modifier.fillMaxWidth().height(top + 280.dp))
-        AnimatedContent(
-            targetState = tab,
-            transitionSpec = {
-                val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
-                (slideInHorizontally(spring(dampingRatio = 0.85f, stiffness = 420f)) { dir * it / 5 } + fadeIn(tween(220))) togetherWith
-                    (slideOutHorizontally(tween(180)) { -dir * it / 6 } + fadeOut(tween(150)))
-            },
-            label = "tab",
-        ) { t ->
-            when (t) {
+        // Swipe sideways anywhere to change tabs; the tab bar and the pager follow each other.
+        val pager = rememberPagerState(initialPage = tab.ordinal) { Tab.entries.size }
+        LaunchedEffect(tab) { if (pager.targetPage != tab.ordinal) pager.animateScrollToPage(tab.ordinal, animationSpec = spring(dampingRatio = 0.85f, stiffness = 420f)) }
+        LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { tab = Tab.entries[it] } }
+        HorizontalPager(pager, Modifier.fillMaxSize(), key = { Tab.entries[it] }) { page ->
+            when (Tab.entries[page]) {
                 Tab.Stash -> StashScreen(
                     tasks, engine, padding,
                     onAdd = {
@@ -451,6 +459,7 @@ private fun App(inPip: Boolean) {
                     onQuality = { menuFor = null; qualityFor = it },
                     onSaveAudio = { menuFor = null; saveAudio(it) },
                     onRename = { menuFor = null; renameFor = it },
+                    onInfo = { menuFor = null; infoFor = it },
                     onHide = { menuFor = null; hide(it) },
                     onDelete = { menuFor = null; delete(listOf(it)) },
                     onAgain = { menuFor = null; again(it) },
@@ -467,6 +476,9 @@ private fun App(inPip: Boolean) {
                     }
                 })
             }
+        }
+        Overlay(visible = infoFor != null, onDismiss = { infoFor = null }) {
+            infoFor?.let { t -> InfoSheet(t, onCopy = { copy(context, it); hint(context.getString(R.string.info_copied)) }) }
         }
         Overlay(visible = qualityFor != null, onDismiss = { qualityFor = null }) {
             qualityFor?.let { t ->
@@ -505,6 +517,7 @@ private fun TaskMenu(
     onQuality: (DownloadTask) -> Unit,
     onSaveAudio: (DownloadTask) -> Unit,
     onRename: (DownloadTask) -> Unit,
+    onInfo: (DownloadTask) -> Unit,
     onHide: (List<DownloadTask>) -> Unit,
     onDelete: (DownloadTask) -> Unit,
     onAgain: (DownloadTask) -> Unit,
@@ -535,10 +548,8 @@ private fun TaskMenu(
             DownloadPreview(t, Modifier.padding(horizontal = 4.dp))
             Spacer(Modifier.height(12.dp))
         }
-        Txt(t.title, style = Hamstr.type.section, maxLines = 2, modifier = Modifier.padding(horizontal = 12.dp))
-        Spacer(Modifier.height(2.dp))
-        Txt(listOfNotNull(t.uploader, t.url).joinToString(" · "), style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp))
-        Spacer(Modifier.height(10.dp))
+        MenuHeader(t, showPicture = t.status == Status.Done)
+        Spacer(Modifier.height(14.dp))
         if (t.status == Status.Failed) {
             // What happened, in plain words, with the engine's own message underneath.
             val why = Failures.explain(t.error)
@@ -576,40 +587,97 @@ private fun TaskMenu(
             Txt(stringResource(R.string.file_gone_long), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             MenuRow(R.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) }
         }
+        val copyLink = { copy(context, t.url); onCopied(context.getString(R.string.info_copied)); onClose() }
         if (file != null) {
             val kind = kindOf(file)
-            MenuRow(
-                if (kind == Kind.Video || kind == Kind.Audio) R.drawable.ic_play_arrow else R.drawable.ic_open_in_new,
-                stringResource(
-                    when (kind) {
-                        Kind.Video, Kind.Audio -> R.string.menu_play
-                        Kind.Image -> R.string.menu_view
-                        Kind.Other -> R.string.menu_details
-                    },
-                ),
-            ) { onPlay(t); onClose() }
-            if (canHaveVersions(t)) MenuRow(R.drawable.ic_movie, stringResource(R.string.menu_quality)) { onQuality(t) }
-            if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, stringResource(R.string.menu_save_audio)) { onSaveAudio(t) }
-            MenuRow(R.drawable.ic_open_in_new, stringResource(R.string.menu_open_with)) { Playback.openWith(context, t); onClose() }
-            MenuRow(R.drawable.ic_share, stringResource(R.string.menu_share_file)) { Playback.shareFile(context, t); onClose() }
-            MenuRow(R.drawable.ic_edit, stringResource(R.string.menu_rename)) { onRename(t) }
-        }
-        MenuRow(R.drawable.ic_link, stringResource(R.string.menu_copy_link)) {
-            copy(context, t.url)
-            onClose()
+            val playable = kind == Kind.Video || kind == Kind.Audio
+            // The everyday actions as tiles, then what changes the file, then what removes it.
+            Row(Modifier.padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionTile(
+                    if (playable) R.drawable.ic_play_arrow else R.drawable.ic_open_in_new,
+                    stringResource(if (playable) R.string.menu_tile_play else R.string.menu_tile_view),
+                    accent = true,
+                ) { onPlay(t); onClose() }
+                ActionTile(R.drawable.ic_share, stringResource(R.string.menu_tile_share)) { Playback.shareFile(context, t); onClose() }
+                ActionTile(R.drawable.ic_open_in_new, stringResource(R.string.menu_tile_open)) { Playback.openWith(context, t); onClose() }
+                ActionTile(R.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
+            }
+            Spacer(Modifier.height(10.dp))
+            MenuGroup {
+                if (canHaveVersions(t)) MenuRow(R.drawable.ic_movie, stringResource(R.string.menu_quality)) { onQuality(t) }
+                if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, stringResource(R.string.menu_save_audio)) { onSaveAudio(t) }
+                MenuRow(R.drawable.ic_edit, stringResource(R.string.menu_rename)) { onRename(t) }
+                MenuRow(R.drawable.ic_info, stringResource(R.string.menu_info)) { onInfo(t) }
+            }
+            Spacer(Modifier.height(10.dp))
+        } else {
+            MenuRow(R.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
         }
         if (t.status == Status.Failed || t.status == Status.Paused) {
             MenuRow(R.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
         }
         when {
             t.status.active -> MenuRow(R.drawable.ic_close, stringResource(R.string.menu_cancel)) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
-            file != null -> {
+            file != null -> MenuGroup {
                 MenuRow(R.drawable.ic_visibility_off, stringResource(R.string.menu_hide), subtitle = stringResource(R.string.menu_hide_hint)) { onHide(listOf(t)) }
                 MenuRow(R.drawable.ic_delete, stringResource(R.string.menu_delete), danger = true) { onDelete(t) }
             }
             else -> MenuRow(R.drawable.ic_close, stringResource(R.string.menu_remove)) { onHide(listOf(t)) }
         }
     }
+}
+
+/** Picture, title and one line of facts (channel, quality, size) at the top of the menu. */
+@Composable
+private fun MenuHeader(t: DownloadTask, showPicture: Boolean) {
+    val c = Hamstr.colors
+    Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (showPicture) {
+            val bitmap = rememberBitmap(t.thumbnail, 240)
+            Box(Modifier.width(88.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).background(c.black)) {
+                bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+            }
+            Spacer(Modifier.width(12.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2)
+            Spacer(Modifier.height(3.dp))
+            val facts = listOfNotNull(
+                t.uploader ?: t.source,
+                formatBadge(t).takeIf { t.status == Status.Done }?.uppercase(),
+                t.sizeBytes.takeIf { it > 0 }?.let(::formatBytes),
+            )
+            Txt(facts.joinToString(" · ").ifEmpty { t.url }, style = Hamstr.type.mono, color = c.ghost, maxLines = 1)
+        }
+    }
+}
+
+/** A button in the menu's top row: icon over a short label. */
+@Composable
+private fun RowScope.ActionTile(icon: Int, label: String, accent: Boolean = false, onClick: () -> Unit) {
+    val c = Hamstr.colors
+    Column(
+        Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (accent) c.accent else c.surface)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, tint = if (accent) c.onAccent else c.ink, size = 22.dp)
+        Spacer(Modifier.height(6.dp))
+        Txt(label, style = Hamstr.type.small, color = if (accent) c.onAccent else c.muted, maxLines = 1)
+    }
+}
+
+/** Rows that belong together, on one panel. */
+@Composable
+private fun MenuGroup(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.padding(horizontal = 4.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Hamstr.colors.surface),
+        content = content,
+    )
 }
 
 @Composable

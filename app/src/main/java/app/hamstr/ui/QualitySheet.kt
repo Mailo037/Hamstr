@@ -62,6 +62,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.ui.graphics.lerp
+import app.hamstr.ui.components.animateSelection
 
 /** Only downloaded links can be fetched again, and only single videos and songs. */
 fun canHaveVersions(t: DownloadTask): Boolean {
@@ -104,7 +106,9 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
         }
     }
 
-    var state by remember(task.url) { mutableStateOf<InfoState>(InfoState.Loading) }
+    var state by remember(task.url) {
+        mutableStateOf<InfoState>(Engine.cachedInfo(task.url)?.let(InfoState::Loaded) ?: InfoState.Loading)
+    }
     LaunchedEffect(task.url) {
         state = try { InfoState.Loaded(Engine.info(task.url)) } catch (e: CancellationException) {
             throw e
@@ -212,17 +216,18 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                 ) {
                     offers.forEach { o ->
                         val on = o in picked
+                        val p = animateSelection(on)
                         val bytes = if (o.height == 0) s.info.audioBytes else s.info.videoBytes[o.height] ?: 0
                         Column(
                             Modifier
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (on) c.accent else c.surface)
+                                .background(lerp(c.surface, c.accent, p))
                                 .clickable { picked = if (on) picked - o else picked + o }
                                 .padding(horizontal = 14.dp, vertical = 7.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Txt(if (o.height == 0) stringResource(R.string.mode_audio) else heightLabel(o.height), style = Hamstr.type.bodyMedium, color = if (on) c.onAccent else c.ink)
-                            Txt(if (bytes > 0) "~" + formatBytes(bytes) else stringResource(R.string.q_size_unknown), style = Hamstr.type.small, color = if (on) c.onAccent else c.ghost)
+                            Txt(if (o.height == 0) stringResource(R.string.mode_audio) else heightLabel(o.height), style = Hamstr.type.bodyMedium, color = lerp(c.ink, c.onAccent, p))
+                            Txt(if (bytes > 0) "~" + formatBytes(bytes) else stringResource(R.string.q_size_unknown), style = Hamstr.type.small, color = lerp(c.ghost, c.onAccent, p))
                         }
                     }
                 }

@@ -111,6 +111,8 @@ import app.hamstr.update.Updater
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
+import androidx.compose.ui.graphics.lerp
+import app.hamstr.ui.components.animateSelection
 
 /** Settings are split into categories, each on its own page (Glyph: never one long page). */
 private enum class Page(val title: Int, val icon: Int) {
@@ -452,10 +454,11 @@ private fun SubtitleLanguages(s: Settings) {
     Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEach { code ->
             val on = code in picked
+            val p = animateSelection(on)
             Box(
                 Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (on) c.accent else c.surface)
+                    .background(lerp(c.surface, c.accent, p))
                     .clickable {
                         val next = if (on) picked - code else picked + code
                         // At least one stays picked.
@@ -464,7 +467,7 @@ private fun SubtitleLanguages(s: Settings) {
                     .heightIn(min = 40.dp)
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
-            ) { Txt(languageName(code), style = Hamstr.type.bodyMedium, color = if (on) c.onAccent else c.ink) }
+            ) { Txt(languageName(code), style = Hamstr.type.bodyMedium, color = lerp(c.ink, c.onAccent, p)) }
         }
     }
 }

@@ -96,6 +96,16 @@ object Engine {
         weightOf = { it.json.length * 2 },
         cacheable = { it.reusable },
     )
+    private data class InfoSnapshot(val info: MediaInfo, val reusable: Boolean)
+    // Keep display metadata longer than signed media URLs; downloading still uses previews.
+    private val infos = PreviewCache<InfoSnapshot>(
+        scope = scope, ttlMillis = 30 * 60_000L, maxEntries = 64, maxWeight = 512 * 1024,
+        weightOf = { snapshot -> snapshot.info.let {
+            256 + 2 * (it.url.length + it.title.length + (it.thumbnail?.length ?: 0) +
+                (it.uploader?.length ?: 0)) + it.heights.size * 24
+        } },
+        cacheable = { it.reusable },
+    )
     private val previewSlots = Semaphore(2)
     // The updater replaces the Python archive. Readers can run together, but must
     // finish before it is replaced or imports can fail with a zipimport EOFError.
@@ -105,7 +115,7 @@ object Engine {
     internal const val METADATA_PREFIX = "HAMSTR_METADATA:"
     /** Callback lines that carry a [app.hamstr.data.Stage] name instead of yt-dlp output. */
     internal const val STAGE_PREFIX = "HAMSTR_STAGE:"
-    private val expiredMedia = Regex("HTTP Error (401|403|404|410)|(?:URL|signature).*expired|Requested format is not available", RegexOption.IGNORE_CASE)
+    private val expiredMedia = Regex("""HTTP (?:Error |status client error \()(401|403|404|410)|(?:URL|signature).*expired|Requested format is not available""", RegexOption.IGNORE_CASE)
 
     fun start(context: Context) {
         app = context.applicationContext
@@ -113,6 +123,7 @@ object Engine {
         tempDir = File(app.cacheDir, "parts").apply { mkdirs() }
         extractorCacheDir = File(app.cacheDir, "yt-dlp").apply { mkdirs() }
         Cheek.init(app)
+        CineSrc.init(app)
         scope.launch {
             try {
                 boot()
@@ -234,7 +245,11 @@ object Engine {
         try { block() } finally { lock.unlock() }
     }
 
-    suspend fun info(url: String): MediaInfo = preview(url).info
+    fun cachedInfo(url: String): MediaInfo? = infos.get(url)?.info ?: previews.get(url)?.info
+
+    suspend fun info(url: String): MediaInfo = infos.getOrLoad(url) {
+        preview(url).let { InfoSnapshot(it.info, it.reusable) }
+    }.info
 
     /** One resolution per link, shared by the sheet and the download that follows it. */
     private suspend fun preview(url: String): Preview = withContext(Dispatchers.IO) {
@@ -248,16 +263,23 @@ object Engine {
      * to yt-dlp, warm when it can be.
      */
     private suspend fun resolve(url: String): Preview {
+        CineSrcTarget.parse(url)?.let { target ->
+            val text = CineSrc.resolve(target)
+            return Preview(mediaInfo(url, JSONObject(text)), text, reusable = true)
+        }
         if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.available && readRuntime { WarmYtDlp.extractor(url) } == "Generic") {
             runInterruptible { Cheek.resolve(url) }?.let { nativePreview(url, it) }?.let { return it }
         }
-        val req = YoutubeDLRequest(url).apply {
-            addOption("--no-playlist")
-            addOption("--socket-timeout", 15)
-            addOption("--cache-dir", extractorCacheDir.absolutePath)
-            addOption("--dump-single-json")
+        val response = YoutubeAccess.run(url) { client ->
+            val req = YoutubeDLRequest(url).apply {
+                addOption("--no-playlist")
+                addOption("--socket-timeout", 15)
+                addOption("--cache-dir", extractorCacheDir.absolutePath)
+                addOption("--dump-single-json")
+                if (client != null) addOption("--extractor-args", "youtube:player_client=$client")
+            }
+            readRuntime { WarmYtDlp.execute(req) ?: YoutubeDL.getInstance().execute(req) }
         }
-        val response = readRuntime { WarmYtDlp.execute(req) ?: YoutubeDL.getInstance().execute(req) }
         val json = JSONObject(response.out)
         return Preview(
             mediaInfo(url, json), response.out,
@@ -325,7 +347,7 @@ object Engine {
     }
 
     /** A version is one more file of one video, even when playlists are switched on. */
-    internal fun playlists(task: DownloadTask) = Prefs.settings.value.playlists && task.versionOf == null
+    internal fun playlists(task: DownloadTask) = Prefs.settings.value.playlists && task.versionOf == null && CineSrcTarget.parse(task.url) == null
 
     fun pathFile(task: DownloadTask) = File(tempDir, "${task.id}.path")
 
@@ -336,6 +358,8 @@ object Engine {
 
     suspend fun execute(task: DownloadTask, callback: ((Float, Long, String) -> Unit)? = null): YoutubeDLResponse = withContext(Dispatchers.IO) {
         awaitReady()
+        val cineSrc = CineSrcTarget.parse(task.url) != null
+        if (cineSrc) preview(task.url) // Instant stash also needs WebView resolution before either engine starts.
         if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.handles(task)) {
             val res = executeCheek(task, callback)
             // Formats cheek can't fetch (DASH fragments, DRM) go to yt-dlp after all.
@@ -344,14 +368,30 @@ object Engine {
         }
         val initialRequest = request(task)
         try {
-            readRuntime { YoutubeDL.getInstance().execute(initialRequest, task.id, callback) }
+            executeYtDlp(task, initialRequest, callback)
         } catch (e: YoutubeDLException) {
             // Some bundled versions do not reliably re-extract expired info-json URLs.
             // Retry once from the webpage, retaining .part files for resumption.
             if (!initialRequest.hasOption("--load-info-json") || !expiredMedia.containsMatchIn(e.message.orEmpty()) || pathFile(task).exists()) throw e
             previews.invalidate(task.url)
-            readRuntime { YoutubeDL.getInstance().execute(request(task, reusePreview = false), task.id, callback) }
+            if (cineSrc) preview(task.url)
+            executeYtDlp(task, request(task, reusePreview = cineSrc), callback)
         }
+    }
+
+    private suspend fun executeYtDlp(
+        task: DownloadTask,
+        initialRequest: YoutubeDLRequest,
+        callback: ((Float, Long, String) -> Unit)?,
+    ): YoutubeDLResponse = YoutubeAccess.run(task.url, mayRetry = { !pathFile(task).exists() }) { client ->
+        val req = if (client == null) initialRequest else {
+            // A client change needs fresh stream URLs, rather than the previous info JSON.
+            previews.invalidate(task.url)
+            request(task, reusePreview = false).apply {
+                addOption("--extractor-args", "youtube:player_client=$client")
+            }
+        }
+        readRuntime { YoutubeDL.getInstance().execute(req, task.id, callback) }
     }
 
     /**
@@ -362,7 +402,9 @@ object Engine {
         suspend fun download(): YoutubeDLResponse {
             val preview = preview(task.url)
             val format = if (preview.native) null else formatSelector(task.choice)
-            return Cheek.execute(task, preview.json, format, tempDir, outputDir, pathFile(task), callback)
+            return runInterruptible {
+                Cheek.execute(task, preview.json, format, tempDir, outputDir, pathFile(task), callback)
+            }
         }
         outputDir.mkdirs()
         val first = download()

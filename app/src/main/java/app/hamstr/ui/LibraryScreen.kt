@@ -76,6 +76,8 @@ import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.Segmented
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.theme.Hamstr
+import androidx.compose.ui.graphics.lerp
+import app.hamstr.ui.components.animateSelection
 
 private enum class Filter(val label: Int) { All(R.string.lib_all), Video(R.string.mode_video), Audio(R.string.mode_audio) }
 
@@ -211,15 +213,16 @@ fun LibraryScreen(
                     Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         sites.forEach { s ->
                             val on = s == site
+                            val p = animateSelection(on)
                             Box(
                                 Modifier
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (on) c.accent else c.overlay)
+                                    .background(lerp(c.overlay, c.accent, p))
                                     .clickable { site = if (on) null else s }
                                     .heightIn(min = 36.dp)
                                     .padding(horizontal = 12.dp),
                                 contentAlignment = Alignment.Center,
-                            ) { Txt(s, style = Hamstr.type.small, color = if (on) c.onAccent else c.muted) }
+                            ) { Txt(s, style = Hamstr.type.small, color = lerp(c.muted, c.onAccent, p)) }
                         }
                     }
                 }
@@ -262,6 +265,8 @@ fun LibraryScreen(
             val t = (shelf as Shelf.One).task
             val gone = t.id in missing
             val on = t.family in selected
+            // Under Video or Audio, a tile only counts the files of that kind.
+            val all = versions[t.family].orEmpty().filter { filter == Filter.All || (it.choice.mode == Mode.Audio) == (filter == Filter.Audio) }.ifEmpty { listOf(t) }
             Column(
                 anim
                     .clip(RoundedCornerShape(14.dp))
@@ -278,8 +283,13 @@ fun LibraryScreen(
                     )
                     if (gone) {
                         Badge(stringResource(R.string.lib_gone), modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 8.dp, vertical = 4.dp))
-                    } else if (t.durationSec > 0) {
+                    } else {
+                        // Quality and length sit on the picture, so the tile needs no extra line for them.
                         Txt(
+                            versionsBadge(all), style = Hamstr.type.badge, color = Color.White, maxLines = 1,
+                            modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.65f)).padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                        if (t.durationSec > 0) Txt(
                             formatDuration(t.durationSec), style = Hamstr.type.badge, color = Color.White,
                             modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.65f)).padding(horizontal = 6.dp, vertical = 2.dp),
                         )
@@ -291,7 +301,9 @@ fun LibraryScreen(
                 Row(verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
                         Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2, modifier = Modifier.padding(horizontal = 2.dp))
-                        (t.uploader ?: versions[t.family]?.firstNotNullOfOrNull { it.uploader })?.let { Txt(it, style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)) }
+                        val size = all.sumOf { it.sizeBytes }.takeIf { it > 0 }?.let(::formatBytes)
+                        listOfNotNull(t.uploader ?: versions[t.family]?.firstNotNullOfOrNull { it.uploader }, size).joinToString(" · ").takeIf { it.isNotEmpty() }
+                            ?.let { Txt(it, style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)) }
                     }
                     if (!selecting) {
                         // The file menu, also reachable with a long press on the player.
@@ -300,13 +312,6 @@ fun LibraryScreen(
                             contentAlignment = Alignment.TopCenter,
                         ) { Icon(R.drawable.ic_more_vert, tint = c.ghost, size = 18.dp, modifier = Modifier.padding(top = 2.dp)) }
                     }
-                }
-                Spacer(Modifier.height(3.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 2.dp)) {
-                    // Under Video or Audio, a tile only counts the files of that kind.
-                    val all = versions[t.family].orEmpty().filter { filter == Filter.All || (it.choice.mode == Mode.Audio) == (filter == Filter.Audio) }.ifEmpty { listOf(t) }
-                    Badge(versionsBadge(all))
-                    all.sumOf { it.sizeBytes }.takeIf { it > 0 }?.let { Badge(formatBytes(it)) }
                 }
             }
         }
@@ -318,6 +323,7 @@ fun LibraryScreen(
 private fun SelectMark(selecting: Boolean, on: Boolean, modifier: Modifier = Modifier) {
     val c = Hamstr.colors
     val shown by animateFloatAsState(if (selecting) 1f else 0f, tween(160), label = "selectMark")
+    val p = animateSelection(on)
     if (shown <= 0f) return
     Box(
         modifier
@@ -325,8 +331,8 @@ private fun SelectMark(selecting: Boolean, on: Boolean, modifier: Modifier = Mod
             .graphicsLayer { alpha = shown; scaleX = 0.6f + 0.4f * shown; scaleY = 0.6f + 0.4f * shown }
             .size(24.dp)
             .clip(CircleShape)
-            .background(if (on) c.accent else Color.Black.copy(alpha = 0.45f))
-            .border(2.dp, if (on) c.accent else Color.White.copy(alpha = 0.8f), CircleShape),
+            .background(lerp(Color.Black.copy(alpha = 0.45f), c.accent, p))
+            .border(2.dp, lerp(Color.White.copy(alpha = 0.8f), c.accent, p), CircleShape),
         contentAlignment = Alignment.Center,
     ) { if (on) Icon(R.drawable.ic_check, tint = c.onAccent, size = 16.dp) }
 }

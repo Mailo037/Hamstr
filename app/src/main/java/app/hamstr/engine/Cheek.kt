@@ -196,6 +196,7 @@ object Cheek {
         val errReader = thread(name = "cheek-stderr") { runCatching { proc.errorStream.bufferedReader().forEachLine { err.appendLine(it) } } }
         var failure: String? = null
         try {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException("Download stopped")
             proc.inputStream.bufferedReader().forEachLine { line ->
                 val e = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
                 when (e.optString("type")) {
@@ -225,8 +226,11 @@ object Cheek {
             Log.w(TAG, "cheek stopped", e)
             throw e
         } finally {
-            processes.remove(task.id)
-            if (proc.isAlive) proc.destroy()
+            processes.remove(task.id, proc)
+            if (proc.isAlive) {
+                TaskProcesses.stop(work)
+                proc.destroy()
+            }
         }
     }
 

@@ -70,6 +70,7 @@ import kotlin.coroutines.resume
 class DownloadService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = mutableMapOf<String, Job>()
+    private val stopping = mutableSetOf<String>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val retryTick = Runnable { pump() }
     private var lastStartId = 0
@@ -126,7 +127,7 @@ class DownloadService : Service() {
             Network.state.value.online -> Stage.WaitingForWifi
             else -> Stage.WaitingForNetwork
         }
-        val queued = DownloadStore.tasks.value.filter { it.status == Status.Queued && it.id !in jobs }.reversed() // oldest first
+        val queued = DownloadStore.tasks.value.filter { it.status == Status.Queued && it.id !in jobs && it.id !in stopping }.reversed() // oldest first
         for (task in queued) {
             if (waiting != null) {
                 if (task.stage != waiting) DownloadStore.update(task.id, persist = false) { it.copy(stage = waiting) }
@@ -156,7 +157,7 @@ class DownloadService : Service() {
                 ?.let { mainHandler.postDelayed(retryTick, it - now + 50) }
         }
         notifyProgress(force = true)
-        if (jobs.isEmpty()) finishIfIdle()
+        if (jobs.isEmpty() && stopping.isEmpty()) finishIfIdle()
     }
 
     /** The network is back (or Wi-Fi is): waiting and retrying downloads go at once. */
@@ -322,13 +323,29 @@ class DownloadService : Service() {
 
     private fun stop(id: String, status: Status, stage: Stage? = null) {
         val task = DownloadStore.get(id) ?: return
-        if (status == Status.Canceled && !task.status.active && task.status != Status.Paused) return
-        DownloadStore.update(id) { it.copy(status = status, speed = "", etaSec = -1, stage = stage, retryAt = 0) }
-        val job = synchronized(this) { jobs[id] }
-        YoutubeDL.getInstance().destroyProcessById(id)
-        Cheek.destroy(id)
+        if (!task.status.active && !(status == Status.Canceled && task.status == Status.Paused)) return
+        DownloadStore.update(id) {
+            if (it.status.active || status == Status.Canceled && it.status == Status.Paused)
+                it.copy(status = status, speed = "", etaSec = -1, stage = stage, retryAt = 0)
+            else it
+        }
+        if (DownloadStore.get(id)?.status != status) return
+        val job = synchronized(this) {
+            if (!stopping.add(id)) return
+            jobs[id]
+        }
         job?.cancel()
-        if (status == Status.Canceled && job == null) scope.launch { Engine.clearTemporaryFiles(task) }
+        scope.launch {
+            try {
+                TaskProcesses.stop(File(cacheDir, "parts/$id"))
+                YoutubeDL.getInstance().destroyProcessById(id)
+                Cheek.destroy(id)
+                if (DownloadStore.get(id)?.status == Status.Canceled && job == null) Engine.clearTemporaryFiles(task)
+            } finally {
+                synchronized(this@DownloadService) { stopping.remove(id) }
+                pump()
+            }
+        }
         notifyProgress(force = true)
     }
 
@@ -337,7 +354,7 @@ class DownloadService : Service() {
         // newly started foreground service before its start command is handled.
         mainHandler.post {
             synchronized(this) {
-                if (scope.isActive && jobs.isEmpty() && DownloadStore.tasks.value.none { it.status == Status.Queued && it.stage != Stage.PausedBySystem } &&
+                if (scope.isActive && jobs.isEmpty() && stopping.isEmpty() && DownloadStore.tasks.value.none { it.status == Status.Queued && it.stage != Stage.PausedBySystem } &&
                     stopSelfResult(lastStartId)
                 ) {
                     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)

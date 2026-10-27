@@ -77,6 +77,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.compose.ui.graphics.lerp
+import app.hamstr.ui.components.animateSelection
 
 sealed interface InfoState {
     data object Loading : InfoState
@@ -118,7 +120,9 @@ fun ShareSheet(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val defaults = remember { Prefs.settings.value }
-    var state by remember(url) { mutableStateOf<InfoState>(InfoState.Loading) }
+    var state by remember(url) {
+        mutableStateOf<InfoState>(Engine.cachedInfo(url)?.let(InfoState::Loaded) ?: InfoState.Loading)
+    }
     var peek by remember(url) { mutableStateOf<Peek?>(null) }
     var mode by remember { mutableStateOf(defaults.mode) }
     var modeTouched by remember { mutableStateOf(false) }
@@ -133,8 +137,12 @@ fun ShareSheet(
     var details by remember { mutableStateOf(false) }
     val net by Network.state.collectAsState()
 
-    LaunchedEffect(url) { peek = Peeker.peek(url) }
+    LaunchedEffect(url) { if (Engine.cachedInfo(url) == null) peek = Peeker.peek(url) }
     LaunchedEffect(url, reload, net.online) {
+        Engine.cachedInfo(url)?.let {
+            state = InfoState.Loaded(it)
+            return@LaunchedEffect
+        }
         if (!net.online) {
             state = InfoState.Failed("Network is unreachable")
             return@LaunchedEffect
@@ -147,6 +155,8 @@ fun ShareSheet(
         }
     }
     val info = (state as? InfoState.Loaded)?.info
+    // Stashed before yt-dlp is done: the first look's title and picture go with the task until yt-dlp's arrive.
+    val stashInfo = info ?: peek?.let { MediaInfo(url, it.title ?: url, it.thumbnail, null, 0, null, emptyList(), 0) }
     // Sound-only links (SoundCloud, YouTube Music, a podcast) start in Audio unless picked otherwise.
     LaunchedEffect(info) { if (info != null && !modeTouched && looksLikeAudio(url, info)) mode = Mode.Audio }
 
@@ -351,7 +361,7 @@ fun ShareSheet(
             when {
                 // Offline: it can still be queued; it starts on its own once the phone is back online.
                 !net.online -> HButton(
-                    stringResource(R.string.share_stash_later), { keepChoice(); onStash(null, choice) },
+                    stringResource(R.string.share_stash_later), { keepChoice(); onStash(stashInfo, choice) },
                     primary, kind = ButtonKind.Primary, icon = R.drawable.ic_download,
                 )
                 s is InfoState.Failed -> {
@@ -383,7 +393,7 @@ fun ShareSheet(
                 )
                 else -> HButton(
                     if (size != null) stringResource(R.string.share_stash_sized, size) else stringResource(R.string.share_stash),
-                    { keepChoice(); onStash(info, choice) },
+                    { keepChoice(); onStash(stashInfo, choice) },
                     primary, kind = ButtonKind.Primary, icon = R.drawable.ic_download,
                 )
             }
@@ -414,17 +424,18 @@ fun <T> Chips(options: List<T>, selected: T, label: (T) -> String, sub: (T) -> S
     Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEach { o ->
             val on = o == selected
+            val p = animateSelection(on)
             val second = sub(o)
             Column(
                 Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (on) c.accent else c.surface)
+                    .background(lerp(c.surface, c.accent, p))
                     .clickable { onPick(o) }
                     .padding(horizontal = 14.dp, vertical = if (second != null) 6.dp else 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Txt(label(o), style = Hamstr.type.bodyMedium, color = if (on) c.onAccent else c.ink)
-                if (second != null) Txt(second, style = Hamstr.type.small, color = if (on) c.onAccent else c.ghost)
+                Txt(label(o), style = Hamstr.type.bodyMedium, color = lerp(c.ink, c.onAccent, p))
+                if (second != null) Txt(second, style = Hamstr.type.small, color = lerp(c.ghost, c.onAccent, p))
             }
         }
     }

@@ -13,6 +13,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PreviewCacheTest {
+    @Test fun displayMetadataOutlivesSignedUrlsWithoutExtendingTheirLifetime() = runBlocking {
+        var time = 0L
+        val urls = PreviewCache<String>(this, ttlMillis = 120_000, weightOf = { it.length }, now = { time })
+        val metadata = PreviewCache<List<Int>>(this, ttlMillis = 30 * 60_000, weightOf = { it.size * 4 }, now = { time })
+        urls.getOrLoad("video") { "signed-url" }
+        metadata.getOrLoad("video") { listOf(360, 720, 1080) }
+        time = 120_001
+        assertNull(urls.get("video"))
+        assertEquals(listOf(360, 720, 1080), metadata.getOrLoad("video") { error("Reopening should not extract again") })
+        time = 30 * 60_000
+        assertNull(metadata.get("video"))
+        assertEquals("fresh-url", urls.getOrLoad("video") { "fresh-url" })
+    }
+
     @Test fun simultaneousCallersAndCanceledWaiterShareOneExtraction() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {

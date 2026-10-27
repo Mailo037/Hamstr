@@ -48,8 +48,6 @@ import app.hamstr.ui.components.pressable
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
 
-private val LINK = Regex("""https?://\S+""")
-
 /**
  * The "+" sheet: type or paste a link, take the one on the clipboard, or bring in files
  * that are already on the phone.
@@ -58,7 +56,7 @@ private val LINK = Regex("""https?://\S+""")
 fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Unit) {
     val c = Hamstr.colors
     var text by remember { mutableStateOf("") }
-    val link = LINK.find(text)?.value
+    val link = app.hamstr.engine.MediaLinks.find(text)
     val submit = { if (link != null) onLink(link) }
 
     Column(

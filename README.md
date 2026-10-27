@@ -60,6 +60,17 @@ Android asks once whether your browser may install apps. Later updates come thro
 
 ## How it works
 
+Cineby/CineSrc movie and episode links, including
+`https://cineby.rocks/watch/movie/TMDB_ID`, are resolved on the phone with Android's
+built-in WebView. You can also paste `cinesrc:movie:TMDB_ID` or
+`cinesrc:tv:TMDB_ID:SEASON:EPISODE` (`cineby:` works too). Series require a season
+and episode; season 0 supports specials. Hamstr loads the regular CineSrc player,
+checks its HLS playlist without transferring browser cookies, then closes the
+WebView. Cheek or yt-dlp downloads the stream, with the available qualities shown
+in the normal share sheet. No desktop Chrome, remote resolver or extra app is
+needed. The provider must expose an accessible stream; resolution times out after
+90 seconds. Keep Android System WebView up to date.
+
 ```
  share link ──► ShareActivity ──► share sheet ──► DownloadService (foreground, queue)
                                        │                    │
