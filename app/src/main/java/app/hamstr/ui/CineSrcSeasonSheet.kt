@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -24,6 +25,7 @@ import app.hamstr.ui.components.Chips
 @Composable
 internal fun CineSrcSeasonSheet(target: CineSrcTarget, onEpisode: (String) -> Unit, onDismiss: () -> Unit, onQueued: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val c = Hamstr.colors
     var series by remember(target.tmdbId) { mutableStateOf<CineSrcSeries?>(null) }
     var season by remember(target) { mutableStateOf(target.season) }
@@ -38,7 +40,7 @@ internal fun CineSrcSeasonSheet(target: CineSrcTarget, onEpisode: (String) -> Un
         try {
             val show = CineSrcCatalog.series(target.tmdbId)
             series = show
-            check(show.seasons.isNotEmpty()) { context.getString(R.string.cinesrc_empty) }
+            check(show.seasons.isNotEmpty()) { resources.getString(R.string.cinesrc_empty) }
             if (season == null) season = show.seasons.firstOrNull { it.number > 0 }?.number ?: show.seasons.firstOrNull()?.number
         } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
     }
@@ -48,12 +50,12 @@ internal fun CineSrcSeasonSheet(target: CineSrcTarget, onEpisode: (String) -> Un
         loaded = null
         error = null
         try {
-            check(show.seasons.any { it.number == number }) { context.getString(R.string.cinesrc_season_missing) }
+            check(show.seasons.any { it.number == number }) { resources.getString(R.string.cinesrc_season_missing) }
             loaded = CineSrcCatalog.season(show.id, number)
         } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
     }
     val current = loaded?.takeIf { it.number == season }
-    val seasonLabel = { n: Int? -> if (n == 0) context.getString(R.string.cinesrc_specials) else context.getString(R.string.cinesrc_season, n) }
+    val seasonLabel = { n: Int? -> if (n == 0) resources.getString(R.string.cinesrc_specials) else resources.getString(R.string.cinesrc_season, n) }
     val episodes = if (error == null) current?.episodes.orEmpty() else emptyList()
     // The header and the state of the season ride in the list; the buttons stay put.
     Sheet(scroll = false) {
@@ -102,7 +104,7 @@ internal fun CineSrcSeasonSheet(target: CineSrcTarget, onEpisode: (String) -> Un
         ) { _, episode ->
             PickRow(
                 checked = episode.number in selected, thumbnail = episode.thumbnail,
-                title = episode.title.ifBlank { context.getString(R.string.cinesrc_episode, episode.number, "") },
+                title = episode.title.ifBlank { resources.getString(R.string.cinesrc_episode, episode.number, "") },
                 meta = listOfNotNull("E" + episode.number.toString().padStart(2, '0'), episode.durationSec.takeIf { it > 0 }?.let(::formatDuration)),
                 onToggle = { selected = if (it) selected + episode.number else selected - episode.number },
             )
@@ -111,7 +113,7 @@ internal fun CineSrcSeasonSheet(target: CineSrcTarget, onEpisode: (String) -> Un
         if (selected.size > 1 && episodes.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Txt(stringResource(R.string.cinesrc_max_quality), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
-            Chips(listOf(null, 1080, 720, 480), height, { it?.let { h -> "${h}p" } ?: context.getString(R.string.cinesrc_best) }) { height = it }
+            Chips(listOf(null, 1080, 720, 480), height, { it?.let { h -> "${h}p" } ?: resources.getString(R.string.cinesrc_best) }) { height = it }
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

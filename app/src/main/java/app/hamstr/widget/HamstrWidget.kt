@@ -46,6 +46,13 @@ object Widgets {
                 .sample(1000)
                 .collect { refresh(app) }
         }
+        // The other widgets only change with the accent (the player widget also hears from the player).
+        scope.launch {
+            Prefs.settings.map { it.accent }.distinctUntilChanged().collect {
+                PlayerWidgets.refresh(app)
+                PlayerWidgets.refreshMark(app)
+            }
+        }
     }
 
     fun refresh(context: Context) {
@@ -85,6 +92,7 @@ object Widgets {
             )
             v.setViewVisibility(R.id.widget_progress, View.GONE)
         }
+        v.setImageViewBitmap(R.id.widget_mark, PlayerWidgets.markBitmap(context, Prefs.settings.value.accent))
         if (Build.VERSION.SDK_INT >= 31) {
             val accent = ColorStateList.valueOf(Prefs.settings.value.accent)
             v.setColorStateList(R.id.widget_add, "setBackgroundTintList", accent)

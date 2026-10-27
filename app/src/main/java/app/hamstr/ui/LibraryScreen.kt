@@ -77,8 +77,23 @@ import app.hamstr.ui.components.Chips
 import app.hamstr.ui.components.PictureLabel
 import app.hamstr.ui.components.pressable
 import app.hamstr.ui.components.Specs
+import app.hamstr.ui.components.SwipeAction
+import app.hamstr.data.PlaylistPlacement
+import app.hamstr.ui.theme.Radii
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.res.pluralStringResource
+import app.hamstr.ui.components.SwipeRow
 
 private enum class Filter(val label: Int) { All(R.string.lib_all), Video(R.string.mode_video), Audio(R.string.mode_audio) }
+
+private fun PlaylistPlacement.label() = when (this) {
+    PlaylistPlacement.Row -> R.string.lib_pl_row
+    PlaylistPlacement.Grid -> R.string.lib_pl_grid
+    PlaylistPlacement.Hidden -> R.string.lib_pl_hidden
+}
 
 private fun LibrarySort.label() = when (this) {
     LibrarySort.Newest -> R.string.lib_sort_newest
@@ -91,7 +106,8 @@ private fun LibrarySort.label() = when (this) {
  * Everything stashed: playlists in a row on top, then the files as a grid, or under Audio
  * as a list of songs. Search covers titles, channels and sites; the list can be sorted and
  * narrowed to one site. A long press starts selecting, to share, hide, delete or put
- * several files into a playlist at once.
+ * several files into a playlist at once. Swiped right a file plays next, swiped left it
+ * goes into Favorites (or out again); both are in its menu too.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -101,6 +117,8 @@ fun LibraryScreen(
     onMenu: (DownloadTask) -> Unit,
     onPlay: (DownloadTask, List<DownloadTask>) -> Unit,
     onPlayList: (DownloadTask, List<DownloadTask>) -> Unit,
+    onPlayNext: (DownloadTask) -> Unit,
+    onFavorite: (DownloadTask) -> Unit,
     onPlaylist: (String) -> Unit,
     onNewPlaylist: () -> Unit,
     onAddToPlaylist: (List<DownloadTask>) -> Unit,
@@ -112,6 +130,7 @@ fun LibraryScreen(
     val haptics = LocalHapticFeedback.current
     val settings by Prefs.settings.collectAsState()
     val sort = settings.librarySort
+    val placement = settings.libraryPlaylists
     var filter by rememberSaveable { mutableStateOf(Filter.All) }
     var site by rememberSaveable { mutableStateOf<String?>(null) }
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -146,8 +165,10 @@ fun LibraryScreen(
                 }
             }
     }
-    // Files of a downloaded playlist live in its tile up top; the songs list shows every song.
-    val tiles = remember(done) { shelves(done).filterIsInstance<Shelf.One>() }
+    // Files of a downloaded playlist live in its playlist; with playlists hidden, every file shows.
+    val tiles = remember(done, placement) {
+        if (placement == PlaylistPlacement.Hidden) done.map { Shelf.One(it) } else shelves(done).filterIsInstance<Shelf.One>()
+    }
     val songs = filter == Filter.Audio
     val lists by Playlists.lists.collectAsState()
     val playlists = remember(completed, lists, filter, q) {
@@ -161,6 +182,7 @@ fun LibraryScreen(
         }
     }
     val playing by Playback.current.collectAsState()
+    val favorites = remember(lists) { lists.firstOrNull { "list:" + it.id == Playlists.FAVORITES }?.ids?.toSet().orEmpty() }
     val versions = remember(completed) { completed.groupBy { it.family } }
     // A selected tile stands for all its qualities, or all files of its playlist.
     fun filesOf(ids: Set<String>) = completed.filter { t -> t.family in ids || t.group in ids || t.id in ids }
@@ -222,6 +244,10 @@ fun LibraryScreen(
                         Txt(stringResource(R.string.lib_sort), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(start = 2.dp))
                         val labels = LibrarySort.entries.associateWith { stringResource(it.label()) }
                         Chips(LibrarySort.entries.toList(), sort, { labels.getValue(it) }, background = c.overlay) { s -> Prefs.edit { it.copy(librarySort = s) } }
+                        Spacer(Modifier.height(6.dp))
+                        Txt(stringResource(R.string.lib_playlists), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(start = 2.dp))
+                        val places = PlaylistPlacement.entries.associateWith { stringResource(it.label()) }
+                        Chips(PlaylistPlacement.entries.toList(), placement, { places.getValue(it) }, background = c.overlay) { v -> Prefs.edit { it.copy(libraryPlaylists = v) } }
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -239,19 +265,35 @@ fun LibraryScreen(
                     }
                 }
                 // Stays while selecting, so the grid doesn't jump under the finger.
-                if (completed.isNotEmpty()) {
+                if (completed.isNotEmpty() && placement == PlaylistPlacement.Row) {
                     Spacer(Modifier.height(if (sites.size > 1) 12.dp else 18.dp))
                     Txt(stringResource(R.string.lib_playlists), style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(start = 2.dp, bottom = 8.dp))
                     val scroll = rememberScrollState()
-                    Row(Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        playlists.forEach { p -> PlaylistTile(p, 148.dp) { onPlaylist(p.id) } }
-                        NewPlaylistTile(148.dp, onNewPlaylist)
+                    // Square song lists and wide video lists stand on one line, names level.
+                    Row(
+                        Modifier.edgeFade(scroll, Orientation.Horizontal).horizontalScroll(scroll),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        playlists.forEach { p -> app.hamstr.ui.PlaylistTile(p, 148.dp, { onPlaylist(p.id) }, square = p.songs || (songs && p.items.isNotEmpty())) }
+                        app.hamstr.ui.NewPlaylistTile(148.dp, onNewPlaylist, square = songs)
                     }
                 }
                 if (songs && done.isNotEmpty()) {
                     Spacer(Modifier.height(18.dp))
                     Txt("${stringResource(R.string.lib_songs)} · ${done.size}", style = Hamstr.type.badge, color = c.ghost, modifier = Modifier.padding(start = 2.dp))
                 }
+            }
+        }
+        // Playlists among the files: tiles in the grid, rows in the songs list.
+        if (placement == PlaylistPlacement.Grid && !selecting) {
+            if (songs) items(playlists, key = { "plrow:" + it.id }, span = { GridItemSpan(2) }) { p ->
+                PlaylistRow(p, Modifier.animateItem(fadeInSpec = Specs.listIn(), fadeOutSpec = Specs.listOut())) { onPlaylist(p.id) }
+            } else {
+                items(playlists, key = { "pltile:" + it.id }) { p ->
+                    PlaylistTile(p, Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut())) { onPlaylist(p.id) }
+                }
+                item(key = "pltile:new") { NewPlaylistTile(Modifier.animateItem(fadeInSpec = Specs.listIn(), fadeOutSpec = Specs.listOut()), onNewPlaylist) }
             }
         }
         if (done.isEmpty()) {
@@ -266,7 +308,11 @@ fun LibraryScreen(
             items(done, key = { "song:" + it.id }, span = { GridItemSpan(2) }) { t ->
                 val gone = t.id in missing
                 val on = t.family in selected
-                Box(Modifier.animateItem(fadeInSpec = Specs.listIn(), fadeOutSpec = Specs.listOut())) {
+                SwipeRow(
+                    start = if (selecting || gone) null else playNextAction { onPlayNext(t) },
+                    end = if (selecting || gone) null else favoriteAction(t, favorites) { onFavorite(t) },
+                    modifier = Modifier.animateItem(fadeInSpec = Specs.listIn(), fadeOutSpec = Specs.listOut()),
+                ) {
                     SongRow(
                         t, now = playing?.id == t.id, gone = gone,
                         onClick = { if (selecting) toggle(t.family) else if (gone) onMenu(t) else onPlayList(t, done.filter { it.id !in missing }) },
@@ -284,8 +330,12 @@ fun LibraryScreen(
             val on = t.family in selected
             // Under Video or Audio, a tile only counts the files of that kind.
             val all = versions[t.family].orEmpty().filter { filter == Filter.All || (it.choice.mode == Mode.Audio) == (filter == Filter.Audio) }.ifEmpty { listOf(t) }
-            Column(
-                anim
+            SwipeRow(
+                start = if (selecting || gone) null else playNextAction { onPlayNext(t) },
+                end = if (selecting || gone) null else favoriteAction(t, favorites) { onFavorite(t) },
+                modifier = anim,
+            ) { Column(
+                Modifier
                     .clip(RoundedCornerShape(14.dp))
                     .pressable(
                         onClick = { if (selecting) toggle(t.family) else if (gone) onMenu(t) else onPlay(t, done) },
@@ -317,16 +367,79 @@ fun LibraryScreen(
                             ?.let { Txt(it, style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)) }
                     }
                     if (!selecting) {
-                        // The file menu, also reachable with a long press on the player.
+                        // The file menu, also reachable with a long press on the player. The 48 dp target
+                        // reaches into the gutter, so the dots line up with the picture's edge.
                         Box(
-                            Modifier.size(48.dp).pressable({ onMenu(t) }, label = stringResource(R.string.player_more), pressedScale = 0.92f),
+                            Modifier.offset(x = 14.dp).size(48.dp).pressable({ onMenu(t) }, label = stringResource(R.string.player_more), pressedScale = 0.92f),
                             contentAlignment = Alignment.TopCenter,
                         ) { Icon(R.drawable.ic_more_vert, tint = c.ghost, size = 18.dp, modifier = Modifier.padding(top = 2.dp)) }
                     }
                 }
-            }
+            } }
         }
     }
+}
+
+/** A playlist as a tile among the files: the fan as wide as a file's picture. */
+@Composable
+private fun PlaylistTile(p: app.hamstr.data.Playlist, modifier: Modifier, onClick: () -> Unit) {
+    val c = Hamstr.colors
+    Column(modifier.clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
+            PlaylistFan(p.items, if (p.songs) Modifier.fillMaxHeight() else Modifier.fillMaxWidth(), square = p.songs)
+        }
+        Spacer(Modifier.height(7.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp)) {
+            Icon(if (p.favorites) R.drawable.ic_favorite else R.drawable.ic_queue_music, tint = c.accent, size = 14.dp, modifier = Modifier.padding(end = 4.dp))
+            Txt(p.name.ifEmpty { stringResource(R.string.lib_playlist) }, style = Hamstr.type.bodyMedium, maxLines = 1)
+        }
+        Txt(pluralStringResource(R.plurals.lib_files, p.items.size, p.items.size), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp))
+    }
+}
+
+@Composable
+private fun NewPlaylistTile(modifier: Modifier, onClick: () -> Unit) {
+    val c = Hamstr.colors
+    Column(modifier.clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).border(2.dp, c.line, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(R.drawable.ic_add, tint = c.accent, size = 28.dp) }
+        Spacer(Modifier.height(7.dp))
+        Txt(stringResource(R.string.pl_new), style = Hamstr.type.bodyMedium, color = c.accent, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp))
+    }
+}
+
+/** A playlist in the songs list: a small square fan, its name and how many songs. */
+@Composable
+private fun PlaylistRow(p: app.hamstr.data.Playlist, modifier: Modifier, onClick: () -> Unit) {
+    val c = Hamstr.colors
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.row)).clickable(onClick = onClick).padding(start = 6.dp, top = 6.dp, bottom = 6.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlaylistFan(p.items, Modifier.size(52.dp), square = true)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Txt(p.name.ifEmpty { stringResource(R.string.lib_playlist) }, style = Hamstr.type.bodyMedium, maxLines = 1)
+            Spacer(Modifier.height(2.dp))
+            Txt(pluralStringResource(R.plurals.lib_files, p.items.size, p.items.size), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
+        }
+        Icon(if (p.favorites) R.drawable.ic_favorite else R.drawable.ic_chevron_right, tint = if (p.favorites) c.accent else c.ghost, size = 18.dp)
+    }
+}
+
+@Composable
+private fun playNextAction(run: () -> Unit) = SwipeAction(R.drawable.ic_play_next, stringResource(R.string.play_next), Hamstr.colors.accent, onTrigger = run)
+
+@Composable
+private fun favoriteAction(t: DownloadTask, favorites: Set<String>, run: () -> Unit): SwipeAction {
+    val on = t.id in favorites
+    return SwipeAction(
+        if (on) R.drawable.ic_favorite_border else R.drawable.ic_favorite,
+        stringResource(if (on) R.string.fav_remove else R.string.fav_add),
+        Hamstr.colors.accent, onTrigger = run,
+    )
 }
 
 /** The tick in a tile's corner while selecting. */

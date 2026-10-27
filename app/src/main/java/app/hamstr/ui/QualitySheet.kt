@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import app.hamstr.engine.Failures
@@ -60,13 +61,13 @@ import app.hamstr.ui.components.SheetHeader
 fun canHaveVersions(t: DownloadTask): Boolean {
     if (t.status != Status.Done || t.group != null || !t.url.startsWith("http")) return false
     val file = t.filePath?.let(::File)?.takeIf { it.isFile } ?: return false
-    return kindOf(file).let { it == Kind.Video || it == Kind.Audio }
+    return kindOf(t).let { it == Kind.Video || it == Kind.Audio }
 }
 
 /** A video whose link has no audio-only file yet; [family] is everything stashed from that link. */
 fun canSaveAudio(t: DownloadTask, family: List<DownloadTask>): Boolean {
     val file = t.filePath?.let(::File)?.takeIf { it.isFile } ?: return false
-    return t.status == Status.Done && kindOf(file) == Kind.Video && family.none { it.choice.mode == Mode.Audio && it.status != Status.Canceled && it.status != Status.Failed }
+    return file.isFile && t.status == Status.Done && kindOf(t) == Kind.Video && family.none { it.choice.mode == Mode.Audio && it.status != Status.Canceled && it.status != Status.Failed }
 }
 
 /** One quality to fetch: a video height, or 0 for audio only. */
@@ -80,6 +81,7 @@ private data class Pick(val height: Int)
 fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAudio: (DownloadTask) -> Unit, onDelete: (DownloadTask) -> Unit, onDone: (String) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val tasks by DownloadStore.tasks.collectAsState()
     val playing by Playback.current.collectAsState()
@@ -229,7 +231,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                     }
                     DownloadService.stashVersion(context, current, choice, replace)
                 }
-                onDone(if (picked.size == 1) context.getString(R.string.q_fetching_one) else context.getString(R.string.q_fetching_many, picked.size))
+                onDone(if (picked.size == 1) resources.getString(R.string.q_fetching_one) else resources.getString(R.string.q_fetching_many, picked.size))
             },
             modifier = Modifier.fillMaxWidth(),
             kind = ButtonKind.Primary,

@@ -14,3 +14,7 @@ captures/
 .claude/
 # Fetched by the fetchCheek task
 app/src/main/jniLibs/
+
+# Local browser diagnostics
+.playwright-cli/
+__pycache__/

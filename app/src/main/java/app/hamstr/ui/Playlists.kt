@@ -85,12 +85,14 @@ fun shelves(done: List<DownloadTask>): List<Shelf> {
  * for everything else, and the first one upright on top in the middle.
  */
 @Composable
-fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier) {
-    BoxWithConstraints(modifier.aspectRatio(16f / 9f)) {
+fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier, square: Boolean = false) {
+    // Songs have square covers, so a list of songs fans out square cards.
+    val ratio = if (square) 1f else 16f / 9f
+    BoxWithConstraints(modifier.aspectRatio(ratio)) {
         if (items.isEmpty()) {
             // A new list: an empty card with the add mark, so it still reads as a playlist.
             Box(
-                Modifier.align(Alignment.Center).width(maxWidth * 0.53f).aspectRatio(16f / 9f)
+                Modifier.align(Alignment.Center).width(maxWidth * 0.53f).aspectRatio(ratio)
                     .clip(RoundedCornerShape(10.dp)).border(2.dp, Hamstr.colors.line, RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center,
             ) { Icon(R.drawable.ic_playlist_add, tint = Hamstr.colors.ghost, size = 22.dp) }
@@ -99,26 +101,26 @@ fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier) {
         val w = maxWidth * 0.5f
         // Card centres as fractions of the tile, measured from its middle.
         fun at(x: Float, y: Float) = Modifier.align(Alignment.Center).offset(x = maxWidth * (x - 0.5f), y = maxHeight * (y - 0.5f))
-        items.getOrNull(1)?.let { FanThumb(it, w, at(0.29f, 0.62f).graphicsLayer { rotationZ = -10f }) }
-        items.getOrNull(2)?.let { FanThumb(it, w, at(0.71f, 0.62f).graphicsLayer { rotationZ = 10f }, more = items.size - 2) }
-        FanThumb(items.first(), w * 1.06f, at(0.5f, 0.4f))
+        items.getOrNull(1)?.let { FanThumb(it, w, at(0.29f, 0.62f).graphicsLayer { rotationZ = -10f }, ratio) }
+        items.getOrNull(2)?.let { FanThumb(it, w, at(0.71f, 0.62f).graphicsLayer { rotationZ = 10f }, ratio, more = items.size - 2) }
+        FanThumb(items.first(), w * 1.06f, at(0.5f, 0.4f), ratio)
     }
 }
 
 @Composable
-private fun FanThumb(t: DownloadTask, width: Dp, modifier: Modifier, more: Int = 0) {
+private fun FanThumb(t: DownloadTask, width: Dp, modifier: Modifier, ratio: Float, more: Int = 0) {
     val c = Hamstr.colors
     Box(
         modifier
             .width(width)
-            .aspectRatio(16f / 9f)
+            .aspectRatio(ratio)
             .clip(RoundedCornerShape(10.dp))
             .border(2.dp, c.canvas, RoundedCornerShape(10.dp)),
     ) {
-        AsciiImage(rememberBitmap(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(c.black))
+        AsciiImage(rememberBitmap(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxWidth().aspectRatio(ratio).background(c.black))
         if (more > 0) {
             // The middle card covers this one's top left, so the count sits bottom right.
-            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.BottomEnd) {
+            Box(Modifier.fillMaxWidth().aspectRatio(ratio).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.BottomEnd) {
                 Txt(
                     "+$more",
                     style = Hamstr.type.mono.copy(fontSize = 18.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),

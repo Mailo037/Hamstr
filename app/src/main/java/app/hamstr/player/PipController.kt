@@ -23,7 +23,7 @@ internal class PipController(private val apply: (PictureInPictureParams) -> Unit
 
     val eligible: Boolean
         get() = task?.let { t ->
-            t.filePath?.let { kindOf(File(it)) } == Kind.Video &&
+            kindOf(t) == Kind.Video &&
                 player?.isPlaying == true && player?.currentMediaItem?.mediaId == t.id
         } == true
 

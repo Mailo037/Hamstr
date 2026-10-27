@@ -15,6 +15,8 @@ import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.SocketException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -24,6 +26,53 @@ import kotlinx.coroutines.runBlocking
 /** Tests the packaged release binary through Hamstr's real bridge, without yt-dlp fallback. */
 @RunWith(AndroidJUnit4::class)
 class CheekReleaseIntegrationTest {
+    @Test fun mediaDownloadConvertsAudioAndEmbedsMetadata(): Unit = runBlocking {
+        Engine.awaitReady()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "cheek-media-${UUID.randomUUID()}").apply { mkdirs() }
+        val samples = 8000
+        val wav = ByteBuffer.allocate(44 + samples * 2).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray()); putInt(36 + samples * 2); put("WAVEfmt ".toByteArray())
+            putInt(16); putShort(1); putShort(1); putInt(8000); putInt(16000); putShort(2); putShort(16)
+            put("data".toByteArray()); putInt(samples * 2)
+            repeat(samples) { putShort(0) }
+        }.array()
+        val server = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+        val acceptor = thread(isDaemon = true) {
+            try {
+                while (!server.isClosed) server.accept().use { socket ->
+                    val reader = socket.getInputStream().bufferedReader()
+                    while (!reader.readLine().isNullOrEmpty()) { }
+                    socket.getOutputStream().apply {
+                        write("HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: ${wav.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                        write(wav); flush()
+                    }
+                }
+            } catch (_: SocketException) { /* Closed by cleanup. */ }
+        }
+        try {
+            val url = "http://127.0.0.1:${server.localPort}/song.wav"
+            val info = JSONObject().put("id", "media-test").put("title", "Release audio fixture")
+                .put("url", url).put("ext", "wav").put("vcodec", "none").put("acodec", "pcm_s16le")
+            val task = DownloadTask(url = url, title = "Release audio fixture", thumbnail = null, source = null,
+                durationSec = 1, choice = Choice(Mode.Audio, null, "mp4", "m4a", false))
+            val paths = File(root, "paths.jsonl")
+            val response = Cheek.execute(task, info.toString(), null, root, root, paths, null)
+            assertEquals(response.err, 0, response.exitCode)
+            val output = File(JSONObject(paths.readLines().single()).getString("filepath"))
+            assertEquals("m4a", output.extension)
+            android.media.MediaMetadataRetriever().run {
+                try {
+                    setDataSource(output.absolutePath)
+                    assertEquals("yes", extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO))
+                    assertEquals("Release audio fixture", extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE))
+                } finally { release() }
+            }
+        } finally {
+            server.close(); acceptor.join(2000); root.deleteRecursively()
+        }
+    }
+
     @Test fun versionCheckReadsTheInstalledExecutable(): Unit = runBlocking {
         assertEquals(BuildConfig.CHEEK_VERSION, Cheek.version())
     }
@@ -76,7 +125,8 @@ class CheekReleaseIntegrationTest {
                 choice = Choice(Mode.Audio, null, "mp4", "m4a", false),
             )
             val paths = File(root, "paths.jsonl")
-            val response = Cheek.execute(task, info.toString(), Engine.formatSelector(task.choice), root, root, paths, null)
+            // Synthetic fragments test byte transport; they are not a decodable audio file.
+            val response = Cheek.execute(task, info.toString(), Engine.formatSelector(task.choice), root, root, paths, null, mediaFile = false)
             assertEquals(response.err, 0, response.exitCode)
             val output = File(JSONObject(paths.readLines().single()).getString("filepath"))
             assertArrayEquals(parts.reduce { a, b -> a + b }, output.readBytes())

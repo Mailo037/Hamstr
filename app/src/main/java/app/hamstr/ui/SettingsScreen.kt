@@ -1,5 +1,19 @@
 package app.hamstr.ui
 
+import app.hamstr.data.DownloadStore
+import app.hamstr.data.IconStyle
+import app.hamstr.data.MiniStyle
+import app.hamstr.data.UiSize
+import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.asImageBitmap
+import app.hamstr.data.DownloadTask
+import app.hamstr.data.Status
+import app.hamstr.ui.components.AsciiImage
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.Color
 import app.hamstr.data.DownloadEngine
 import androidx.compose.runtime.CompositionLocalProvider
 import app.hamstr.ui.components.searchHighlight
@@ -72,6 +86,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -116,13 +131,15 @@ private enum class Page(val title: Int, val icon: Int) {
     Appearance(R.string.page_appearance, R.drawable.ic_palette),
     Motion(R.string.page_motion, R.drawable.ic_auto_awesome),
     Downloads(R.string.page_downloads, R.drawable.ic_download),
+    Playback(R.string.page_playback, R.drawable.ic_play_arrow),
     Queue(R.string.page_queue, R.drawable.ic_folder_open),
     Engine(R.string.page_engine, R.drawable.ic_code),
+    Hidden(R.string.page_hidden, R.drawable.ic_visibility_off),
     About(R.string.page_about, R.drawable.ic_info),
 }
 
 @Composable
-fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit) {
+fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit, onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit) {
     var page by rememberSaveable { mutableStateOf<Page?>(null) }
     var highlight by rememberSaveable { mutableStateOf<String?>(null) }
     BackHandler(enabled = page != null) { page = null; highlight = null }
@@ -141,7 +158,7 @@ fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit) {
     ) { p ->
         if (p == null) Root(contentPadding) { target, setting -> page = target; highlight = setting }
         else CompositionLocalProvider(LocalSettingHighlight provides highlight) {
-            SubPage(p, contentPadding, onUpdate, onBack = { page = null; highlight = null })
+            SubPage(p, contentPadding, onUpdate, onDelete, onHint, onBack = { page = null; highlight = null })
         }
     }
 }
@@ -150,6 +167,8 @@ fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit) {
 private fun Root(contentPadding: PaddingValues, open: (Page, String?) -> Unit) {
     val s by Prefs.settings.collectAsState()
     val engine by Engine.state.collectAsState()
+    val tasks by DownloadStore.tasks.collectAsState()
+    val hidden = remember(tasks) { tasks.filter { it.hidden && it.status == Status.Done } }
     val scroll = rememberScrollState()
     var query by rememberSaveable { mutableStateOf("") }
     val context = LocalContext.current
@@ -173,12 +192,15 @@ private fun Root(contentPadding: PaddingValues, open: (Page, String?) -> Unit) {
                 results.forEach { r -> CategoryRow(r.page, stringResource(r.page.title), title = r.title) { open(r.page, r.title) } }
             }
         } else Group {
-            Page.entries.forEach { p -> CategoryRow(p, summary(context, p, s, engine)) { open(p, null) } }
+            Page.entries.forEach { p -> CategoryRow(p, summary(context, p, s, engine, hidden)) { open(p, null) } }
         }
     }
 }
 
-private fun summary(context: android.content.Context, p: Page, s: Settings, engine: EngineState): String = when (p) {
+private fun summary(context: android.content.Context, p: Page, s: Settings, engine: EngineState, hidden: List<DownloadTask>): String = when (p) {
+    Page.Playback -> context.getString(if (s.resumeAfterVideos) R.string.set_playback_resumes else R.string.set_playback_pauses)
+    Page.Hidden -> if (hidden.isEmpty()) context.getString(R.string.hidden_summary_none)
+        else context.resources.getQuantityString(R.plurals.hidden_summary, hidden.size, hidden.size, formatBytes(hidden.sumOf { it.sizeBytes }))
     Page.Appearance -> "${ACCENTS.firstOrNull { it.argb == s.accent }?.name ?: context.getString(R.string.set_custom)} · ${s.base.label}"
     Page.Motion -> {
         val on = listOf(s.intro, s.raster, s.asciiThumbs, s.rain, s.decode, s.moods, s.stretch, s.haptics).count { it }
@@ -224,7 +246,14 @@ private fun CategoryRow(p: Page, summary: String, title: String = stringResource
  * right: it follows the finger, squashes a little with its speed and goes back past 30 %.
  */
 @Composable
-private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit, onBack: () -> Unit) {
+private fun SubPage(
+    p: Page,
+    contentPadding: PaddingValues,
+    onUpdate: () -> Unit,
+    onDelete: (List<DownloadTask>) -> Unit,
+    onHint: (String) -> Unit,
+    onBack: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val offset = remember { Animatable(0f) }
@@ -276,7 +305,9 @@ private fun SubPage(p: Page, contentPadding: PaddingValues, onUpdate: () -> Unit
             Page.Motion -> MotionPage()
             Page.Downloads -> DownloadsPage()
             Page.Queue -> QueuePage()
+            Page.Playback -> PlaybackPage()
             Page.Engine -> EnginePage()
+            Page.Hidden -> HiddenPage(onDelete, onHint)
             Page.About -> AboutPage(onUpdate)
         }
         Spacer(Modifier.height(24.dp))
@@ -301,11 +332,128 @@ private fun AppearancePage() {
             AccentPicker(ACCENTS, s.accent) { a -> Prefs.edit { it.copy(accent = a) } }
         }
         Block(stringResource(R.string.set_background)) {
-            Segmented(Base.entries.toList(), s.base, { it.label }, { b -> Prefs.edit { it.copy(base = b) } })
+            Chips(Base.entries.toList(), s.base, { it.label }) { b -> Prefs.edit { it.copy(base = b) } }
+        }
+        Block(stringResource(R.string.set_size)) {
+            val labels = mapOf(UiSize.Small to stringResource(R.string.size_small), UiSize.Normal to stringResource(R.string.size_normal), UiSize.Large to stringResource(R.string.size_large))
+            Segmented(UiSize.entries.toList(), s.size, { labels.getValue(it) }, { v -> Prefs.edit { it.copy(size = v) } })
+        }
+        Block(stringResource(R.string.set_mini)) {
+            val labels = mapOf(MiniStyle.Floating to stringResource(R.string.mini_floating), MiniStyle.Docked to stringResource(R.string.mini_docked), MiniStyle.Compact to stringResource(R.string.mini_compact))
+            Segmented(MiniStyle.entries.toList(), s.miniStyle, { labels.getValue(it) }, { v -> Prefs.edit { it.copy(miniStyle = v) } })
         }
     }
     Spacer(Modifier.height(12.dp))
+    Group {
+        Block(stringResource(R.string.set_icon_style)) {
+            IconStylePicker(s.iconStyle, s.accent, s.iconFollowsAccent) { v -> Prefs.edit { it.copy(iconStyle = v) } }
+        }
+        Divider()
+        FxRow(stringResource(R.string.set_icon_accent), stringResource(R.string.set_icon_accent_hint), s.iconFollowsAccent) { v -> Prefs.edit { it.copy(iconFollowsAccent = v) } }
+    }
+    Spacer(Modifier.height(12.dp))
     Txt(stringResource(R.string.set_appearance_note), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
+}
+
+/** The launcher icon's styles as small tiles, drawn with the cheeks the launcher will show. */
+@Composable
+private fun IconStylePicker(style: IconStyle, accent: Int, follows: Boolean, onPick: (IconStyle) -> Unit) {
+    val c = Hamstr.colors
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val cheeks = ACCENTS[if (follows) AppIcon.nearest(accent) else 0].argb
+    val labels = mapOf(IconStyle.Dark to R.string.icon_dark, IconStyle.Light to R.string.icon_light, IconStyle.Accent to R.string.icon_accent)
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        IconStyle.entries.forEach { st ->
+            val on = st == style
+            val (tile, ink, cheek) = when (st) {
+                IconStyle.Dark -> Triple(0xFF0A0A09.toInt(), 0xFFEEEEEE.toInt(), cheeks)
+                IconStyle.Light -> Triple(0xFFF2EEE8.toInt(), 0xFF1A1714.toInt(), cheeks)
+                IconStyle.Accent -> Triple(cheeks, 0xFF14100A.toInt(), 0xFFFFFFFF.toInt())
+            }
+            val mark = remember(st, cheek) { AppIcon.mark(context, 160, cheek, ink).asImageBitmap() }
+            val scale by animateFloatAsState(if (on) 1.08f else 1f, Specs.pop(), label = "iconStyle")
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier
+                        .size(64.dp)
+                        .graphicsLayer { scaleX = scale; scaleY = scale }
+                        .clip(RoundedCornerShape(20.dp))
+                        .border(if (on) 2.dp else 0.dp, if (on) c.ink else Color.Transparent, RoundedCornerShape(20.dp))
+                        .padding(if (on) 4.dp else 0.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(tile))
+                        .clickable {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            onPick(st)
+                        }
+                        .padding(12.dp),
+                ) { Image(mark, null, Modifier.fillMaxSize()) }
+                Spacer(Modifier.height(6.dp))
+                Txt(stringResource(labels.getValue(st)), style = Hamstr.type.small, color = if (on) c.ink else c.ghost)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackPage() {
+    val s by Prefs.settings.collectAsState()
+    Group {
+        FxRow(stringResource(R.string.set_resume_videos), stringResource(R.string.set_resume_videos_hint), s.resumeAfterVideos) { v -> Prefs.edit { it.copy(resumeAfterVideos = v) } }
+    }
+}
+
+/** Files hidden from the library: show them again, or delete them for good. */
+@Composable
+private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit) {
+    val c = Hamstr.colors
+    val tasks by DownloadStore.tasks.collectAsState()
+    val hidden = remember(tasks) { tasks.filter { it.hidden && it.status == Status.Done } }
+    var confirm by remember { mutableStateOf(false) }
+    val restored = stringResource(R.string.hidden_restored)
+    if (hidden.isEmpty()) {
+        Txt(stringResource(R.string.hidden_empty), color = c.muted, modifier = Modifier.padding(horizontal = 6.dp))
+        return
+    }
+    Group {
+        hidden.forEachIndexed { i, t ->
+            if (i > 0) Divider()
+            Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
+                    AsciiImage(rememberBitmap(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(52.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2)
+                    Spacer(Modifier.height(2.dp))
+                    Txt(
+                        listOfNotNull(t.uploader ?: t.source, t.sizeBytes.takeIf { it > 0 }?.let(::formatBytes)).joinToString(" · "),
+                        style = Hamstr.type.small, color = c.ghost, maxLines = 1,
+                    )
+                }
+                IconButton(R.drawable.ic_restore, stringResource(R.string.hidden_restore), {
+                    DownloadStore.setHidden(setOf(t.id), false)
+                    onHint(restored)
+                }, tint = c.accent, background = Color.Transparent)
+                IconButton(R.drawable.ic_delete, stringResource(R.string.menu_delete), { onDelete(listOf(t)) }, tint = c.red, background = Color.Transparent)
+            }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        HButton(stringResource(R.string.hidden_restore_all), {
+            DownloadStore.setHidden(hidden.map { it.id }.toSet(), false)
+            onHint(restored)
+        }, Modifier.weight(1f), kind = ButtonKind.Neutral, icon = R.drawable.ic_restore)
+        HButton(
+            stringResource(if (confirm) R.string.hidden_delete_confirm else R.string.hidden_delete_all),
+            { if (!confirm) confirm = true else { confirm = false; onDelete(hidden) } },
+            Modifier.weight(1f), kind = ButtonKind.Ghost, icon = R.drawable.ic_delete,
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+    Txt(stringResource(R.string.hidden_note), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 6.dp))
 }
 
 @Composable
@@ -487,7 +635,7 @@ private fun NotificationsRow() {
 @Composable
 private fun SubtitleLanguages(s: Settings) {
     val picked = s.subtitleLanguages()
-    val system = java.util.Locale.getDefault().language
+    val system = androidx.compose.ui.text.intl.Locale.current.language
     val options = (listOf(system) + SUBTITLE_LANGUAGES).distinct()
     ChipRow {
         options.forEach { code ->
@@ -511,6 +659,7 @@ private fun languageName(code: String): String =
 private fun EnginePage() {
     val c = Hamstr.colors
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val s by Prefs.settings.collectAsState()
     val engine by Engine.state.collectAsState()
@@ -555,7 +704,7 @@ private fun EnginePage() {
                         if (!cheekUpdating && !checking) scope.launch {
                             cheekMsg = null
                             if (available == null) CheekUpdates.checkVersion()
-                            else cheekMsg = CheekUpdates.update().fold({ context.getString(R.string.set_cheek_installed, it) }, { context.getString(R.string.set_update_failed_why, it.message) })
+                            else cheekMsg = CheekUpdates.update().fold({ resources.getString(R.string.set_cheek_installed, it) }, { resources.getString(R.string.set_update_failed_why, it.message) })
                         }
                     },
                     enabled = !cheekUpdating && !checking && Cheek.available,
@@ -601,7 +750,7 @@ private fun EnginePage() {
                     if (!updating && !checking) scope.launch {
                         updateMsg = null
                         if (available == null) Engine.checkVersion()
-                        else updateMsg = Engine.update(context).exceptionOrNull()?.let { context.getString(R.string.set_update_failed_why, it.message) }
+                        else updateMsg = Engine.update(context).exceptionOrNull()?.let { resources.getString(R.string.set_update_failed_why, it.message) }
                     }
                 },
                 enabled = !updating && !checking && engine is EngineState.Ready,
@@ -687,6 +836,12 @@ private class Found(val title: String, val page: Page)
 private val SETTINGS_INDEX = listOf(
     SettingEntry(R.string.set_accent, Page.Appearance, "color colour farbe accent hue theme pink orange"),
     SettingEntry(R.string.set_background, Page.Appearance, "theme dark oled black cocoa graphite hintergrund"),
+    SettingEntry(R.string.set_icon_accent, Page.Appearance, "icon launcher app icon cheeks backen symbol"),
+    SettingEntry(R.string.set_icon_style, Page.Appearance, "icon style light dark accent launcher symbol"),
+    SettingEntry(R.string.set_size, Page.Appearance, "size scale big small large text größe groß klein schrift"),
+    SettingEntry(R.string.set_mini, Page.Appearance, "mini player docked floating slim compact miniplayer"),
+    SettingEntry(R.string.set_resume_videos, Page.Playback, "youtube tiktok pause resume audio focus music fortsetzen wiedergabe"),
+    SettingEntry(R.string.page_hidden, Page.Hidden, "hidden unlisted restore delete versteckt wiederherstellen löschen"),
     SettingEntry(R.string.set_intro, Page.Motion, "intro splash start animation"),
     SettingEntry(R.string.set_moods, Page.Motion, "blink wink munch hamster mark"),
     SettingEntry(R.string.set_stretch, Page.Motion, "stretch deform drag speed animation"),

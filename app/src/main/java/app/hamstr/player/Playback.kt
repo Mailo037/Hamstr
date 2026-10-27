@@ -15,12 +15,18 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import app.hamstr.R
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.Mode
 import app.hamstr.data.Positions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -49,7 +55,17 @@ fun mimeOf(file: File): String = when (val ext = file.extension.lowercase()) {
     else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
 }
 
-private fun playable(t: DownloadTask) = t.filePath?.let(::File)?.takeIf { it.isFile }?.let(::kindOf).let { it == Kind.Video || it == Kind.Audio }
+/**
+ * What a download is: by its extension, except that a song is a song even in an .mp4 or
+ * .webm (SoundCloud and other audio sites hand those out when asked for a video).
+ */
+fun kindOf(t: DownloadTask): Kind {
+    val file = t.filePath?.let(::File) ?: return Kind.Other
+    val kind = kindOf(file)
+    return if (kind == Kind.Video && t.choice.mode == Mode.Audio) Kind.Audio else kind
+}
+
+private fun playable(t: DownloadTask) = t.filePath?.let(::File)?.isFile == true && kindOf(t).let { it == Kind.Video || it == Kind.Audio }
 
 /** The in-app player's state: what is loaded and whether it is shown big or as the mini player. */
 object Playback {
@@ -92,10 +108,10 @@ object Playback {
 
     /** What plays after [task] when it is started from [from]: the rest of its playlist, or the other songs. */
     fun queueFor(task: DownloadTask, from: List<DownloadTask>): List<DownloadTask> {
-        val kind = task.filePath?.let(::File)?.takeIf { it.isFile }?.let(::kindOf)
+        val kind = kindOf(task)
         val pool = when {
             task.group != null -> from.filter { it.group == task.group }.sortedBy { it.createdAt }
-            kind == Kind.Audio -> from.filter { t -> t.filePath?.let(::File)?.takeIf { it.isFile }?.let(::kindOf) == Kind.Audio }
+            kind == Kind.Audio -> from.filter { kindOf(it) == Kind.Audio }
             else -> return listOf(task)
         }.filter(::playable).distinctBy { it.id }
         return if (pool.any { it.id == task.id }) pool else listOf(task)
@@ -104,7 +120,8 @@ object Playback {
     private fun item(task: DownloadTask, file: File) = MediaItem.Builder()
         .setMediaId(task.id)
         .setUri(Uri.fromFile(file))
-        .setMimeType(mimeOf(file))
+        // An audio-only .mp4 still plays as a song, with its cover in the notification.
+        .setMimeType(if (kindOf(task) == Kind.Audio && kindOf(file) == Kind.Video) "audio/mp4".takeIf { file.extension.equals("mp4", true) } ?: mimeOf(file) else mimeOf(file))
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(task.title)
@@ -126,14 +143,19 @@ object Playback {
         play: Boolean = true,
         expand: Boolean = true,
     ): Boolean = withContext(Dispatchers.Main.immediate) {
-        val request = ++openGeneration
         val file = task.filePath?.let(::File)?.takeIf { it.isFile } ?: return@withContext false
+        val kind = kindOf(task)
+        // Documents and archives belong to their viewer, never to the playback queue.
+        if (kind == Kind.Other) {
+            openWith(context, task)
+            return@withContext true
+        }
+        val request = ++openGeneration
         _current.value = task
-        if (expand) _expanded.value = true
-        val kind = kindOf(file)
+        if (expand || kind == Kind.Image) _expanded.value = true
         if (kind != Kind.Video && kind != Kind.Audio) {
             _queue.value = listOf(task)
-            _controller.value?.pause()
+            _controller.value?.takeIf { it.isConnected }?.run { pause(); stop(); clearMediaItems() }
             return@withContext true
         }
         val c = connect(context)
@@ -167,10 +189,131 @@ object Playback {
         else open(context, task, startAt = c.currentPosition, play = c.playWhenReady, expand = false)
     }
 
+    // ---- the queue ------------------------------------------------------------------------
+
+    private fun live(): MediaController? = _controller.value?.takeIf {
+        it.isConnected && _current.value?.let(::playable) == true &&
+            _queue.value.isNotEmpty() && it.mediaItemCount == _queue.value.size
+    }
+
+    private fun enqueue(task: DownloadTask, next: Boolean): Boolean {
+        val c = live() ?: return false
+        val file = task.filePath?.let(::File)?.takeIf { it.isFile && playable(task) } ?: return false
+        val now = c.currentMediaItemIndex
+        val at = _queue.value.indexOfFirst { it.id == task.id }
+        // A short clip loops on its own; with more to come, the queue plays on instead.
+        if (c.mediaItemCount == 1 && c.repeatMode == Player.REPEAT_MODE_ONE) c.repeatMode = Player.REPEAT_MODE_OFF
+        if (at == now) return true
+        if (at >= 0) {
+            val to = if (next) (if (at < now) now else now + 1) else _queue.value.lastIndex
+            move(at, to)
+            return true
+        }
+        val to = if (next) now + 1 else c.mediaItemCount
+        c.addMediaItem(to, item(task, file))
+        _queue.value = _queue.value.toMutableList().apply { add(to.coerceAtMost(size), task) }
+        return true
+    }
+
+    /** Plays [task] right after what plays now; with nothing playing it just starts. */
+    suspend fun playNext(context: Context, task: DownloadTask): Boolean = withContext(Dispatchers.Main.immediate) {
+        enqueue(task, next = true) || open(context, task, expand = false)
+    }
+
+    /** Puts [task] at the end of what plays; with nothing playing it just starts. */
+    suspend fun addToQueue(context: Context, task: DownloadTask): Boolean = withContext(Dispatchers.Main.immediate) {
+        enqueue(task, next = false) || open(context, task, expand = false)
+    }
+
+    /** Takes one entry off the queue; the last one closes the player. */
+    fun removeAt(index: Int) {
+        val c = live() ?: return
+        if (index !in _queue.value.indices) return
+        if (_queue.value.size == 1) return close()
+        c.removeMediaItem(index)
+        _queue.value = _queue.value.toMutableList().apply { removeAt(index) }
+        c.currentMediaItem?.mediaId?.let { id -> _queue.value.firstOrNull { it.id == id }?.let { _current.value = it } }
+    }
+
+    fun move(from: Int, to: Int) {
+        val c = live() ?: return
+        val q = _queue.value
+        if (from !in q.indices || to !in q.indices || from == to) return
+        c.moveMediaItem(from, to)
+        _queue.value = q.toMutableList().apply { add(to, removeAt(from)) }
+    }
+
+    /** Skips to a neighbour from the start; the UI shows it at once instead of waiting for the player. */
+    fun skipTo(index: Int) {
+        val c = live() ?: return
+        val t = _queue.value.getOrNull(index) ?: return
+        _current.value = t
+        c.seekToDefaultPosition(index)
+    }
+
+    /** Jumps to an entry of the queue and plays it from where it was left. */
+    fun jumpTo(index: Int) {
+        val c = live() ?: return
+        val t = _queue.value.getOrNull(index) ?: return
+        c.seekTo(index, Positions.resumeAt(t.id))
+        c.play()
+    }
+
+    // ---- sleep timer ------------------------------------------------------------------------
+
+    /** When playback stops by itself: at a moment, or when the song that plays now ends. */
+    sealed interface Sleep {
+        data class At(val endsAt: Long) : Sleep
+        data object EndOfTrack : Sleep
+    }
+
+    private val timerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var timer: Job? = null
+    private val _sleep = MutableStateFlow<Sleep?>(null)
+    val sleep: StateFlow<Sleep?> = _sleep.asStateFlow()
+
+    fun sleepIn(minutes: Int) {
+        timer?.cancel()
+        val at = System.currentTimeMillis() + minutes * 60_000L
+        _sleep.value = Sleep.At(at)
+        timer = timerScope.launch {
+            delay(at - System.currentTimeMillis())
+            _controller.value?.pause()
+            _sleep.value = null
+        }
+    }
+
+    fun sleepAtEnd() {
+        timer?.cancel()
+        _sleep.value = Sleep.EndOfTrack
+        timer = timerScope.launch {
+            val start = _controller.value?.currentMediaItem?.mediaId
+            while (true) {
+                delay(200)
+                val c = _controller.value ?: break
+                // Pauses in the last moment of the song; should the next one start anyway, there.
+                val left = c.duration - c.currentPosition
+                if (c.currentMediaItem?.mediaId != start || (c.isPlaying && c.duration > 0 && left in 0..350)) { c.pause(); break }
+            }
+            _sleep.value = null
+        }
+    }
+
+    fun cancelSleep() {
+        timer?.cancel()
+        timer = null
+        _sleep.value = null
+    }
+
     fun expand() { _expanded.value = true }
-    fun minimize() { if (_current.value != null) _expanded.value = false }
+    fun minimize() {
+        val task = _current.value ?: return
+        if (kindOf(task) == Kind.Image || kindOf(task) == Kind.Other) close()
+        else _expanded.value = false
+    }
 
     fun close() {
+        cancelSleep()
         openGeneration++
         _current.value = null
         _expanded.value = false

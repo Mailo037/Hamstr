@@ -19,14 +19,20 @@
 
 **Stash**
 - Share from YouTube, Instagram, TikTok, SoundCloud, Reddit, X, Twitch and the [1,800+ other sites yt-dlp knows](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
+- Glyph song, playlist and album links resolve through Cheek, with the existing playlist picker. Official 30-second previews are marked; the public Glyph web player exposes up to 200 songs per share.
 - Choose video (up to 4K; mp4, mkv or webm), audio (opus, m4a or mp3) or your own yt-dlp format string. Subtitles and whole playlists are optional.
 - Downloads run in a queue with progress notifications. You can pause, resume and retry them, and run up to three at once.
 - Cheek fetches supported files and HLS/DASH fragments over parallel connections. Settings › Engine lets you switch to yt-dlp.
 - Files go to `Download/Hamstr` and show up in every gallery and music app.
 - With *Instant stash* on, sharing starts the download straight away, without the sheet.
+- A song that is locked with DRM (SoundCloud Go, for one) gets looked up on YouTube Music, with an offer to stash that one instead.
 
 **Play**
-- A built-in player for video and audio. Swipe it down and it becomes a mini player that floats above the tabs.
+- A built-in player for video and audio. Swipe it down and it becomes a mini player above the tabs: swipe it sideways to turn through the queue, pull it down to stop, hold it for the queue.
+- A song page like a music app's, tinted by its cover: lyrics that follow along (from LRCLIB or typed in), a sleep timer (after some minutes or at the end of the song), shuffle and repeat.
+- A queue: *Play next* and *Add to queue* from any file's menu or a swipe in the library, reordered and trimmed in the queue sheet.
+- Favorites and your own playlists; hold a file in a playlist and drag it to a new place.
+- Music pauses when another app plays and, after a video (YouTube, TikTok), carries on by itself.
 - Background audio with media controls, picture-in-picture, fullscreen, and double-tap to skip 10 s.
 - *Open with…* hands a file to any other app: a video player, a music app, a PDF reader or Word. *Share file* sends the file itself, not the link.
 - Keep a video in several qualities: tap the quality in the player to switch between them at the same spot, fetch another one next to it, or replace the current one once the new file is in.
@@ -38,7 +44,9 @@
   - Thumbnails that resolve out of characters.
   - A hamster that blinks, winks and munches when something finishes.
 - Drags have weight: the tab pill, switches, sheets and swipe rows stretch with their speed.
-- Seven accents plus a custom hue, and three backgrounds (Graphite, OLED black, Cocoa). Every effect can be switched off on its own.
+- Seven accents plus a custom hue, six backgrounds, three sizes and three mini player styles. The launcher icon (dark, light or accent), its shortcuts, the widgets and the notifications take the accent too. Every effect can be switched off on its own.
+- Three widgets: downloads at a glance, what plays with its controls, and the hamster alone to stash a copied link.
+- Files you hide from the library wait in Settings › Hidden, to show again or delete for good.
 
 **Updates**
 - Hamstr checks this repository's releases and installs new versions in place, without a browser detour (Settings › About).

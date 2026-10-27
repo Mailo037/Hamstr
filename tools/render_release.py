@@ -12,14 +12,15 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 FEATURES = [
-    ("PLAYLISTS", "Your own lists to play in order or shuffle"),
-    ("PICK FROM A PLAYLIST", "Share one, tick the videos you want"),
-    ("WHOLE SEASONS", "Cineby series open an episode picker"),
-    ("PLAIN FILES", "Direct links to files download as they are"),
+    ("MUSIC & LYRICS", "A song page, synced lyrics and sleep timer"),
+    ("YOUR QUEUE", "Play next, reorder and keep favorites"),
+    ("GLYPH SHARES", "Stash shared songs, albums and playlists"),
+    ("MAKE IT YOURS", "Accent icons, widgets and hidden files"),
 ]
-SHOTS = [("library.png", "Library"), ("playlist.png", "Playlist"), ("menu.png", "File menu")]
+SHOTS = [("music.png", "Music"), ("queue.png", "Queue"), ("settings.png", "Settings")]
+
 
 
 def release(shots):

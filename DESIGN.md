@@ -63,11 +63,14 @@ Meta lines join facts with ` · ` in `ghost`: `channel · 212 MB · 3 h ago`.
 
 ### Accent
 
-One accent, chosen by the user; three bases (Graphite, OLED, Cocoa). `onAccent` is
+One accent, chosen by the user; six bases (Graphite, OLED, Cocoa, Midnight, Moss, Plum). `onAccent` is
 derived from the accent's luminance, so text on accent stays readable for any choice.
 Colour changes from Settings ease over 260 ms instead of snapping.
 
 - Never hardcode the orange in UI code; read `Hamstr.colors.accent`.
+- The hamster outside the app wears it too: widgets draw the mark with accent cheeks
+  (`AppIcon.mark`), shortcuts are drawn in it, and the launcher icon switches to the
+  activity-alias of the nearest preset (and the chosen icon style) once the app is left.
 - At most one filled accent button per sheet: the primary action.
 - Accent marks: the primary button, selected chips, progress, the play button,
   category icons, the text cursor and selection, a search icon once something is typed,
@@ -354,6 +357,14 @@ Always through `LocalHapticFeedback`, so the switch in Settings silences them.
   hit opens its page and flashes the setting.
 - The player is one surface that morphs between the mini bar and the full view; held
   sideways, a video fills the screen with its controls over scrims.
+- The mini bar: tap opens, up opens, sideways turns the queue (the neighbour slides in,
+  the buttons stay), down stops, a hold shows the queue. Its visible equivalents are the
+  next button and the queue sheet's *Close player*. Floating, docked (a lip on the tab bar,
+  `overlay`) or slim, per Settings > Appearance.
+- A song's page follows music apps: a square cover, the title in `title`, the artist with
+  the heart beside it, then shuffle, previous, play, next, repeat in one row and the sleep
+  timer, speed, lyrics and queue under it. A lit mode is accent with a dot under it.
+- Settings > Appearance > Size scales the density (0.9, 1, 1.1), so every dp and sp moves together.
 
 ## Text and accessibility
 
@@ -364,5 +375,11 @@ Always through `LocalHapticFeedback`, so the switch in Settings silences them.
 
 ## Known deviations
 
-None right now. When something has to break a rule above, note it here with the file and
-line and the reason, so the next change can fix it or turn it into a rule.
+When something has to break a rule above, note it here with the file and line and the
+reason, so the next change can fix it or turn it into a rule.
+
+- `player/PlayerHost.kt` (`rememberCoverColor`): a song's full view has a gradient from its
+  cover's colour into the canvas. A second decorative gradient besides the accent glow,
+  asked for so a song feels like its cover.
+- `ui/LibraryScreen.kt`: library tiles and song rows swipe (play next, favourite), so a
+  sideways drag that starts on one doesn't change tabs. The Stash rows already did this.

@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
+import app.hamstr.MainActivity
 import app.hamstr.data.Choice
 import app.hamstr.data.DownloadFiles
 import app.hamstr.data.DownloadStore
@@ -289,6 +290,15 @@ private fun MediaSheet(
                 Txt(stringResource(why.title), style = Hamstr.type.section)
                 Spacer(Modifier.height(3.dp))
                 Txt(stringResource(why.hint), style = Hamstr.type.small, color = c.muted)
+                // Locked here, maybe free on YouTube Music: offer that one instead.
+                if (why.title == R.string.err_drm) {
+                    val guess = remember(url) { guessFromLink(url) }
+                    val title = peek?.title ?: guess?.first
+                    if (title != null) {
+                        Spacer(Modifier.height(10.dp))
+                        ElsewhereCard(title, guess?.second.takeIf { peek?.title == null }, 0) { MainActivity.openLink(it) }
+                    }
+                }
                 if (s.message.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))
                     Row(

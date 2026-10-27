@@ -22,6 +22,7 @@ data class Settings(
     val notifications: Boolean = true,
     val askedNotifications: Boolean = false,
     val librarySort: LibrarySort = LibrarySort.Newest,
+    val libraryPlaylists: PlaylistPlacement = PlaylistPlacement.Row,
     val quickStash: Boolean = false, // share -> download immediately, no sheet
     val playlists: Boolean = false,
     // Bring Hamstr up with the file playing once the last download is in.
@@ -38,6 +39,9 @@ data class Settings(
     // Appearance
     val accent: Int = ACCENTS.first().argb,
     val base: Base = Base.Graphite,
+    val size: UiSize = UiSize.Normal,
+    val miniStyle: MiniStyle = MiniStyle.Floating,
+    val iconStyle: IconStyle = IconStyle.Dark,
     // Motion & effects
     val intro: Boolean = true,
     val raster: Boolean = true,
@@ -47,6 +51,9 @@ data class Settings(
     val moods: Boolean = true,
     val stretch: Boolean = true,
     val haptics: Boolean = true,
+    // Playback
+    val resumeAfterVideos: Boolean = true,
+    val iconFollowsAccent: Boolean = true,
 ) {
     fun defaultChoice() = Choice(mode, height, container, audioFormat, subtitles)
 
@@ -57,6 +64,9 @@ data class Settings(
 }
 
 enum class LibrarySort { Newest, Oldest, Name, Size }
+
+/** Where the library shows playlists: a row on top, as tiles among the files, or not at all. */
+enum class PlaylistPlacement { Row, Grid, Hidden }
 
 object Prefs {
     private lateinit var sp: SharedPreferences
@@ -82,6 +92,7 @@ object Prefs {
             notifications = sp.getBoolean("notifications", true),
             askedNotifications = sp.getBoolean("askedNotifications", false),
             librarySort = runCatching { LibrarySort.valueOf(sp.getString("librarySort", null)!!) }.getOrDefault(LibrarySort.Newest),
+            libraryPlaylists = runCatching { PlaylistPlacement.valueOf(sp.getString("libraryPlaylists", null)!!) }.getOrDefault(PlaylistPlacement.Row),
             quickStash = sp.getBoolean("quickStash", false),
             playlists = sp.getBoolean("playlists", false),
             openWhenDone = sp.getBoolean("openWhenDone", false),
@@ -95,6 +106,9 @@ object Prefs {
             seenRelease = sp.getString("seenRelease", "")!!,
             accent = sp.getInt("accent", ACCENTS.first().argb),
             base = runCatching { Base.valueOf(sp.getString("base", null)!!) }.getOrDefault(Base.Graphite),
+            size = runCatching { UiSize.valueOf(sp.getString("size", null)!!) }.getOrDefault(UiSize.Normal),
+            miniStyle = runCatching { MiniStyle.valueOf(sp.getString("miniStyle", null)!!) }.getOrDefault(MiniStyle.Floating),
+            iconStyle = runCatching { IconStyle.valueOf(sp.getString("iconStyle", null)!!) }.getOrDefault(IconStyle.Dark),
             intro = sp.getBoolean("fx.intro", true),
             raster = sp.getBoolean("fx.raster", true),
             rain = sp.getBoolean("fx.rain", true),
@@ -103,6 +117,8 @@ object Prefs {
             moods = sp.getBoolean("fx.moods", true),
             stretch = sp.getBoolean("fx.stretch", true),
             haptics = sp.getBoolean("fx.haptics", true),
+            resumeAfterVideos = sp.getBoolean("resumeAfterVideos", true),
+            iconFollowsAccent = sp.getBoolean("iconFollowsAccent", true),
         )
     }
 
@@ -122,6 +138,7 @@ object Prefs {
             .putBoolean("notifications", s.notifications)
             .putBoolean("askedNotifications", s.askedNotifications)
             .putString("librarySort", s.librarySort.name)
+            .putString("libraryPlaylists", s.libraryPlaylists.name)
             .putBoolean("quickStash", s.quickStash)
             .putBoolean("playlists", s.playlists)
             .putBoolean("openWhenDone", s.openWhenDone)
@@ -135,6 +152,9 @@ object Prefs {
             .putString("seenRelease", s.seenRelease)
             .putInt("accent", s.accent)
             .putString("base", s.base.name)
+            .putString("size", s.size.name)
+            .putString("miniStyle", s.miniStyle.name)
+            .putString("iconStyle", s.iconStyle.name)
             .putBoolean("fx.intro", s.intro)
             .putBoolean("fx.raster", s.raster)
             .putBoolean("fx.rain", s.rain)
@@ -143,6 +163,8 @@ object Prefs {
             .putBoolean("fx.moods", s.moods)
             .putBoolean("fx.stretch", s.stretch)
             .putBoolean("fx.haptics", s.haptics)
+            .putBoolean("resumeAfterVideos", s.resumeAfterVideos)
+            .putBoolean("iconFollowsAccent", s.iconFollowsAccent)
             .apply()
     }
 }
@@ -157,7 +179,18 @@ fun heightLabel(h: Int?) = when (h) {
 enum class DownloadEngine(val label: String) { YtDlp("yt-dlp"), Cheek("Cheek") }
 
 /** Dark bases; all keep Slate's neutral steps, just shifted. */
-enum class Base(val label: String) { Graphite("Graphite"), Oled("OLED black"), Cocoa("Cocoa") }
+enum class Base(val label: String) {
+    Graphite("Graphite"), Oled("OLED black"), Cocoa("Cocoa"), Midnight("Midnight"), Moss("Moss"), Plum("Plum"),
+}
+
+/** How big everything is drawn: text, controls and spacing scale together. */
+enum class UiSize(val scale: Float) { Small(0.9f), Normal(1f), Large(1.1f) }
+
+/** The mini player: floating above the tabs, docked onto them, or a slimmer bar. */
+enum class MiniStyle { Floating, Docked, Compact }
+
+/** The launcher icon: the hamster on black, on a light tile, or on the accent. */
+enum class IconStyle { Dark, Light, Accent }
 
 data class AccentPreset(val name: String, val argb: Int)
 

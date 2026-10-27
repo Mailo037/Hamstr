@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="glyph_resolve_failed">Couldn\'t resolve this Glyph share. Try again later.</string>
     <string name="sc_paste_short">Stash copied link</string>
     <string name="sc_paste_long">Stash the link on the clipboard</string>
     <string name="sc_add_short">Add link or file</string>
@@ -146,8 +147,8 @@
     <string name="audio_failed">Couldn\'t save the audio</string>
     <string name="undo">Undo</string>
     <string name="removed_from_list">Removed from the list</string>
-    <string name="hidden_one">Hidden · the file stays in Download/Hamstr</string>
-    <string name="hidden_many">%1$d hidden · the files stay in Download/Hamstr</string>
+    <string name="hidden_one">Hidden · find it in Settings › Hidden</string>
+    <string name="hidden_many">%1$d hidden · find them in Settings › Hidden</string>
     <string name="deleted_one">File deleted</string>
     <string name="deleted_many">%1$d files deleted</string>
     <string name="engine_restarting">Starting yt-dlp again …</string>
@@ -370,7 +371,7 @@
     <string name="set_video_format">Video format</string>
     <string name="set_parallel">Parallel downloads</string>
     <string name="set_engine">Download engine</string>
-    <string name="set_appearance_note">Changes apply right away. The launcher icon keeps its orange cheeks.</string>
+    <string name="set_appearance_note">Changes apply right away, in the app, its widgets, shortcuts and notifications.</string>
     <string name="set_intro">Startup animation</string>
     <string name="set_intro_hint">The hamster assembles itself and waves hello</string>
     <string name="set_moods">Hamster moods</string>
@@ -500,4 +501,93 @@
     </plurals>
     <string name="cinesrc_pick">Pick episodes</string>
     <string name="cinesrc_select_episodes_first">Open this series link and select the episodes to download first.</string>
+
+    <!-- Queue, sleep timer, lyrics, favorites -->
+    <string name="queue_title">Queue</string>
+    <string name="queue_position">%1$d of %2$d</string>
+    <string name="queue_remove">Remove from queue</string>
+    <string name="queue_now">now</string>
+    <string name="play_next">Play next</string>
+    <string name="add_to_queue">Add to queue</string>
+    <string name="queued_next">Plays next: %1$s</string>
+    <string name="queued_end">Added to the queue: %1$s</string>
+    <string name="sleep">Sleep</string>
+    <string name="sleep_end_short">End of song</string>
+    <string name="sleep_title">Sleep timer</string>
+    <string name="sleep_hint">Playback stops by itself.</string>
+    <string name="sleep_running">It is running. Pick another time, or turn it off.</string>
+    <string name="sleep_minutes">In %1$d minutes</string>
+    <string name="sleep_end">When this song ends</string>
+    <string name="sleep_off">Turn the timer off</string>
+    <string name="sleep_set">Sleep timer: %1$s</string>
+    <string name="sleep_canceled">Sleep timer off</string>
+    <string name="lyrics">Lyrics</string>
+    <string name="lyrics_none">No lyrics found</string>
+    <string name="lyrics_none_hint">Look again, or paste them in yourself.</string>
+    <string name="lyrics_retry">Look again</string>
+    <string name="lyrics_add">Add</string>
+    <string name="lyrics_searching">Looking for lyrics…</string>
+    <string name="lyrics_loading">…</string>
+    <string name="lyrics_edit">Edit lyrics</string>
+    <string name="lyrics_find">Find online</string>
+    <string name="lyrics_placeholder">Paste or type the lyrics. Lines that start with a time, like [01:23.45], follow the song.</string>
+    <string name="lyrics_saved">Lyrics saved</string>
+    <string name="lyrics_removed">Lyrics removed</string>
+    <string name="pl_favorites">Favorites</string>
+    <string name="fav_add">Add to Favorites</string>
+    <string name="fav_remove">Remove from Favorites</string>
+    <string name="fav_added">Added to Favorites</string>
+    <string name="fav_removed">Removed from Favorites</string>
+
+    <string name="lib_pl_row">On top</string>
+    <string name="lib_pl_grid">In the list</string>
+    <string name="lib_pl_hidden">Hidden</string>
+
+    <string name="drm_looking">Looking for it on YouTube Music…</string>
+    <string name="drm_found">Locked here, but YouTube Music has it</string>
+    <string name="drm_not_found">Not on YouTube Music either.</string>
+    <string name="drm_use">Stash this one instead</string>
+
+    <!-- Settings > Hidden -->
+    <string name="page_hidden">Hidden</string>
+    <string name="hidden_summary_none">Nothing hidden</string>
+    <plurals name="hidden_summary">
+        <item quantity="one">%1$d file · %2$s</item>
+        <item quantity="other">%1$d files · %2$s</item>
+    </plurals>
+    <string name="hidden_empty">Nothing is hidden. What you hide from the library waits here, and the files stay on the phone.</string>
+    <string name="hidden_restore">Show again</string>
+    <string name="hidden_restore_all">Show all again</string>
+    <string name="hidden_delete_all">Delete all</string>
+    <string name="hidden_delete_confirm">Tap again to delete</string>
+    <string name="hidden_restored">Back in the library</string>
+    <string name="hidden_note">Hidden files stay in Download/Hamstr. Delete them here to free the space.</string>
+    <string name="set_icon_accent">App icon follows the accent</string>
+    <string name="set_icon_accent_hint">The launcher icon\'s cheeks take the accent when you leave the app. Some launchers need a moment, or the icon placed on the home screen again.</string>
+
+    <string name="set_size">Size</string>
+    <string name="size_small">Small</string>
+    <string name="size_normal">Normal</string>
+    <string name="size_large">Large</string>
+    <string name="set_mini">Mini player</string>
+    <string name="mini_floating">Floating</string>
+    <string name="mini_docked">Docked</string>
+    <string name="mini_compact">Slim</string>
+    <string name="set_icon_style">App icon</string>
+    <string name="icon_dark">Dark</string>
+    <string name="icon_light">Light</string>
+    <string name="icon_accent">Accent</string>
+    <string name="page_playback">Playback</string>
+    <string name="set_playback_resumes">Carries on after videos</string>
+    <string name="set_playback_pauses">Pauses for other apps</string>
+    <string name="set_resume_videos">Carry on after videos</string>
+    <string name="set_resume_videos_hint">Music always pauses when another app plays. When that was a video (YouTube, TikTok, Reels), the song goes on once it stops. Music apps and podcasts keep the sound.</string>
+
+    <!-- More widgets -->
+    <string name="widget_player_label">Hamstr · now playing</string>
+    <string name="widget_player_description">What plays, with play, pause and skip</string>
+    <string name="widget_mark_label">Hamstr · stash</string>
+    <string name="widget_mark_description">The hamster: tap it to stash the link you copied</string>
+    <string name="widget_nothing_playing">Nothing playing</string>
+    <string name="widget_open_library">Tap to pick something from the library</string>
 </resources>

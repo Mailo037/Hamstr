@@ -2,6 +2,7 @@ package app.hamstr.engine
 
 import app.hamstr.data.DownloadEngine
 import app.hamstr.BuildConfig
+import app.hamstr.R
 import app.hamstr.data.Choice
 import android.content.Context
 import android.os.Environment
@@ -258,6 +259,45 @@ object Engine {
         try { block() } finally { lock.unlock() }
     }
 
+    /** A song found under another link, for one that is locked where it was shared. */
+    data class Elsewhere(val url: String, val title: String, val uploader: String?, val durationSec: Int)
+
+    /**
+     * Looks a song up on YouTube Music by artist and title (then on YouTube), for links that
+     * are locked with DRM (SoundCloud Go tracks, for one). With a known length, only a hit
+     * within 15 seconds of it counts, so a cover or a remix doesn't pass for the song.
+     */
+    suspend fun findOnYoutubeMusic(title: String, artist: String?, durationSec: Int): Elsewhere? = withContext(Dispatchers.IO) {
+        awaitReady()
+        val query = listOfNotNull(artist?.removeSuffix(" - Topic"), title).joinToString(" ").trim()
+        if (query.isEmpty()) return@withContext null
+        val enc = java.net.URLEncoder.encode(query, "UTF-8")
+        for (url in listOf("https://music.youtube.com/search?q=$enc#songs", "ytsearch5:$query")) {
+            val out = try {
+                val req = YoutubeDLRequest(url).apply {
+                    addOption("--flat-playlist")
+                    addOption("--playlist-end", 5)
+                    addOption("--socket-timeout", 15)
+                    addOption("--cache-dir", extractorCacheDir.absolutePath)
+                    addOption("--dump-single-json")
+                }
+                readRuntime { WarmYtDlp.execute(req) ?: YoutubeDL.getInstance().execute(req) }.out
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Search failed for $url", e); continue }
+            val entries = runCatching { JSONObject(out).optJSONArray("entries") }.getOrNull() ?: continue
+            val hits = (0 until entries.length()).mapNotNull { i ->
+                val e = entries.optJSONObject(i) ?: return@mapNotNull null
+                val link = e.optString("url").takeIf { it.startsWith("http") }
+                    ?: e.optString("id").takeIf { it.isNotBlank() }?.let { "https://music.youtube.com/watch?v=$it" }
+                    ?: return@mapNotNull null
+                Elsewhere(link, e.optString("title"), e.optString("channel").ifBlank { e.optString("uploader") }.ifBlank { null }, e.optDouble("duration", 0.0).toInt())
+            }
+            val best = if (durationSec <= 0) hits.firstOrNull()
+            else hits.filter { it.durationSec > 0 && kotlin.math.abs(it.durationSec - durationSec) <= 15 }.minByOrNull { kotlin.math.abs(it.durationSec - durationSec) }
+            if (best != null) return@withContext best
+        }
+        null
+    }
+
     fun cachedInfo(url: String): MediaInfo? = infos.get(url)?.info ?: previews.get(url)?.info
 
     /** Puts a finished look-up in place, as if [MediaInfo.url] had just been resolved. The debug build's demo mode uses it. */
@@ -280,6 +320,11 @@ object Engine {
      * to yt-dlp, warm when it can be.
      */
     private suspend fun resolve(url: String): Preview {
+        if (GlyphLinks.matches(url) && Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.available) {
+            val text = runInterruptible { Cheek.resolve(url) }
+                ?: error(app.getString(R.string.glyph_resolve_failed))
+            return nativePreview(url, text) ?: error(app.getString(R.string.glyph_resolve_failed))
+        }
         CineSrcTarget.parse(url)?.let { target ->
             val text = CineSrc.resolve(target)
             return Preview(mediaInfo(url, JSONObject(text)), text, reusable = true)
@@ -325,6 +370,9 @@ object Engine {
 
     private fun nativePreview(url: String, text: String): Preview? {
         val m = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        if (m.optString("_type") == "playlist") {
+            return Preview(mediaInfo(url, m), text, reusable = true, native = true)
+        }
         val streams = m.optJSONArray("streams")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty()
         if (streams.isEmpty()) return null
         fun string(key: String) = if (m.isNull(key)) null else m.optString(key).takeIf { it.isNotBlank() }
@@ -414,7 +462,7 @@ object Engine {
 
     /** A version is one more file of one video, even when playlists are switched on, and so is a video picked from a playlist. */
     internal fun playlists(task: DownloadTask) =
-        Prefs.settings.value.playlists && task.versionOf == null && task.group == null && CineSrcTarget.parse(task.url) == null
+        Prefs.settings.value.playlists && task.versionOf == null && task.group == null && CineSrcTarget.parse(task.url) == null && !GlyphLinks.matches(task.url)
 
     fun pathFile(task: DownloadTask) = File(tempDir, "${task.id}.path")
 

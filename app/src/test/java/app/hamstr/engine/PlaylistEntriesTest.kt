@@ -5,6 +5,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PlaylistEntriesTest {
+    @Test fun readsGlyphPlaylistInOrder() {
+        val entries = Engine.playlistEntries(JSONObject("""{
+            "_type":"playlist","extractor":"Glyph","title":"My songs","entries":[
+                {"id":"UrPYWeQ4-0","title":"First","uploader":"Artist","extractor_key":"Glyph",
+                 "url":"https://glyph.my/p/UrPYWeQ4/listen/0","thumbnail":"https://glyph.my/p/UrPYWeQ4/cover/0"},
+                {"id":"UrPYWeQ4-1","title":"Second","uploader":"Other","extractor_key":"Glyph",
+                 "url":"https://glyph.my/p/UrPYWeQ4/listen/1"}
+            ]} """))
+        assertEquals(listOf("First", "Second"), entries.map { it.title })
+        assertEquals("Glyph:UrPYWeQ4-0", entries[0].key)
+        assertEquals("https://glyph.my/p/UrPYWeQ4/listen/1", entries[1].url)
+        assertEquals("Artist", entries[0].uploader)
+        assertTrue(entries.all { it.available })
+    }
     private val flat = JSONObject(
         """
         {"_type": "playlist", "title": "Mix", "uploader": "Someone", "entries": [

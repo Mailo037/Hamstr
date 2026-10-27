@@ -81,6 +81,8 @@ data class DownloadTask(
     val uploader: String? = null, // channel or artist
     // The video behind the link, e.g. "Youtube:dQw4w9WgXcQ", however it was shared.
     val mediaKey: String? = null,
+    // Off the library and the stash, but the file stays; Settings > Hidden brings it back or deletes it.
+    val hidden: Boolean = false,
     // Live only, never saved: what happens besides fetching bytes, and the retry state.
     val stage: Stage? = null,
     val attempts: Int = 0,
@@ -182,6 +184,12 @@ object DownloadStore {
         save()
     }
 
+    /** Hides finished files from the lists or brings them back; the files stay where they are. */
+    fun setHidden(ids: Set<String>, hidden: Boolean) {
+        _tasks.update { list -> list.map { if (it.id in ids) it.copy(hidden = hidden) else it } }
+        save()
+    }
+
     /** Deleting a physical file also removes duplicate entries that reference it. */
     fun removeFile(file: File) {
         val path = file.absoluteFile.normalize()
@@ -226,7 +234,7 @@ object DownloadStore {
         put("error", t.error); put("createdAt", t.createdAt); put("finishedAt", t.finishedAt)
         put("group", t.group); put("groupTitle", t.groupTitle)
         put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
-        put("uploader", t.uploader); put("mediaKey", t.mediaKey)
+        put("uploader", t.uploader); put("mediaKey", t.mediaKey); put("hidden", t.hidden)
     }
 
     private fun fromJson(o: JSONObject) = DownloadTask(
@@ -259,6 +267,7 @@ object DownloadStore {
         videoHeight = o.optInt("videoHeight"),
         uploader = o.optStringOrNull("uploader"),
         mediaKey = o.optStringOrNull("mediaKey"),
+        hidden = o.optBoolean("hidden"),
     )
 
     private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }

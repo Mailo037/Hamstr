@@ -22,6 +22,9 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.runtime.remember
 import app.hamstr.R
 import app.hamstr.data.Base
 import app.hamstr.data.Prefs
@@ -123,6 +126,27 @@ fun paletteFor(base: Base, accent: Color): Palette {
             ink = Color(0xFFF1EBE2), muted = Color(0xFFADA396), ghost = Color(0xFF8E8476),
             black = Color(0xFF0D0B09), accent = accent, onAccent = onAccent,
         )
+        // Blue-black, like a night sky.
+        Base.Midnight -> Palette(
+            canvas = Color(0xFF0F121A), overlay = Color(0xFF171B26), surface = Color(0xFF1F2431),
+            raised = Color(0xFF262C3A), hover = Color(0xFF2E3546), line = Color(0xFF303849),
+            ink = Color(0xFFE8ECF4), muted = Color(0xFFA3AABA), ghost = Color(0xFF828A9C),
+            black = Color(0xFF090B10), accent = accent, onAccent = onAccent,
+        )
+        // Green-black, like a forest floor.
+        Base.Moss -> Palette(
+            canvas = Color(0xFF111411), overlay = Color(0xFF191E19), surface = Color(0xFF212721),
+            raised = Color(0xFF282F28), hover = Color(0xFF303830), line = Color(0xFF323A31),
+            ink = Color(0xFFE9EEE6), muted = Color(0xFFA4AC9F), ghost = Color(0xFF858D80),
+            black = Color(0xFF0A0C0A), accent = accent, onAccent = onAccent,
+        )
+        // Violet-black.
+        Base.Plum -> Palette(
+            canvas = Color(0xFF141117), overlay = Color(0xFF1D1821), surface = Color(0xFF26202B),
+            raised = Color(0xFF2D2633), hover = Color(0xFF362E3D), line = Color(0xFF3A3141),
+            ink = Color(0xFFF0EAF3), muted = Color(0xFFADA3B3), ghost = Color(0xFF8D8394),
+            black = Color(0xFF0C0A0D), accent = accent, onAccent = onAccent,
+        )
     }
 }
 
@@ -148,7 +172,11 @@ fun HamstrTheme(content: @Composable () -> Unit) {
         moods = s.moods && !reduce,
         stretch = s.stretch && !reduce,
     )
+    // Settings > Appearance > Size: everything measured in dp and sp grows or shrinks together.
+    val density = LocalDensity.current
+    val scaled = remember(density, s.size) { Density(density.density * s.size.scale, density.fontScale) }
     CompositionLocalProvider(
+        LocalDensity provides scaled,
         LocalPalette provides palette,
         LocalType provides Type(),
         LocalTextSelectionColors provides TextSelectionColors(palette.accent, palette.accent.copy(alpha = 0.35f)),

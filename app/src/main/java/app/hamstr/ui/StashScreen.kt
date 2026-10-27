@@ -1,6 +1,7 @@
 package app.hamstr.ui
 
 import android.content.Context
+import java.io.File
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
@@ -79,6 +80,8 @@ import app.hamstr.data.heightLabel
 import app.hamstr.engine.DownloadService
 import app.hamstr.engine.EngineState
 import app.hamstr.engine.Failures
+import app.hamstr.player.Kind
+import app.hamstr.player.kindOf
 import app.hamstr.ui.components.AsciiImage
 import app.hamstr.ui.components.Badge
 import app.hamstr.ui.components.DecodeText
@@ -589,10 +592,16 @@ fun versionsBadge(versions: List<DownloadTask>) =
     versions.sortedWith(compareByDescending<DownloadTask> { it.choice.mode != Mode.Audio }.thenByDescending { it.videoHeight })
         .map(::formatBadge).distinct().joinToString(" · ")
 
-fun formatBadge(t: DownloadTask) = when (t.choice.mode) {
-    Mode.Audio -> t.choice.audioFormat
-    Mode.Video -> heightLabel(t.videoHeight.takeIf { it > 0 } ?: t.choice.height)
-    Mode.Custom -> "custom"
+fun formatBadge(t: DownloadTask): String {
+    val file = t.filePath?.let(::File)
+    if (file != null && kindOf(t).let { it == Kind.Other || it == Kind.Image }) {
+        return file.extension.ifBlank { "?" }
+    }
+    return when (t.choice.mode) {
+        Mode.Audio -> t.choice.audioFormat
+        Mode.Video -> heightLabel(t.videoHeight.takeIf { it > 0 } ?: t.choice.height)
+        Mode.Custom -> "custom"
+    }
 }
 
 private fun statusLine(context: Context, t: DownloadTask, versions: List<DownloadTask> = listOf(t)): String = when (t.status) {

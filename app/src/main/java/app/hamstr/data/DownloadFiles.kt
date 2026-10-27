@@ -180,6 +180,42 @@ object DownloadFiles {
         return if (file.renameTo(target)) target else file
     }
 
+    /**
+     * Whether [file] has a picture track: false for audio in a video container (a song from
+     * SoundCloud fetched as "video"), null when the platform can't read the file.
+     */
+    fun hasVideo(file: File): Boolean? {
+        if (app.hamstr.player.kindOf(file) == app.hamstr.player.Kind.Audio) return false
+        if (app.hamstr.player.kindOf(file) != app.hamstr.player.Kind.Video) return null
+        return runCatching {
+            MediaMetadataRetriever().run {
+                try {
+                    setDataSource(file.absolutePath)
+                    extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
+                } finally { release() }
+            }
+        }.getOrNull()
+    }
+
+    /** A "video" download that turned out to be sound only becomes the song it is. */
+    fun asAudio(t: DownloadTask): DownloadTask {
+        val ext = t.filePath?.let { File(it).extension.lowercase() }.orEmpty()
+        val format = when (ext) { "mp4", "m4a" -> "m4a"; "webm", "ogg", "opus" -> "opus"; "" -> t.choice.audioFormat; else -> ext }
+        return t.copy(choice = t.choice.copy(mode = Mode.Audio, audioFormat = format), videoHeight = 0)
+    }
+
+    /** Earlier downloads stored as videos although they hold only sound; runs once per start. */
+    fun fixAudioKinds() {
+        scope.launch {
+            DownloadStore.tasks.value
+                .filter { it.status == Status.Done && it.choice.mode != Mode.Audio && it.videoHeight == 0 && it.filePath != null }
+                .forEach { t ->
+                    val file = File(t.filePath!!)
+                    if (file.isFile && hasVideo(file) == false) DownloadStore.update(t.id) { asAudio(it) }
+                }
+        }
+    }
+
     /** The video's height in pixels, or 0 for audio and files the platform can't read. */
     fun probeHeight(file: File): Int = runCatching {
         MediaMetadataRetriever().run {

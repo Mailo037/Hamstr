@@ -32,11 +32,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.zIndex
+import app.hamstr.ui.components.Specs
+import app.hamstr.ui.components.SwipeAction
+import app.hamstr.ui.components.SwipeRow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -76,8 +94,10 @@ fun rememberPlaylist(id: String): Playlist? {
 }
 
 /**
- * One playlist: play it all or shuffled, start from any file, take files off it, rename
- * it or delete it. Deleting a list keeps its files; a downloaded one can drop its files too.
+ * One playlist: play it all or shuffled, start from any file, take files off it (the cross
+ * or a swipe), rename it or delete it. Hold a file and drag to move it: the row lifts out
+ * as a bubble with its name that follows the finger, and the others make room. Deleting a
+ * list keeps its files; a downloaded one can drop its files too.
  */
 @Composable
 fun PlaylistSheet(
@@ -91,6 +111,7 @@ fun PlaylistSheet(
 ) {
     val c = Hamstr.colors
     val context = LocalContext.current
+    val resources = LocalResources.current
     val p = rememberPlaylist(id)
     LaunchedEffect(p == null) { if (p == null) onClose() }
     if (p == null) return
@@ -99,10 +120,20 @@ fun PlaylistSheet(
     val playing by Playback.current.collectAsState()
     var confirm by remember(id) { mutableStateOf(false) }
     val list = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    // While a file is held, a local copy of the order moves under the finger; the list is saved on release.
+    var rows by remember(id) { mutableStateOf(items) }
+    var dragKey by remember { mutableStateOf<String?>(null) }
+    var dragFrom by remember { mutableIntStateOf(-1) }
+    var dragY by remember { mutableFloatStateOf(0f) }
+    var grab by remember { mutableStateOf(Offset.Zero) }
+    var rowH by remember { mutableIntStateOf(0) }
+    val gap = with(LocalDensity.current) { 2.dp.toPx() }
+    LaunchedEffect(items) { if (dragKey == null) rows = items }
     // Header and buttons stay put; the files take the room that is left.
     Sheet(scroll = false) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-            PlaylistFan(items, Modifier.width(132.dp))
+            PlaylistFan(items, Modifier.width(if (p.songs) 96.dp else 132.dp), square = p.songs)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Txt(name, style = Hamstr.type.section, maxLines = 2)
@@ -131,16 +162,64 @@ fun PlaylistSheet(
                 state = list,
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(items, key = { it.id }) { t ->
-                    SongRow(
-                        t, now = playing?.id == t.id, wide = true,
-                        onClick = { onPlay(t, items) }, onLongClick = { onMenu(t) },
-                        modifier = Modifier.animateItem(),
+                items(rows, key = { it.id }) { t ->
+                    val dragging = t.id == dragKey
+                    val remove = {
+                        Playlists.remove(id, t)
+                        onHint(resources.getString(R.string.pl_removed, name))
+                    }
+                    Box(
+                        (if (dragging) Modifier.zIndex(1f) else Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut()))
+                            .onSizeChanged { rowH = it.height }
+                            .pointerInput(t.id) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = { at ->
+                                        haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                        dragKey = t.id; dragY = 0f; grab = at
+                                        dragFrom = rows.indexOfFirst { it.id == t.id }
+                                    },
+                                    onDragEnd = {
+                                        val to = rows.indexOfFirst { it.id == dragKey }
+                                        if (dragFrom >= 0 && to >= 0 && to != dragFrom) {
+                                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                            Playlists.move(id, items, dragFrom, to)
+                                        }
+                                        dragKey = null; dragY = 0f
+                                    },
+                                    onDragCancel = { rows = items; dragKey = null; dragY = 0f },
+                                ) { change, drag ->
+                                    change.consume()
+                                    dragY += drag.y
+                                    grab = grab.copy(x = grab.x + drag.x)
+                                    val step = rowH + gap
+                                    val i = rows.indexOfFirst { it.id == dragKey }
+                                    val target = when {
+                                        dragY > step / 2 && i < rows.lastIndex -> i + 1
+                                        dragY < -step / 2 && i > 0 -> i - 1
+                                        else -> i
+                                    }
+                                    if (target != i && i >= 0) {
+                                        rows = rows.toMutableList().apply { add(target, removeAt(i)) }
+                                        dragY -= (target - i) * step
+                                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    }
+                                }
+                            },
                     ) {
-                        IconButton(R.drawable.ic_close, stringResource(R.string.pl_remove), {
-                            Playlists.remove(id, t)
-                            onHint(context.getString(R.string.pl_removed, name))
-                        }, tint = c.ghost, background = Color.Transparent, size = 40.dp)
+                        // The held row stays as a faint gap where it would land.
+                        SwipeRow(
+                            start = null,
+                            end = SwipeAction(R.drawable.ic_close, stringResource(R.string.pl_remove), c.red, removes = true) { remove() },
+                            modifier = Modifier.graphicsLayer { alpha = if (dragging) 0.18f else 1f },
+                        ) {
+                            SongRow(
+                                t, now = playing?.id == t.id, wide = !p.songs,
+                                onClick = { onPlay(t, items) }, onLongClick = {},
+                            ) {
+                                IconButton(R.drawable.ic_close, stringResource(R.string.pl_remove), remove, tint = c.ghost, background = Color.Transparent, size = 40.dp)
+                            }
+                        }
+                        if (dragging) DragBubble(t.title, Modifier.graphicsLayer { translationX = grab.x; translationY = grab.y + dragY })
                     }
                 }
             }
@@ -152,7 +231,7 @@ fun PlaylistSheet(
                 {
                     if (!confirm) confirm = true else {
                         Playlists.delete(id)
-                        onHint(context.getString(R.string.pl_deleted))
+                        onHint(resources.getString(R.string.pl_deleted))
                         onClose()
                     }
                 },
@@ -165,11 +244,40 @@ fun PlaylistSheet(
     }
 }
 
+/** What a held file turns into while it is dragged: its name in an accent bubble, centred on the finger. */
+@Composable
+private fun DragBubble(title: String, modifier: Modifier) {
+    val c = Hamstr.colors
+    val pop = remember { Animatable(0.5f) }
+    LaunchedEffect(Unit) { pop.animateTo(1f, Specs.pop()) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    Row(
+        modifier
+            .onSizeChanged { size = it }
+            .graphicsLayer {
+                translationX -= size.width / 2f
+                translationY -= size.height / 2f
+                scaleX = pop.value; scaleY = pop.value
+                alpha = pop.value.coerceIn(0f, 1f)
+            }
+            .widthIn(max = 260.dp)
+            .clip(RoundedCornerShape(50))
+            .background(c.accent)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(R.drawable.ic_music_note, tint = c.onAccent, size = 16.dp)
+        Spacer(Modifier.width(8.dp))
+        Txt(title, style = Hamstr.type.bodyMedium, color = c.onAccent, maxLines = 1)
+    }
+}
+
 /** Picks the playlist [files] go into, or starts a new one. */
 @Composable
 fun AddToPlaylistSheet(files: List<DownloadTask>, onNew: () -> Unit, onDone: (String) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
+    val resources = LocalResources.current
     val tasks by DownloadStore.tasks.collectAsState()
     val lists by Playlists.lists.collectAsState()
     val all = remember(tasks, lists) { Playlists.all(tasks, lists) }
@@ -200,9 +308,9 @@ fun AddToPlaylistSheet(files: List<DownloadTask>, onNew: () -> Unit, onDone: (St
                 val name = p.name.ifEmpty { stringResource(R.string.lib_playlist) }
                 ChoiceRow({
                     if (!inIt) Playlists.add(p.id, files)
-                    onDone(if (files.size == 1) context.getString(R.string.pl_added_one, name) else context.getString(R.string.pl_added_many, files.size, name))
+                    onDone(if (files.size == 1) resources.getString(R.string.pl_added_one, name) else resources.getString(R.string.pl_added_many, files.size, name))
                 }) {
-                    Box(Modifier.width(64.dp)) { PlaylistFan(p.items, Modifier.fillMaxWidth()) }
+                    Box(Modifier.width(64.dp), contentAlignment = Alignment.Center) { PlaylistFan(p.items, Modifier.width(if (p.songs) 40.dp else 64.dp), square = p.songs) }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Txt(name, style = Hamstr.type.bodyMedium, maxLines = 1)
@@ -251,22 +359,26 @@ fun NameSheet(title: String, initial: String, action: String, onDone: (String) -
 
 /** A playlist in the library's row: the fanned covers, its name and how many files. */
 @Composable
-fun PlaylistTile(p: Playlist, width: Dp, onClick: () -> Unit) {
-    Column(Modifier.width(width).clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
-        PlaylistFan(p.items, Modifier.fillMaxWidth())
+fun PlaylistTile(p: Playlist, width: Dp, onClick: () -> Unit, square: Boolean = p.songs) {
+    // A square fan as tall as a wide one would be too big; it gets narrower instead.
+    Column(Modifier.width(if (square) width * 0.72f else width).clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
+        PlaylistFan(p.items, Modifier.fillMaxWidth(), square = square)
         Spacer(Modifier.height(6.dp))
-        Txt(p.name.ifEmpty { stringResource(R.string.lib_playlist) }, style = Hamstr.type.bodyMedium, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp)) {
+            if (p.favorites) Icon(R.drawable.ic_favorite, tint = Hamstr.colors.accent, size = 14.dp, modifier = Modifier.padding(end = 4.dp))
+            Txt(p.name.ifEmpty { stringResource(R.string.lib_playlist) }, style = Hamstr.type.bodyMedium, maxLines = 1)
+        }
         Txt(pluralStringResource(R.plurals.lib_files, p.items.size, p.items.size), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 2.dp))
     }
 }
 
 /** The tile that starts a new playlist, at the end of the row. */
 @Composable
-fun NewPlaylistTile(width: Dp, onClick: () -> Unit) {
+fun NewPlaylistTile(width: Dp, onClick: () -> Unit, square: Boolean = false) {
     val c = Hamstr.colors
-    Column(Modifier.width(width).clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
+    Column(Modifier.width(if (square) width * 0.72f else width).clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).border(2.dp, c.line, RoundedCornerShape(14.dp)),
+            Modifier.fillMaxWidth().aspectRatio(if (square) 1f else 16f / 9f).clip(RoundedCornerShape(14.dp)).border(2.dp, c.line, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
         ) { Icon(R.drawable.ic_add, tint = c.accent, size = 28.dp) }
         Spacer(Modifier.height(6.dp))

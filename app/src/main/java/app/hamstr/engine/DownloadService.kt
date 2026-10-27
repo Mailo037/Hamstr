@@ -32,6 +32,7 @@ import app.hamstr.data.Choice
 import app.hamstr.data.DownloadFiles
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.Mode
 import app.hamstr.data.Prefs
 import app.hamstr.data.Stage
 import app.hamstr.data.Status
@@ -228,8 +229,10 @@ class DownloadService : Service() {
             val grouped = entries.size > 1
             val groupTitle = if (grouped) entries.firstNotNullOfOrNull { it.playlist } ?: task.title else null
             val height = file?.let(DownloadFiles::probeHeight) ?: 0
+            // Asked for a video, got only sound (SoundCloud, Bandcamp …): it is a song.
+            val soundOnly = height == 0 && task.choice.mode != Mode.Audio && file != null && DownloadFiles.hasVideo(file) == false
             DownloadStore.update(task.id) {
-                if (it.status != Status.Running) it else it.copy(status = Status.Done, progress = 1f, filePath = path, contentUri = uri?.toString(),
+                if (it.status != Status.Running) it else (if (soundOnly) DownloadFiles.asAudio(it.copy(filePath = path)) else it).copy(status = Status.Done, progress = 1f, filePath = path, contentUri = uri?.toString(),
                     sizeBytes = file?.length() ?: 0, videoHeight = height, speed = "", etaSec = -1, finishedAt = System.currentTimeMillis(),
                     title = if (grouped) main?.title ?: it.title else it.title,
                     thumbnail = if (grouped) main?.thumbnail ?: it.thumbnail else it.thumbnail,
@@ -470,7 +473,7 @@ class DownloadService : Service() {
 
     private suspend fun notifyDone(id: String) {
         val t = DownloadStore.get(id) ?: return
-        if (!canNotify()) return
+        if (!canNotify() || Seen.foreground) return
         val b = NotificationCompat.Builder(this, CH_DONE)
             .setSmallIcon(R.drawable.ic_stat_hamstr)
             .setColor(Prefs.settings.value.accent)

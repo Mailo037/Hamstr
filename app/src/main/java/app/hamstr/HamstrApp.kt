@@ -19,11 +19,14 @@ class HamstrApp : Application() {
         DownloadStore.init(this)
         Positions.init(this)
         Playlists.init(this)
+        app.hamstr.data.Lyrics.init(this)
         Network.init(this)
         DownloadFiles.finishPending(this)
+        DownloadFiles.fixAudioKinds()
         DownloadService.channels(this)
         Engine.start(this)
         Updater.init(this)
         Widgets.start(this)
+        app.hamstr.ui.AppIcon.shortcuts(this, Prefs.settings.value.accent)
     }
 }

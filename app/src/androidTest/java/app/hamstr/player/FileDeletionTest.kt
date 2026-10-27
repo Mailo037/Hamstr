@@ -48,6 +48,37 @@ class FileDeletionTest {
         return file
     }
 
+    @Test fun viewingAnImageClearsAudioBeforeAddingAnotherSong(): Unit = runBlocking {
+        val root = File(context.cacheDir, "image-queue-${UUID.randomUUID()}").apply { mkdirs() }
+        val first = task(wav(File(root, "first.wav")))
+        val second = task(wav(File(root, "second.wav")))
+        val image = task(File(root, "picture.png").apply {
+            outputStream().use { out ->
+                android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888)
+                    .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+            }
+        })
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                assertTrue(Playback.open(context, first, queue = listOf(first, second), play = false))
+                assertTrue(Playback.open(context, image))
+                withContext(Dispatchers.Main) {
+                    assertEquals(0, Playback.controller.value!!.mediaItemCount)
+                    assertNull(DownloadFiles.hasVideo(File(image.filePath!!)))
+                }
+                assertTrue(Playback.addToQueue(context, second))
+                withContext(Dispatchers.Main) {
+                    assertEquals(listOf(second.id), Playback.queue.value.map { it.id })
+                    assertEquals(second.id, Playback.current.value?.id)
+                    assertEquals(1, Playback.controller.value!!.mediaItemCount)
+                }
+            }
+        } finally {
+            withContext(Dispatchers.Main) { Playback.close() }
+            root.deleteRecursively()
+        }
+    }
+
     @Test fun deletionStopsTheMatchingPlayerAndKeepsOtherFilesAndFailedEntries(): Unit = runBlocking {
         val root = File(context.cacheDir, "delete-test-${UUID.randomUUID()}").apply { mkdirs() }
         val audio = task(wav(File(root, "playing.wav")))

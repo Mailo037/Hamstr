@@ -25,11 +25,18 @@ data class UserList(val id: String, val name: String, val ids: List<String>, val
  * one on their own; the user's own lists sit beside them. Both can be renamed, added to,
  * taken from and deleted; deleting a list never touches its files.
  */
-data class Playlist(val id: String, val name: String, val items: List<DownloadTask>, val downloaded: Boolean)
+data class Playlist(val id: String, val name: String, val items: List<DownloadTask>, val downloaded: Boolean) {
+    val favorites get() = id == Playlists.FAVORITES
+    /** Every file in it is a song: the library shows its covers square. */
+    val songs get() = items.isNotEmpty() && items.all { it.choice.mode == Mode.Audio }
+}
 
 object Playlists {
     private const val GROUP = "group:"
     private const val LIST = "list:"
+    private const val FAVORITES_ID = "favorites"
+    /** The list a swipe in the library fills; it exists from the first heart on. */
+    const val FAVORITES = LIST + FAVORITES_ID
 
     private val _lists = MutableStateFlow<List<UserList>>(emptyList())
     val lists: StateFlow<List<UserList>> = _lists.asStateFlow()
@@ -78,9 +85,11 @@ object Playlists {
 
     /** Every playlist with at least one finished file: the user's own first (newest on top), then downloaded ones. */
     fun all(tasks: List<DownloadTask>, lists: List<UserList>): List<Playlist> {
-        val done = tasks.filter { it.status == Status.Done }
+        val done = tasks.filter { it.status == Status.Done && !it.hidden }
         val byId = done.associateBy { it.id }
-        val own = lists.sortedByDescending { it.createdAt }.map { l -> Playlist(LIST + l.id, l.name, l.ids.mapNotNull(byId::get), downloaded = false) }
+        // Favorites lead, and only once something is in them.
+        val own = lists.sortedWith(compareByDescending<UserList> { it.id == FAVORITES_ID }.thenByDescending { it.createdAt })
+            .filter { it.id != FAVORITES_ID || it.ids.any(byId::containsKey) }.map { l -> Playlist(LIST + l.id, l.name, l.ids.mapNotNull(byId::get), downloaded = false) }
         val groups = done.filter { it.group != null }.groupBy { it.group!! }.map { (g, items) ->
             val sorted = items.sortedBy { it.createdAt }
             Playlist(GROUP + g, sorted.firstNotNullOfOrNull { it.groupTitle } ?: "", sorted, downloaded = true)
@@ -100,6 +109,23 @@ object Playlists {
         return LIST + l.id
     }
 
+    fun isFavorite(task: DownloadTask) = _lists.value.any { it.id == FAVORITES_ID && task.id in it.ids }
+
+    /** Hearts [task] or takes the heart back; returns whether it is a favorite now. */
+    fun toggleFavorite(task: DownloadTask, name: String): Boolean {
+        val now = !isFavorite(task)
+        _lists.update { all ->
+            val fav = all.firstOrNull { it.id == FAVORITES_ID }
+            when {
+                fav == null -> all + UserList(FAVORITES_ID, name, listOf(task.id))
+                now -> all.map { if (it.id == FAVORITES_ID) it.copy(ids = it.ids + task.id) else it }
+                else -> all.map { if (it.id == FAVORITES_ID) it.copy(ids = it.ids - task.id) else it }
+            }
+        }
+        save()
+        return now
+    }
+
     fun add(id: String, items: List<DownloadTask>) {
         when {
             id.startsWith(LIST) -> edit(id.removePrefix(LIST)) { l -> l.copy(ids = (l.ids + items.map { it.id }).distinct()) }
@@ -107,6 +133,23 @@ object Playlists {
                 val g = id.removePrefix(GROUP)
                 val title = DownloadStore.tasks.value.firstNotNullOfOrNull { t -> t.groupTitle?.takeIf { t.group == g } }
                 items.forEach { t -> DownloadStore.update(t.id) { it.copy(group = g, groupTitle = title) } }
+            }
+        }
+    }
+
+    /** Moves a file to another place in the list (a downloaded list keeps its order by arrival times). */
+    fun move(id: String, items: List<DownloadTask>, from: Int, to: Int) {
+        if (from == to || from !in items.indices || to !in items.indices) return
+        val order = items.toMutableList().apply { add(to, removeAt(from)) }
+        when {
+            id.startsWith(LIST) -> edit(id.removePrefix(LIST)) { l ->
+                // Files that are gone stay where they were, after the ones shown.
+                val shown = order.map { it.id }
+                l.copy(ids = shown + l.ids.filterNot { it in shown })
+            }
+            id.startsWith(GROUP) -> {
+                val times = items.map { it.createdAt }.sorted()
+                order.forEachIndexed { i, t -> if (t.createdAt != times[i]) DownloadStore.update(t.id) { it.copy(createdAt = times[i]) } }
             }
         }
     }

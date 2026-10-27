@@ -3,6 +3,11 @@ package app.hamstr
 import androidx.compose.ui.platform.LocalWindowInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.hamstr.ui.PlaylistSheet
+import app.hamstr.ui.QueueSheet
+import app.hamstr.ui.SleepSheet
+import app.hamstr.ui.LyricsSheet
+import app.hamstr.ui.AppIcon
+import app.hamstr.engine.Seen
 import app.hamstr.ui.AddToPlaylistSheet
 import app.hamstr.ui.NameSheet
 import app.hamstr.ui.rememberPlaylist
@@ -63,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -182,6 +188,16 @@ class MainActivity : ComponentActivity() {
         // Back in the foreground: queued downloads (also ones Android paused) go on, gone files show up.
         if (DownloadStore.tasks.value.any { it.status == Status.Queued }) DownloadService.send(this, DownloadService.ACTION_START)
         DownloadFiles.refreshMissing()
+        // What the notifications said is on screen now: finished downloads, a new version.
+        Seen.foreground = true
+        Seen.appOpened(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Seen.foreground = false
+        // The launcher icon changes once the app is out of sight, so it never jumps under the finger.
+        AppIcon.sync(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -200,8 +216,13 @@ class MainActivity : ComponentActivity() {
         const val ACTION_ADD = "app.hamstr.action.ADD"
         const val ACTION_LIBRARY = "app.hamstr.action.LIBRARY"
         const val ACTION_OPEN = "app.hamstr.action.OPEN"
-        private val ACTIONS = setOf(ACTION_PASTE, ACTION_ADD, ACTION_LIBRARY, ACTION_OPEN)
+        const val ACTION_PLAYER = "app.hamstr.action.PLAYER"
+        private val ACTIONS = setOf(ACTION_PASTE, ACTION_ADD, ACTION_LIBRARY, ACTION_OPEN, ACTION_PLAYER)
         internal val pendingAction = MutableStateFlow<String?>(null)
+        private const val LINK = "link:"
+
+        /** Opens the share sheet on another link, e.g. the YouTube Music copy of a locked song. */
+        fun openLink(url: String) { pendingAction.value = LINK + url }
     }
 
     private val inPip = androidx.compose.runtime.mutableStateOf(false)
@@ -240,6 +261,7 @@ private data class Snack(val text: String, val action: String? = null, val id: L
 private fun App(inPip: Boolean) {
     val c = Hamstr.colors
     val context = LocalContext.current
+    val resources = LocalResources.current
     val tasks by DownloadStore.tasks.collectAsState()
     val engine by Engine.state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(Tab.Stash) }
@@ -261,16 +283,22 @@ private fun App(inPip: Boolean) {
     var renameList by rememberSaveable { mutableStateOf<String?>(null) }
     var clipLink by remember { mutableStateOf<String?>(null) }
     var notifyAsk by rememberSaveable { mutableStateOf(false) }
+    var queueSheet by rememberSaveable { mutableStateOf(false) }
+    var sleepSheet by rememberSaveable { mutableStateOf(false) }
+    var lyricsFor by remember { mutableStateOf<DownloadTask?>(null) }
+    // Hidden files live in Settings > Hidden only.
+    val visible = remember(tasks) { tasks.filterNot { it.hidden } }
+    fun library() = DownloadStore.tasks.value.filter { it.status == Status.Done && !it.hidden }
     fun hint(text: String) { snack = Snack(text) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
-            hint(if (uris.size == 1) context.getString(R.string.import_one) else context.getString(R.string.import_many, uris.size))
+            hint(if (uris.size == 1) resources.getString(R.string.import_one) else resources.getString(R.string.import_many, uris.size))
             val n = Importer.import(context, uris)
             hint(
                 when {
-                    n == uris.size -> if (n == 1) context.getString(R.string.import_done_one) else context.getString(R.string.import_done_many, n)
-                    n == 0 -> context.getString(R.string.import_failed)
-                    else -> context.getString(R.string.import_done_some, n, uris.size)
+                    n == uris.size -> if (n == 1) resources.getString(R.string.import_done_one) else resources.getString(R.string.import_done_many, n)
+                    n == 0 -> resources.getString(R.string.import_failed)
+                    else -> resources.getString(R.string.import_done_some, n, uris.size)
                 },
             )
         }
@@ -290,55 +318,72 @@ private fun App(inPip: Boolean) {
     }
     // Lists hand in what plays next: other songs after a song, the rest of a playlist after one of its files.
     val play: (DownloadTask, List<DownloadTask>) -> Unit = { t, from ->
+        Seen.opened(context, t.id)
         scope.launch {
             if (!Playback.open(context, t, Playback.queueFor(t, from))) {
                 DownloadFiles.refreshMissing()
-                snack = Snack(context.getString(R.string.file_gone), context.getString(R.string.download_again)) { again(t) }
+                snack = Snack(resources.getString(R.string.file_gone), resources.getString(R.string.download_again)) { again(t) }
             }
         }
     }
     // A playlist or the songs list plays exactly as shown, in that order.
     val playList: (DownloadTask, List<DownloadTask>) -> Unit = { t, list ->
+        Seen.opened(context, t.id)
         scope.launch {
             if (!Playback.open(context, t, list)) {
                 DownloadFiles.refreshMissing()
-                snack = Snack(context.getString(R.string.file_gone), context.getString(R.string.download_again)) { again(t) }
+                snack = Snack(resources.getString(R.string.file_gone), resources.getString(R.string.download_again)) { again(t) }
             }
         }
     }
     val saveAudio: (DownloadTask) -> Unit = { v ->
         scope.launch {
-            hint(context.getString(R.string.audio_saving))
-            hint(AudioOut.save(context, v).fold({ context.getString(R.string.audio_saved) }, { it.message ?: context.getString(R.string.audio_failed) }))
+            hint(resources.getString(R.string.audio_saving))
+            hint(AudioOut.save(context, v).fold({ resources.getString(R.string.audio_saved) }, { it.message ?: resources.getString(R.string.audio_failed) }))
         }
     }
-    // Hiding keeps the files; deleting waits a moment for Undo before the files go.
+    // Hiding keeps the files (Settings > Hidden has them); deleting waits a moment for Undo before the files go.
     val hide: (List<DownloadTask>) -> Unit = { list ->
-        val removed = DownloadStore.removeAll(list.map { it.id }.toSet())
-        val files = list.count { it.status == Status.Done }
+        val (files, rest) = list.partition { it.status == Status.Done }
+        val ids = files.map { it.id }.toSet()
+        files.forEach(Playback::closeIfCurrent)
+        DownloadStore.setHidden(ids, true)
+        val removed = DownloadStore.removeAll(rest.map { it.id }.toSet())
         snack = Snack(
             when {
-                files == 0 -> context.getString(R.string.removed_from_list)
-                list.size == 1 -> context.getString(R.string.hidden_one)
-                else -> context.getString(R.string.hidden_many, list.size)
+                files.isEmpty() -> resources.getString(R.string.removed_from_list)
+                list.size == 1 -> resources.getString(R.string.hidden_one)
+                else -> resources.getString(R.string.hidden_many, list.size)
             },
-            context.getString(R.string.undo),
-        ) { DownloadStore.restore(removed) }
+            resources.getString(R.string.undo),
+        ) { DownloadStore.setHidden(ids, false); DownloadStore.restore(removed) }
+    }
+    // A swipe or a menu row: right after what plays now, or at the end of the queue.
+    val enqueue: (DownloadTask, Boolean) -> Unit = { t, next ->
+        scope.launch {
+            val playing = Playback.current.value != null
+            val ok = if (next) Playback.playNext(context, t) else Playback.addToQueue(context, t)
+            if (ok && playing) hint(resources.getString(if (next) R.string.queued_next else R.string.queued_end, t.title))
+        }
+    }
+    val favorite: (DownloadTask) -> Unit = { t ->
+        val on = Playlists.toggleFavorite(t, resources.getString(R.string.pl_favorites))
+        hint(resources.getString(if (on) R.string.fav_added else R.string.fav_removed))
     }
     val delete: (List<DownloadTask>) -> Unit = { list ->
         val pending = DownloadFiles.deleteLater(context, list)
         snack = Snack(
-            if (pending.count <= 1) context.getString(R.string.deleted_one) else context.getString(R.string.deleted_many, pending.count),
-            context.getString(R.string.undo),
+            if (pending.count <= 1) resources.getString(R.string.deleted_one) else resources.getString(R.string.deleted_many, pending.count),
+            resources.getString(R.string.undo),
         ) { DownloadFiles.undo(context, pending) }
     }
     val share: (List<DownloadTask>) -> Unit = { list -> Playback.shareFiles(context, list) }
     val retryEngine: () -> Unit = {
         scope.launch {
-            hint(context.getString(R.string.engine_restarting))
+            hint(resources.getString(R.string.engine_restarting))
             Engine.retryStart().fold(
-                { hint(context.getString(R.string.engine_restarted)) },
-                { snack = Snack(context.getString(R.string.engine_still_broken), context.getString(R.string.err_copy)) { copy(context, it.message.orEmpty()) } },
+                { hint(resources.getString(R.string.engine_restarted)) },
+                { snack = Snack(resources.getString(R.string.engine_still_broken), resources.getString(R.string.err_copy)) { copy(context, it.message.orEmpty()) } },
             )
         }
     }
@@ -357,9 +402,14 @@ private fun App(inPip: Boolean) {
     val sideStart = safe.calculateLeftPadding(LayoutDirection.Ltr) + 12.dp
     val contentStart = if (landscape) sideStart + SIDEBAR + 4.dp else 0.dp
     val contentEnd = if (landscape) safe.calculateRightPadding(LayoutDirection.Ltr) else 0.dp
-    // Room for the tab bar, plus the mini player while something is loaded.
+    // Room for the tab bar, plus the mini player while something is loaded (its height and gap per style).
+    val miniRoom = when (settings.miniStyle) {
+        app.hamstr.data.MiniStyle.Floating -> 72.dp
+        app.hamstr.data.MiniStyle.Docked -> 62.dp
+        app.hamstr.data.MiniStyle.Compact -> 60.dp
+    }
     val padding = if (landscape) PaddingValues(top = top + 8.dp, bottom = bottom + 16.dp)
-    else PaddingValues(top = top + 8.dp, bottom = bottom + 84.dp + if (playing != null) 72.dp else 0.dp)
+    else PaddingValues(top = top + 8.dp, bottom = bottom + 84.dp + if (playing != null) miniRoom else 0.dp)
 
     LaunchedEffect(snack?.id) {
         val s = snack ?: return@LaunchedEffect
@@ -374,14 +424,17 @@ private fun App(inPip: Boolean) {
         val a = action ?: return@LaunchedEffect
         when {
             a == MainActivity.ACTION_LIBRARY -> tab = Tab.Library
+            a.startsWith("link:") -> { menuFor = null; tab = Tab.Stash; sheetUrl = a.removePrefix("link:") }
+            a == MainActivity.ACTION_PLAYER -> if (Playback.current.value != null) Playback.expand() else tab = Tab.Library
             a == MainActivity.ACTION_ADD -> if (focused) { tab = Tab.Stash; clipLink = clipboardLink(); addSheet = true } else return@LaunchedEffect
             a == MainActivity.ACTION_PASTE -> if (focused) {
                 tab = Tab.Stash
                 val url = clipboardLink()
-                if (url != null) sheetUrl = url else { hint(context.getString(R.string.no_clipboard_link)); clipLink = null; addSheet = true }
+                if (url != null) sheetUrl = url else { hint(resources.getString(R.string.no_clipboard_link)); clipLink = null; addSheet = true }
             } else return@LaunchedEffect
             a.startsWith(MainActivity.ACTION_OPEN) -> DownloadStore.get(a.substringAfter(':'))?.let { t ->
-                play(t, DownloadStore.tasks.value.filter { it.status == Status.Done })
+                Seen.opened(context, t.id)
+                play(t, library())
             }
             else -> return@LaunchedEffect
         }
@@ -403,10 +456,10 @@ private fun App(inPip: Boolean) {
         HorizontalPager(pager, Modifier.fillMaxSize().padding(start = contentStart, end = contentEnd), key = { Tab.entries[it] }) { page ->
             when (Tab.entries[page]) {
                 Tab.Stash -> StashScreen(
-                    tasks, engine, padding,
+                    visible, engine, padding,
                     onAdd = {
                         val url = clipboardLink()
-                        if (url != null) sheetUrl = url else hint(context.getString(R.string.no_clipboard_link))
+                        if (url != null) sheetUrl = url else hint(resources.getString(R.string.no_clipboard_link))
                     },
                     onOpenAdd = { clipLink = clipboardLink(); addSheet = true },
                     onMenu = { menuFor = it },
@@ -416,12 +469,13 @@ private fun App(inPip: Boolean) {
                     onShowAll = { tab = Tab.Library },
                 )
                 Tab.Library -> LibraryScreen(
-                    tasks, padding,
+                    visible, padding,
                     onMenu = { menuFor = it }, onPlay = play, onPlayList = playList,
+                    onPlayNext = { enqueue(it, true) }, onFavorite = favorite,
                     onPlaylist = { playlistFor = it }, onNewPlaylist = { newList = emptyList() }, onAddToPlaylist = { addToList = it },
                     onHide = hide, onDelete = delete, onShare = share,
                 )
-                Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true })
+                Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true }, onDelete = delete, onHint = { hint(it) })
             }
         }
         if (landscape) {
@@ -433,11 +487,15 @@ private fun App(inPip: Boolean) {
             )
             if (!inPip) PlayerHost(
                 miniBottom = bottom + 9.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
+                onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
                 miniStart = sideStart + 5.dp, miniWidth = SIDEBAR - 10.dp,
             )
         } else {
             TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
-            if (!inPip) PlayerHost(miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it })
+            if (!inPip) PlayerHost(
+                miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
+                onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
+            )
         }
 
         AnimatedVisibility(
@@ -446,7 +504,7 @@ private fun App(inPip: Boolean) {
             exit = slideOutVertically { it / 2 } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(
                 start = 16.dp + contentStart, end = 16.dp + contentEnd,
-                bottom = if (landscape) 16.dp else 96.dp + if (playing != null) 72.dp else 0.dp,
+                bottom = if (landscape) 16.dp else 96.dp + if (playing != null) miniRoom else 0.dp,
             ),
         ) {
             var shown by remember { mutableStateOf(snack) }
@@ -479,6 +537,18 @@ private fun App(inPip: Boolean) {
             lastOffered?.let { r -> UpdateBanner(r, onOpen = { updateSheet = true }, onDismiss = { Updater.dismiss(r) }) }
         }
 
+        Overlay(visible = queueSheet && playing != null, onDismiss = { queueSheet = false }) {
+            QueueSheet(onClose = { queueSheet = false })
+        }
+        Overlay(visible = sleepSheet, onDismiss = { sleepSheet = false }) {
+            SleepSheet { label ->
+                sleepSheet = false
+                hint(if (label == null) resources.getString(R.string.sleep_canceled) else resources.getString(R.string.sleep_set, label))
+            }
+        }
+        Overlay(visible = lyricsFor != null, onDismiss = { lyricsFor = null }) {
+            lyricsFor?.let { t -> LyricsSheet(t) { msg -> lyricsFor = null; hint(msg) } }
+        }
         Overlay(visible = playlistFor != null && renameList == null, onDismiss = { playlistFor = null }) {
             playlistFor?.let { id ->
                 PlaylistSheet(
@@ -504,7 +574,7 @@ private fun App(inPip: Boolean) {
                     newList = null
                     addToList = null
                     if (files.isEmpty()) playlistFor = id
-                    else hint(if (files.size == 1) context.getString(R.string.pl_added_one, name) else context.getString(R.string.pl_added_many, files.size, name))
+                    else hint(if (files.size == 1) resources.getString(R.string.pl_added_one, name) else resources.getString(R.string.pl_added_many, files.size, name))
                 }
             }
         }
@@ -536,7 +606,7 @@ private fun App(inPip: Boolean) {
                     onStash = { link, info, choice -> DownloadService.stash(context, link, info, choice); stashed() },
                     onBatchQueued = { stashed() },
                     onDismiss = { sheetUrl = null },
-                    onOpen = { t -> sheetUrl = null; play(t, DownloadStore.tasks.value.filter { it.status == Status.Done }) },
+                    onOpen = { t -> sheetUrl = null; play(t, library()) },
                     onStashVersion = { of, choice -> DownloadService.stashVersion(context, of, choice, replace = false); stashed() },
                 )
             }
@@ -551,7 +621,10 @@ private fun App(inPip: Boolean) {
             menuFor?.let { t ->
                 TaskMenu(
                     t, gone = t.id in missing,
-                    onPlay = { play(it, DownloadStore.tasks.value.filter { d -> d.status == Status.Done }) },
+                    onPlay = { play(it, library()) },
+                    onPlayNext = { menuFor = null; enqueue(it, true) },
+                    onAddToQueue = { menuFor = null; enqueue(it, false) },
+                    onFavorite = { favorite(it) },
                     onClose = { menuFor = null },
                     onQuality = { menuFor = null; qualityFor = it },
                     onSaveAudio = { menuFor = null; saveAudio(it) },
@@ -570,7 +643,7 @@ private fun App(inPip: Boolean) {
                 RenameSheet(t, onRename = { name ->
                     renameFor = null
                     scope.launch {
-                        hint(DownloadFiles.rename(context, t, name).fold({ context.getString(R.string.rename_done) }, { it.message ?: context.getString(R.string.rename_failed) }))
+                        hint(DownloadFiles.rename(context, t, name).fold({ resources.getString(R.string.rename_done) }, { it.message ?: resources.getString(R.string.rename_failed) }))
                     }
                 })
             }
@@ -580,7 +653,7 @@ private fun App(inPip: Boolean) {
                 val present = t.filePath?.let(::File)?.isFile == true
                 InfoSheet(
                     t,
-                    onCopy = { copy(context, it); hint(context.getString(R.string.info_copied)) },
+                    onCopy = { copy(context, it); hint(resources.getString(R.string.info_copied)) },
                     // The same changes the file menu offers, right where the value is shown.
                     actions = buildMap {
                         if (present) put(R.string.info_name, InfoAction(R.drawable.ic_edit, R.string.menu_rename) { infoFor = null; renameFor = t })
@@ -626,6 +699,9 @@ private fun TaskMenu(
     task: DownloadTask,
     gone: Boolean,
     onPlay: (DownloadTask) -> Unit,
+    onPlayNext: (DownloadTask) -> Unit,
+    onAddToQueue: (DownloadTask) -> Unit,
+    onFavorite: (DownloadTask) -> Unit,
     onClose: () -> Unit,
     onQuality: (DownloadTask) -> Unit,
     onSaveAudio: (DownloadTask) -> Unit,
@@ -639,6 +715,7 @@ private fun TaskMenu(
 ) {
     val c = Hamstr.colors
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     // The menu stays open while the download moves on, so it follows the live task.
     val tasks by DownloadStore.tasks.collectAsState()
@@ -680,18 +757,25 @@ private fun TaskMenu(
                     )
                 }
             }
+            // Locked with DRM where it was shared: maybe YouTube Music has it.
+            if (why.title == R.string.err_drm) {
+                Spacer(Modifier.height(6.dp))
+                val guess = remember(t.url) { app.hamstr.ui.guessFromLink(t.url) }
+                val title = t.title.takeIf { it.isNotBlank() && !it.startsWith("http") } ?: guess?.first
+                if (title != null) app.hamstr.ui.ElsewhereCard(title, t.uploader ?: guess?.second, t.durationSec) { MainActivity.openLink(it) }
+            }
             Spacer(Modifier.height(6.dp))
             t.error?.let { err ->
-                MenuRow(R.drawable.ic_content_paste, stringResource(R.string.err_copy)) { copy(context, err); onCopied(context.getString(R.string.err_copied)) }
+                MenuRow(R.drawable.ic_content_paste, stringResource(R.string.err_copy)) { copy(context, err); onCopied(resources.getString(R.string.err_copied)) }
             }
         }
         if (gone && t.status == Status.Done) {
             Txt(stringResource(R.string.file_gone_long), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
             MenuRow(R.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) }
         }
-        val copyLink = { copy(context, t.url); onCopied(context.getString(R.string.info_copied)); onClose() }
+        val copyLink = { copy(context, t.url); onCopied(resources.getString(R.string.info_copied)); onClose() }
         if (file != null) {
-            val kind = kindOf(file)
+            val kind = kindOf(t)
             val playable = kind == Kind.Video || kind == Kind.Audio
             // The everyday actions as tiles, then what changes the file, then what removes it.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -705,6 +789,16 @@ private fun TaskMenu(
                 ActionTile(R.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
             }
             Spacer(Modifier.height(10.dp))
+            if (playable) {
+                val lists by Playlists.lists.collectAsState()
+                val fav = remember(lists, t.id) { Playlists.isFavorite(t) }
+                MenuGroup {
+                    MenuRow(R.drawable.ic_play_next, stringResource(R.string.play_next)) { onPlayNext(t) }
+                    MenuRow(R.drawable.ic_add_queue, stringResource(R.string.add_to_queue)) { onAddToQueue(t) }
+                    MenuRow(if (fav) R.drawable.ic_favorite else R.drawable.ic_favorite_border, stringResource(if (fav) R.string.fav_remove else R.string.fav_add)) { onFavorite(t) }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
             MenuGroup {
                 if (canHaveVersions(t)) MenuRow(R.drawable.ic_movie, stringResource(R.string.menu_quality)) { onQuality(t) }
                 if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, stringResource(R.string.menu_save_audio)) { onSaveAudio(t) }

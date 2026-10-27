@@ -2,6 +2,7 @@ package app.hamstr.engine
 
 import java.util.Locale
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Mode
@@ -196,24 +197,63 @@ object Cheek {
         // Pausing or losing the network kills the process; its closed pipe must not take the app down.
         val errReader = thread(name = "cheek-stderr") { runCatching { proc.errorStream.bufferedReader().forEachLine { err.appendLine(it) } } }
         var failure: String? = null
+        var downloaded = 0L
+        var lastByteAt = SystemClock.elapsedRealtime()
+        var postProcessing = false
+        var stalled = false
+        val rootInfo = JSONObject(info)
+        var currentInfo = rootInfo
+        val playlistEntries = rootInfo.optJSONArray("entries")
         try {
             if (Thread.currentThread().isInterrupted) throw InterruptedException("Download stopped")
             proc.inputStream.bufferedReader().forEachLine { line ->
                 val e = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
                 when (e.optString("type")) {
+                    "info" -> {
+                        // A playlist resolves one song at a time; metadata follows the current song.
+                        val entry = playlistEntries?.let { list ->
+                            (0 until list.length()).mapNotNull { list.optJSONObject(it) }
+                                .firstOrNull { it.optString("id") == e.optString("id") }
+                        }
+                        currentInfo = JSONObject((entry ?: rootInfo).toString())
+                            .put("title", e.optString("title"))
+                            .put("id", e.optString("id"))
+                            .put("extractor_key", e.optString("extractor"))
+                        callback?.invoke(0f, -1, Engine.METADATA_PREFIX + currentInfo)
+                        downloaded = 0L
+                        lastByteAt = SystemClock.elapsedRealtime()
+                        postProcessing = false
+                    }
                     "progress" -> {
+                        val bytes = e.optLong("downloaded")
+                        val now = SystemClock.elapsedRealtime()
+                        if (bytes != downloaded) {
+                            downloaded = bytes
+                            lastByteAt = now
+                        } else if (!postProcessing && !stalled && now - lastByteAt >= 90_000) {
+                            // Cheek keeps emitting progress even when every fragment is stuck.
+                            // Let the existing yt-dlp fallback try this stream instead of
+                            // occupying a queue slot indefinitely at zero bytes per second.
+                            stalled = true
+                            TaskProcesses.stop(work)
+                            proc.destroy()
+                        }
                         val pct = e.optDouble("percent", 0.0)
                         val eta = if (e.isNull("eta")) -1L else e.optLong("eta", -1)
                         // Phrased like yt-dlp's progress line so the service reads the speed the same way.
                         val line2 = String.format(Locale.ROOT, "[download] %5.1f%% of %s at %s ETA %s", pct, mib(e.optLong("total")), mib(e.optLong("speed")) + "/s", eta)
                         callback?.invoke(pct.toFloat(), eta, line2)
                     }
-                    "stage" -> callback?.invoke(100f, -1, Engine.STAGE_PREFIX + e.optString("stage"))
+                    "stage" -> {
+                        postProcessing = true
+                        callback?.invoke(100f, -1, Engine.STAGE_PREFIX + e.optString("stage"))
+                    }
                     "done" -> {
-                        val o = JSONObject(info)
+                        val o = currentInfo
                         pathFile.appendText(
                             JSONObject().put("filepath", e.optString("path")).put("title", o.opt("title"))
-                                .put("thumbnail", o.opt("thumbnail")).put("duration", o.opt("duration")).toString() + "\n",
+                                .put("thumbnail", o.opt("thumbnail")).put("duration", o.opt("duration"))
+                                .put("playlist_title", if (playlistEntries != null) rootInfo.opt("title") else null).toString() + "\n",
                         )
                     }
                     "error" -> failure = e.optString("message")
@@ -221,9 +261,14 @@ object Cheek {
             }
             val code = proc.waitFor()
             errReader.join(2000)
+            if (stalled) return YoutubeDLResponse(cmd, 1, System.currentTimeMillis() - started, "", "Download stalled without new bytes; use yt-dlp")
             if (code != 0) Log.w(TAG, "cheek exit $code: ${failure ?: err.toString().takeLast(2000)}")
             return YoutubeDLResponse(cmd, code, System.currentTimeMillis() - started, "", failure ?: err.toString())
         } catch (e: Exception) {
+            // Destroying the stalled process may close its stdout while it is being read.
+            if (stalled && e !is InterruptedException) {
+                return YoutubeDLResponse(cmd, 1, System.currentTimeMillis() - started, "", "Download stalled without new bytes; use yt-dlp")
+            }
             Log.w(TAG, "cheek stopped", e)
             throw e
         } finally {
