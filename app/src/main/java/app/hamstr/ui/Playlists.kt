@@ -81,29 +81,46 @@ fun shelves(done: List<DownloadTask>): List<Shelf> {
 }
 
 /**
- * Three thumbnails fanned out: one tilted left at the bottom, one tilted right with "+N"
- * for everything else, and the first one upright on top in the middle.
+ * A playlist's covers as a little stack, laid out by how many there are. One: its cover
+ * big, on a blank card set askew behind it. Two: both, the second tilted behind the first.
+ * Three or more: fanned out, one tilted left at the bottom, one tilted right with "+N" for
+ * everything else, and the first one upright on top in the middle.
  */
 @Composable
 fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier, square: Boolean = false) {
+    val c = Hamstr.colors
     // Songs have square covers, so a list of songs fans out square cards.
     val ratio = if (square) 1f else 16f / 9f
     BoxWithConstraints(modifier.aspectRatio(ratio)) {
-        if (items.isEmpty()) {
-            // A new list: an empty card with the add mark, so it still reads as a playlist.
-            Box(
-                Modifier.align(Alignment.Center).width(maxWidth * 0.53f).aspectRatio(ratio)
-                    .clip(RoundedCornerShape(10.dp)).border(2.dp, Hamstr.colors.line, RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center,
-            ) { Icon(R.drawable.ic_playlist_add, tint = Hamstr.colors.ghost, size = 22.dp) }
-            return@BoxWithConstraints
-        }
-        val w = maxWidth * 0.5f
         // Card centres as fractions of the tile, measured from its middle.
         fun at(x: Float, y: Float) = Modifier.align(Alignment.Center).offset(x = maxWidth * (x - 0.5f), y = maxHeight * (y - 0.5f))
-        items.getOrNull(1)?.let { FanThumb(it, w, at(0.29f, 0.62f).graphicsLayer { rotationZ = -10f }, ratio) }
-        items.getOrNull(2)?.let { FanThumb(it, w, at(0.71f, 0.62f).graphicsLayer { rotationZ = 10f }, ratio, more = items.size - 2) }
-        FanThumb(items.first(), w * 1.06f, at(0.5f, 0.4f), ratio)
+        when (items.size) {
+            // A new list: an empty card with the add mark, so it still reads as a playlist.
+            0 -> Box(
+                Modifier.align(Alignment.Center).width(maxWidth * 0.53f).aspectRatio(ratio)
+                    .clip(RoundedCornerShape(10.dp)).border(2.dp, c.line, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(R.drawable.ic_playlist_add, tint = c.ghost, size = 22.dp) }
+            1 -> {
+                val w = maxWidth * 0.78f
+                Box(
+                    at(0.54f, 0.55f).graphicsLayer { rotationZ = 5f }.width(w).aspectRatio(ratio)
+                        .clip(RoundedCornerShape(10.dp)).background(c.surface).border(2.dp, c.canvas, RoundedCornerShape(10.dp)),
+                )
+                FanThumb(items.first(), w, at(0.48f, 0.46f), ratio)
+            }
+            2 -> {
+                val w = maxWidth * 0.6f
+                FanThumb(items[1], w, at(0.66f, 0.56f).graphicsLayer { rotationZ = 8f }, ratio)
+                FanThumb(items[0], w, at(0.37f, 0.45f).graphicsLayer { rotationZ = -4f }, ratio)
+            }
+            else -> {
+                val w = maxWidth * 0.5f
+                FanThumb(items[1], w, at(0.29f, 0.62f).graphicsLayer { rotationZ = -10f }, ratio)
+                FanThumb(items[2], w, at(0.71f, 0.62f).graphicsLayer { rotationZ = 10f }, ratio, more = items.size - 2)
+                FanThumb(items.first(), w * 1.06f, at(0.5f, 0.4f), ratio)
+            }
+        }
     }
 }
 

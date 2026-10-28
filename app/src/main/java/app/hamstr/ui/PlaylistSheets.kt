@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,21 +31,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.zIndex
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.SwipeAction
@@ -95,9 +92,9 @@ fun rememberPlaylist(id: String): Playlist? {
 
 /**
  * One playlist: play it all or shuffled, start from any file, take files off it (the cross
- * or a swipe), rename it or delete it. Hold a file and drag to move it: the row lifts out
- * as a bubble with its name that follows the finger, and the others make room. Deleting a
- * list keeps its files; a downloaded one can drop its files too.
+ * or a swipe), rename it or delete it. Drag a file by its handle to move it, as in the
+ * queue: the row lifts and follows the finger while the others make room. Holding a file
+ * opens its menu. Deleting a list keeps its files; a downloaded one can drop its files too.
  */
 @Composable
 fun PlaylistSheet(
@@ -110,26 +107,27 @@ fun PlaylistSheet(
     onHint: (String) -> Unit,
 ) {
     val c = Hamstr.colors
-    val context = LocalContext.current
     val resources = LocalResources.current
     val p = rememberPlaylist(id)
     LaunchedEffect(p == null) { if (p == null) onClose() }
     if (p == null) return
     val items = p.items
+    val latest by rememberUpdatedState(items)
     val name = p.name.ifEmpty { stringResource(R.string.lib_playlist) }
     val playing by Playback.current.collectAsState()
     var confirm by remember(id) { mutableStateOf(false) }
     val list = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
-    // While a file is held, a local copy of the order moves under the finger; the list is saved on release.
-    var rows by remember(id) { mutableStateOf(items) }
+    // While a file is held, a copy of the order moves under the finger; the list is saved on
+    // release, and the copy stays until the saved order is back, so nothing jumps.
+    var held by remember(id) { mutableStateOf<List<DownloadTask>?>(null) }
     var dragKey by remember { mutableStateOf<String?>(null) }
     var dragFrom by remember { mutableIntStateOf(-1) }
-    var dragY by remember { mutableFloatStateOf(0f) }
-    var grab by remember { mutableStateOf(Offset.Zero) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
     var rowH by remember { mutableIntStateOf(0) }
     val gap = with(LocalDensity.current) { 2.dp.toPx() }
-    LaunchedEffect(items) { if (dragKey == null) rows = items }
+    LaunchedEffect(items) { if (dragKey == null) held = null }
+    val rows = held ?: items
     // Header and buttons stay put; the files take the room that is left.
     Sheet(scroll = false) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
@@ -169,57 +167,68 @@ fun PlaylistSheet(
                         onHint(resources.getString(R.string.pl_removed, name))
                     }
                     Box(
-                        (if (dragging) Modifier.zIndex(1f) else Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut()))
-                            .onSizeChanged { rowH = it.height }
-                            .pointerInput(t.id) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = { at ->
-                                        haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                        dragKey = t.id; dragY = 0f; grab = at
-                                        dragFrom = rows.indexOfFirst { it.id == t.id }
-                                    },
-                                    onDragEnd = {
-                                        val to = rows.indexOfFirst { it.id == dragKey }
-                                        if (dragFrom >= 0 && to >= 0 && to != dragFrom) {
-                                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                            Playlists.move(id, items, dragFrom, to)
-                                        }
-                                        dragKey = null; dragY = 0f
-                                    },
-                                    onDragCancel = { rows = items; dragKey = null; dragY = 0f },
-                                ) { change, drag ->
-                                    change.consume()
-                                    dragY += drag.y
-                                    grab = grab.copy(x = grab.x + drag.x)
-                                    val step = rowH + gap
-                                    val i = rows.indexOfFirst { it.id == dragKey }
-                                    val target = when {
-                                        dragY > step / 2 && i < rows.lastIndex -> i + 1
-                                        dragY < -step / 2 && i > 0 -> i - 1
-                                        else -> i
-                                    }
-                                    if (target != i && i >= 0) {
-                                        rows = rows.toMutableList().apply { add(target, removeAt(i)) }
-                                        dragY -= (target - i) * step
-                                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                    }
-                                }
-                            },
+                        (if (dragging) Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset; scaleX = 1.02f; scaleY = 1.02f }
+                        else Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut()))
+                            .onSizeChanged { rowH = it.height },
                     ) {
-                        // The held row stays as a faint gap where it would land.
                         SwipeRow(
                             start = null,
                             end = SwipeAction(R.drawable.ic_close, stringResource(R.string.pl_remove), c.red, removes = true) { remove() },
-                            modifier = Modifier.graphicsLayer { alpha = if (dragging) 0.18f else 1f },
+                            background = c.overlay,
                         ) {
-                            SongRow(
-                                t, now = playing?.id == t.id, wide = !p.songs,
-                                onClick = { onPlay(t, items) }, onLongClick = {},
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.row)).background(if (dragging) c.surface else Color.Transparent),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                IconButton(R.drawable.ic_close, stringResource(R.string.pl_remove), remove, tint = c.ghost, background = Color.Transparent, size = 40.dp)
+                                // The handle: drag it up or down.
+                                Box(
+                                    Modifier
+                                        .size(width = 36.dp, height = 52.dp)
+                                        .pointerInput(t.id) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                                    held = latest; dragKey = t.id; dragOffset = 0f
+                                                    dragFrom = latest.indexOfFirst { it.id == t.id }
+                                                },
+                                                onDragEnd = {
+                                                    val to = held?.indexOfFirst { it.id == dragKey } ?: -1
+                                                    if (dragFrom >= 0 && to >= 0 && to != dragFrom) {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                                        Playlists.move(id, latest, dragFrom, to)
+                                                    } else held = null
+                                                    dragKey = null; dragOffset = 0f
+                                                },
+                                                onDragCancel = { held = null; dragKey = null; dragOffset = 0f },
+                                            ) { change, drag ->
+                                                change.consume()
+                                                val now = held ?: return@detectDragGestures
+                                                dragOffset += drag.y
+                                                val step = rowH + gap
+                                                val i = now.indexOfFirst { it.id == dragKey }
+                                                val target = when {
+                                                    dragOffset > step / 2 && i < now.lastIndex -> i + 1
+                                                    dragOffset < -step / 2 && i > 0 -> i - 1
+                                                    else -> i
+                                                }
+                                                if (target != i && i >= 0) {
+                                                    held = now.toMutableList().apply { add(target, removeAt(i)) }
+                                                    dragOffset -= (target - i) * step
+                                                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                                }
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) { Icon(R.drawable.ic_drag_handle, tint = c.ghost, size = 20.dp) }
+                                SongRow(
+                                    t, now = playing?.id == t.id, wide = !p.songs,
+                                    onClick = { onPlay(t, items) }, onLongClick = { onMenu(t) },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    IconButton(R.drawable.ic_close, stringResource(R.string.pl_remove), remove, tint = c.ghost, background = Color.Transparent, size = 40.dp)
+                                }
                             }
                         }
-                        if (dragging) DragBubble(t.title, Modifier.graphicsLayer { translationX = grab.x; translationY = grab.y + dragY })
                     }
                 }
             }
@@ -241,34 +250,6 @@ fun PlaylistSheet(
                 HButton(stringResource(R.string.pl_delete_files), { onDeleteFiles(items); onClose() }, Modifier.weight(1f), kind = ButtonKind.Ghost, icon = R.drawable.ic_delete)
             }
         }
-    }
-}
-
-/** What a held file turns into while it is dragged: its name in an accent bubble, centred on the finger. */
-@Composable
-private fun DragBubble(title: String, modifier: Modifier) {
-    val c = Hamstr.colors
-    val pop = remember { Animatable(0.5f) }
-    LaunchedEffect(Unit) { pop.animateTo(1f, Specs.pop()) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    Row(
-        modifier
-            .onSizeChanged { size = it }
-            .graphicsLayer {
-                translationX -= size.width / 2f
-                translationY -= size.height / 2f
-                scaleX = pop.value; scaleY = pop.value
-                alpha = pop.value.coerceIn(0f, 1f)
-            }
-            .widthIn(max = 260.dp)
-            .clip(RoundedCornerShape(50))
-            .background(c.accent)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(R.drawable.ic_music_note, tint = c.onAccent, size = 16.dp)
-        Spacer(Modifier.width(8.dp))
-        Txt(title, style = Hamstr.type.bodyMedium, color = c.onAccent, maxLines = 1)
     }
 }
 

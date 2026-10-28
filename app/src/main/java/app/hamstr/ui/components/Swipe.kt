@@ -22,12 +22,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import app.hamstr.ui.theme.Hamstr
@@ -49,12 +52,17 @@ data class SwipeAction(
  * Swipe a row sideways to act. The row tilts and squashes with the drag speed, the
  * action underneath grows until it arms (with a haptic tick), and past that point the
  * drag rubber-bands. Releasing armed runs the action.
+ *
+ * While it moves, the row carries [background] (what is behind it at rest), so it slides
+ * over the action like a card instead of showing it through; the action's name only
+ * shows once there is room for all of it.
  */
 @Composable
 fun SwipeRow(
     start: SwipeAction?,
     end: SwipeAction?,
     modifier: Modifier = Modifier,
+    background: Color = Hamstr.colors.canvas,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -68,6 +76,10 @@ fun SwipeRow(
     val stretch by rememberVelocityStretch({ offset.value }, sensitivity = 0.00006f, max = 0.12f)
     val pop = remember { Animatable(0f) }
     val back = Specs.settle<Float>()
+    var labelWidth by remember { mutableIntStateOf(0) }
+    // The edge padding, the icon and the gap before the name, plus a little air.
+    val room = with(LocalDensity.current) { 60.dp.toPx() }
+    val fade = with(LocalDensity.current) { 20.dp.toPx() }
 
     Box(modifier.onSizeChanged { width = it.width }) {
         val o = offset.value
@@ -96,14 +108,17 @@ fun SwipeRow(
                         },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val label = Modifier
+                        .onSizeChanged { labelWidth = it.width }
+                        .graphicsLayer { alpha = ((abs(offset.value) - room - labelWidth) / fade).coerceIn(0f, 1f) }
                     if (o < 0f) {
-                        Txt(action.label, style = Hamstr.type.small, color = action.color)
+                        Txt(action.label, style = Hamstr.type.small, color = action.color, maxLines = 1, modifier = label)
                         Spacer(Modifier.width(8.dp))
                     }
                     Icon(action.icon, tint = action.color, size = 22.dp)
                     if (o > 0f) {
                         Spacer(Modifier.width(8.dp))
-                        Txt(action.label, style = Hamstr.type.small, color = action.color)
+                        Txt(action.label, style = Hamstr.type.small, color = action.color, maxLines = 1, modifier = label)
                     }
                 }
             }
@@ -116,6 +131,7 @@ fun SwipeRow(
                     rotationZ = s * 14f
                     scaleY = 1f - abs(s) * 0.5f
                 }
+                .drawBehind { if (offset.value != 0f) drawRoundRect(background, cornerRadius = CornerRadius(Radii.row.toPx())) }
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragStart = { raw = offset.value; scope.launch { offset.stop() } },

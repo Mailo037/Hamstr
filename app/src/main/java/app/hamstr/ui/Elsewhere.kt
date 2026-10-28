@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.engine.Engine
+import app.hamstr.engine.MediaInfo
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
@@ -48,12 +49,15 @@ fun guessFromLink(url: String): Pair<String, String?>? {
     return words(parts[1]) to words(parts[0])
 }
 
+/** What is known of a hit before yt-dlp looks at it, so its download has a name from the start. */
+fun Engine.Elsewhere.toInfo() = MediaInfo(url, title, null, null, durationSec, uploader, emptyList(), 0)
+
 /**
  * Under a song that is locked with DRM: looks for the same song on YouTube Music and offers
  * to stash that one instead. Shows nothing more than a quiet line when there is none.
  */
 @Composable
-fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (String) -> Unit) {
+fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (Engine.Elsewhere) -> Unit) {
     val c = Hamstr.colors
     var search by remember(title, artist) { mutableStateOf<Search>(Search.Looking) }
     LaunchedEffect(title, artist) {
@@ -79,7 +83,7 @@ fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (Stri
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    HButton(stringResource(R.string.drm_use), { onUse(s.hit.url) }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download)
+                    HButton(stringResource(R.string.drm_use), { onUse(s.hit) }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download)
                 }
             }
         }

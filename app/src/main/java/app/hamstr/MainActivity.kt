@@ -80,6 +80,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import app.hamstr.data.Prefs
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Status
+import app.hamstr.data.Mode
+import app.hamstr.ui.toInfo
 import app.hamstr.engine.DownloadService
 import app.hamstr.engine.Engine
 import app.hamstr.engine.Failures
@@ -762,7 +764,11 @@ private fun TaskMenu(
                 Spacer(Modifier.height(6.dp))
                 val guess = remember(t.url) { app.hamstr.ui.guessFromLink(t.url) }
                 val title = t.title.takeIf { it.isNotBlank() && !it.startsWith("http") } ?: guess?.first
-                if (title != null) app.hamstr.ui.ElsewhereCard(title, t.uploader ?: guess?.second, t.durationSec) { MainActivity.openLink(it) }
+                if (title != null) app.hamstr.ui.ElsewhereCard(title, t.uploader ?: guess?.second, t.durationSec) { hit ->
+                    DownloadService.stash(context, hit.url, hit.toInfo(), t.choice.copy(mode = Mode.Audio))
+                    onCopied(resources.getString(R.string.drm_stashing))
+                    onClose()
+                }
             }
             Spacer(Modifier.height(6.dp))
             t.error?.let { err ->
@@ -831,7 +837,9 @@ private fun MenuHeader(t: DownloadTask, showPicture: Boolean) {
     Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (showPicture) {
             val bitmap = rememberBitmap(t.thumbnail, 240)
-            Box(Modifier.width(88.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).background(c.black)) {
+            // A song's cover is square, as everywhere else songs show.
+            val song = kindOf(t) == Kind.Audio
+            Box(Modifier.width(if (song) 56.dp else 88.dp).aspectRatio(if (song) 1f else 16f / 9f).clip(RoundedCornerShape(10.dp)).background(c.black)) {
                 bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             }
             Spacer(Modifier.width(12.dp))

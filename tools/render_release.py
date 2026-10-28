@@ -12,14 +12,14 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 FEATURES = [
-    ("MUSIC & LYRICS", "A song page, synced lyrics and sleep timer"),
-    ("YOUR QUEUE", "Play next, reorder and keep favorites"),
-    ("GLYPH SHARES", "Stash shared songs, albums and playlists"),
-    ("MAKE IT YOURS", "Accent icons, widgets and hidden files"),
+    ("PLAYLISTS", "Drag by the handle, removals show at once"),
+    ("SWIPES", "Rows slide like cards, grid tiles stay put"),
+    ("COVERS", "One, two or many files, each its own stack"),
+    ("SMALL FIXES", "Square song covers, a clean Audio tab"),
 ]
-SHOTS = [("music.png", "Music"), ("queue.png", "Queue"), ("settings.png", "Settings")]
+SHOTS = [("playlist.png", "Playlist"), ("library_list.png", "Library"), ("swipe.png", "Swipe")]
 
 
 

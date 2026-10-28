@@ -381,5 +381,6 @@ reason, so the next change can fix it or turn it into a rule.
 - `player/PlayerHost.kt` (`rememberCoverColor`): a song's full view has a gradient from its
   cover's colour into the canvas. A second decorative gradient besides the accent glow,
   asked for so a song feels like its cover.
-- `ui/LibraryScreen.kt`: library tiles and song rows swipe (play next, favourite), so a
-  sideways drag that starts on one doesn't change tabs. The Stash rows already did this.
+- `ui/LibraryScreen.kt`: song rows swipe (play next, favourite), so a sideways drag that
+  starts on one doesn't change tabs. The Stash rows already did this. Grid tiles don't
+  swipe: half a screen wide, they slid over their neighbours.

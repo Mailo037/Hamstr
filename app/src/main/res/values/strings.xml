@@ -547,6 +547,7 @@
     <string name="drm_found">Locked here, but YouTube Music has it</string>
     <string name="drm_not_found">Not on YouTube Music either.</string>
     <string name="drm_use">Stash this one instead</string>
+    <string name="drm_stashing">Stashing it from YouTube Music</string>
 
     <!-- Settings > Hidden -->
     <string name="page_hidden">Hidden</string>

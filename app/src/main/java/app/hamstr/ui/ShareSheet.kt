@@ -38,7 +38,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.hamstr.R
-import app.hamstr.MainActivity
 import app.hamstr.data.Choice
 import app.hamstr.data.DownloadFiles
 import app.hamstr.data.DownloadStore
@@ -125,6 +124,7 @@ fun ShareSheet(
         val mediaUrl = episodeUrl ?: url
         key(mediaUrl) {
             SingleMediaShareSheet(mediaUrl, { info, choice -> onStash(mediaUrl, info, choice) },
+                onStashOther = onStash,
                 onDismiss = { if (episodeUrl != null) episodeUrl = null else onDismiss() }, onOpen = onOpen, onStashVersion = onStashVersion,
                 onBatchQueued = onBatchQueued)
         }
@@ -135,6 +135,7 @@ fun ShareSheet(
 private fun SingleMediaShareSheet(
     url: String,
     onStash: (MediaInfo?, Choice) -> Unit,
+    onStashOther: (String, MediaInfo?, Choice) -> Unit,
     onDismiss: () -> Unit,
     onOpen: (DownloadTask) -> Unit,
     onStashVersion: (DownloadTask, Choice) -> Unit,
@@ -151,7 +152,7 @@ private fun SingleMediaShareSheet(
             onBatchQueued()
         }, onDismiss = onDismiss)
     } else {
-        MediaSheet(url, onStash, onDismiss, onOpen, onStashVersion, onPlaylist = { playlist = it })
+        MediaSheet(url, onStash, onStashOther, onDismiss, onOpen, onStashVersion, onPlaylist = { playlist = it })
     }
 }
 
@@ -159,6 +160,7 @@ private fun SingleMediaShareSheet(
 private fun MediaSheet(
     url: String,
     onStash: (MediaInfo?, Choice) -> Unit,
+    onStashOther: (String, MediaInfo?, Choice) -> Unit,
     onDismiss: () -> Unit,
     onOpen: (DownloadTask) -> Unit,
     onStashVersion: (DownloadTask, Choice) -> Unit,
@@ -290,13 +292,16 @@ private fun MediaSheet(
                 Txt(stringResource(why.title), style = Hamstr.type.section)
                 Spacer(Modifier.height(3.dp))
                 Txt(stringResource(why.hint), style = Hamstr.type.small, color = c.muted)
-                // Locked here, maybe free on YouTube Music: offer that one instead.
+                // Locked here, maybe free on YouTube Music: offer that one instead. Taking it closes
+                // the sheet and stashes it right away, as a song unless Video was picked on purpose.
                 if (why.title == R.string.err_drm) {
                     val guess = remember(url) { guessFromLink(url) }
                     val title = peek?.title ?: guess?.first
                     if (title != null) {
                         Spacer(Modifier.height(10.dp))
-                        ElsewhereCard(title, guess?.second.takeIf { peek?.title == null }, 0) { MainActivity.openLink(it) }
+                        ElsewhereCard(title, guess?.second.takeIf { peek?.title == null }, 0) { hit ->
+                            onStashOther(hit.url, hit.toInfo(), if (modeTouched && mode == Mode.Video) choice else choice.copy(mode = Mode.Audio))
+                        }
                     }
                 }
                 if (s.message.isNotBlank()) {

@@ -30,8 +30,8 @@
 **Play**
 - A built-in player for video and audio. Swipe it down and it becomes a mini player above the tabs: swipe it sideways to turn through the queue, pull it down to stop, hold it for the queue.
 - A song page like a music app's, tinted by its cover: lyrics that follow along (from LRCLIB or typed in), a sleep timer (after some minutes or at the end of the song), shuffle and repeat.
-- A queue: *Play next* and *Add to queue* from any file's menu or a swipe in the library, reordered and trimmed in the queue sheet.
-- Favorites and your own playlists; hold a file in a playlist and drag it to a new place.
+- A queue: *Play next* and *Add to queue* from any file's menu or a swipe in the songs list, reordered and trimmed in the queue sheet.
+- Favorites and your own playlists; drag a file in a playlist by its handle to a new place.
 - Music pauses when another app plays and, after a video (YouTube, TikTok), carries on by itself.
 - Background audio with media controls, picture-in-picture, fullscreen, and double-tap to skip 10 s.
 - *Open with…* hands a file to any other app: a video player, a music app, a PDF reader or Word. *Share file* sends the file itself, not the link.
