@@ -91,6 +91,7 @@ def main():
         d.sh("am", "start", "-n", f"{PKG}/.MainActivity")
     else:
         print("seeding the demo (FFmpeg makes the media, this takes a few minutes)")
+        d.sh("am", "force-stop", PKG)
         ready = f"/sdcard/Android/data/{PKG}/files/demo/.ready"
         d.sh("rm", "-f", ready)
         d.sh("am", "start", "-n", f"{PKG}/.demo.DemoActivity", "--es", "seed", a.seed)
@@ -117,7 +118,7 @@ def main():
         d.tap(a.play)
         d.find("Minimize")
         d.shot(out / "player.png", settle=2.5)
-        d.sh("input", "keyevent", "BACK")
+        d.tap("Queue")
         d.tap("Close player")  # the mini player stays out of the other pictures
 
         d.tap(a.play, long=True)
@@ -138,12 +139,7 @@ def main():
         d.shot(out / "music.png", settle=3)
         d.tap("Queue")
         d.shot(out / "queue.png")
-        d.sh("input", "keyevent", "BACK")
-        time.sleep(1)
-        d.sh("input", "keyevent", "BACK")
         d.tap("Close player")
-        d.sh("input", "keyevent", "BACK")
-        time.sleep(1)
         d.tap("Settings")
         d.shot(out / "settings.png", settle=2.5)
         d.tap("Stash")
