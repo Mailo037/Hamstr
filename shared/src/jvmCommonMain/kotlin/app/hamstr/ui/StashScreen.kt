@@ -127,14 +127,14 @@ fun StashScreen(
     val done = tasks.filter { it.status == Status.Done }
     val shelf = remember(done) { collapseVersions(done) }
     val albums = remember(shelf) { shelfOf(shelf) }
-    val heads = remember(albums) { albums.flatMap { e -> if (e is Shelf.Album) e.tracks.map { it.head } else listOf((e as Shelf.One).head) } }
+    val heads = remember(albums) { albums.flatMap { e -> if (e is Stashed.Album) e.tracks.map { it.head } else listOf((e as Stashed.One).head) } }
     // Albums that show their songs.
     var openAlbums by remember { mutableStateOf(emptySet<String>()) }
     val shelfRows = remember(albums, openAlbums) {
         albums.take(SHELF).flatMap { e ->
             when (e) {
-                is Shelf.One -> listOf(ShelfRow.Item(e, null))
-                is Shelf.Album -> listOf(ShelfRow.Head(e)) + if (e.group in openAlbums) e.tracks.map { ShelfRow.Item(it, e) } else emptyList()
+                is Stashed.One -> listOf(StashedRow.Item(e, null))
+                is Stashed.Album -> listOf(StashedRow.Head(e)) + if (e.group in openAlbums) e.tracks.map { StashedRow.Item(it, e) } else emptyList()
             }
         }
     }
@@ -283,7 +283,7 @@ fun StashScreen(
                 itemsIndexed(shelfRows, key = { _, r -> r.key }) { i, r ->
                     GroupedItem(i, shelfRows.size) {
                         when (r) {
-                            is ShelfRow.Head -> {
+                            is StashedRow.Head -> {
                                 val album = r.album
                                 val playable = album.tracks.map { it.head }.filter { it.id !in missing }
                                 SwipeRow(
@@ -300,7 +300,7 @@ fun StashScreen(
                                     }
                                 }
                             }
-                            is ShelfRow.Item -> {
+                            is StashedRow.Item -> {
                                 val t = r.entry.head
                                 val versions = r.entry.versions
                                 val gone = t.id in missing
@@ -371,38 +371,38 @@ private fun activeRows(tasks: List<DownloadTask>, active: List<DownloadTask>, op
 }
 
 /** The Stashed section's entries: a file (with its other qualities), or what arrived together as one album. */
-private sealed interface Shelf {
-    data class One(val head: DownloadTask, val versions: List<DownloadTask>) : Shelf
-    data class Album(val group: String, val title: String, val tracks: List<One>) : Shelf
+private sealed interface Stashed {
+    data class One(val head: DownloadTask, val versions: List<DownloadTask>) : Stashed
+    data class Album(val group: String, val title: String, val tracks: List<One>) : Stashed
 }
 
 /** Its rows: an album's own row, and its songs below it while it is open. */
-private sealed interface ShelfRow {
+private sealed interface StashedRow {
     val key: String
 
-    data class Head(val album: Shelf.Album) : ShelfRow { override val key get() = "a:${album.group}" }
-    data class Item(val entry: Shelf.One, val album: Shelf.Album?) : ShelfRow { override val key get() = entry.head.id }
+    data class Head(val album: Stashed.Album) : StashedRow { override val key get() = "a:${album.group}" }
+    data class Item(val entry: Stashed.One, val album: Stashed.Album?) : StashedRow { override val key get() = entry.head.id }
 }
 
 /**
  * Files that arrived together (an album, a playlist) stay together once they are in, under the
  * same title the Downloading section showed them with; at the place of the newest one.
  */
-private fun shelfOf(shelf: List<Pair<DownloadTask, List<DownloadTask>>>): List<Shelf> {
+private fun shelfOf(shelf: List<Pair<DownloadTask, List<DownloadTask>>>): List<Stashed> {
     val groups = shelf.filter { it.first.group != null }.groupBy { it.first.group!! }.filterValues { it.size > 1 }
     val seen = HashSet<String>()
     return shelf.mapNotNull { (t, versions) ->
         val g = t.group
-        val members = g?.let(groups::get) ?: return@mapNotNull Shelf.One(t, versions)
+        val members = g?.let(groups::get) ?: return@mapNotNull Stashed.One(t, versions)
         if (!seen.add(g)) return@mapNotNull null
         // In album order, the order they were queued in.
-        Shelf.Album(g, t.groupTitle ?: t.title, members.sortedBy { it.first.createdAt }.map { Shelf.One(it.first, it.second) })
+        Stashed.Album(g, t.groupTitle ?: t.title, members.sortedBy { it.first.createdAt }.map { Stashed.One(it.first, it.second) })
     }
 }
 
 /** A stashed album: its cover, how many songs and how big, and the songs below it when opened. */
 @Composable
-private fun AlbumRow(album: Shelf.Album, expanded: Boolean, onToggle: () -> Unit) {
+private fun AlbumRow(album: Stashed.Album, expanded: Boolean, onToggle: () -> Unit) {
     val c = Hamstr.colors
     val tracks = album.tracks.map { it.head }
     val bitmap = rememberImage(tracks.firstNotNullOfOrNull { it.thumbnail }, 160)
