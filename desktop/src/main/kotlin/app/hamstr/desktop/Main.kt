@@ -36,12 +36,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalWindowInfo
+import app.hamstr.ui.components.LocalAmbient
 import java.awt.Dimension
 import java.awt.SystemTray
 import java.io.File
 
 fun main(args: Array<String>) {
     Paths.data.mkdirs()
+    // Already running: that one comes to the front (a start at sign-in leaves it be).
+    if (!Instance.claim(quiet = Autostart.TRAY_FLAG in args)) return
     Prefs.init(PropertiesFile(File(Paths.data, "settings.properties")))
     Positions.init(PropertiesFile(File(Paths.data, "positions.properties")))
     DownloadStore.init(Paths.data)
@@ -104,6 +109,8 @@ fun main(args: Array<String>) {
             LaunchedEffect(Unit) { Nearby.requests.collect { if (it.isNotEmpty()) { visible = true; window.isMinimized = false; window.toFront() } } }
             // Opened again from the tray: in front, not behind whatever was there.
             LaunchedEffect(visible) { if (visible) { window.isMinimized = false; window.toFront() } }
+            // Started a second time: this window comes up instead.
+            LaunchedEffect(Unit) { Instance.show.collect { visible = true; window.isMinimized = false; window.toFront() } }
             LaunchedEffect(Unit) {
                 window.minimumSize = Dimension(760, 520)
                 frame.round()
@@ -113,7 +120,10 @@ fun main(args: Array<String>) {
                     putClientProperty("apple.awt.windowTitleVisible", false)
                 }
             }
-            HamstrTheme { DesktopApp(frame, onClose = close, onQuit = ::exitApplication) }
+            // Ambient motion only while the window is in front: in the background Hamstr draws nothing.
+            CompositionLocalProvider(LocalAmbient provides (visible && LocalWindowInfo.current.isWindowFocused)) {
+                HamstrTheme { DesktopApp(frame, onClose = close, onQuit = ::exitApplication) }
+            }
         }
     }
 }

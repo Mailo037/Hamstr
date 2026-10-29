@@ -1,6 +1,8 @@
 package app.hamstr.ui
 
+import app.hamstr.ui.components.rememberAmbientClock
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -54,6 +57,7 @@ import app.hamstr.ui.components.SettingRow
 import app.hamstr.ui.components.Sheet
 import app.hamstr.ui.components.SheetField
 import app.hamstr.ui.components.SheetHeader
+import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.pressable
 import app.hamstr.ui.theme.Hamstr
@@ -81,9 +85,17 @@ fun SendSheet(url: String, title: String?) {
         onDispose { Nearby.discover(false) }
     }
     val knownIds = remember(known) { known.map { it.id }.toSet() }
+    // Every row keeps the place it first showed up in, so nothing moves under the pointer; a
+    // device that leaves (switched off, out of range, Hamstr closed) stays, marked as no longer
+    // available. The first batch goes devices around first, then by name.
+    val order = remember { LinkedHashMap<String, Peer>() }
+    val here = remember { HashSet<String>() }
     val list = remember(peers, knownIds) {
-        peers.values.filter { it.online || it.id in knownIds }
-            .sortedWith(compareByDescending<Peer> { it.online }.thenByDescending { it.seen }.thenBy { it.name.lowercase() })
+        peers.values.forEach { p -> if (p.online) here += p.id }
+        peers.values.filter { (it.online || it.id in knownIds) && it.id !in order }
+            .sortedWith(compareByDescending<Peer> { it.online }.thenBy { it.name.lowercase() }.thenBy { it.id })
+            .forEach { order[it.id] = it }
+        order.keys.map { id -> peers[id] ?: order.getValue(id).copy(via = emptySet()) }
     }
 
     Sheet {
@@ -104,7 +116,7 @@ fun SendSheet(url: String, title: String?) {
             } else Group {
                 list.forEachIndexed { i, p ->
                     if (i > 0) Divider()
-                    PeerRow(p, state[p.id]) {
+                    PeerRow(p, state[p.id], left = !p.online && p.id in here) {
                         if (state[p.id] == Sending.Busy) return@PeerRow
                         state[p.id] = Sending.Busy
                         scope.launch {
@@ -125,11 +137,12 @@ fun SendSheet(url: String, title: String?) {
 @Composable
 private fun Looking() {
     val c = Hamstr.colors
-    val reduce = LocalReduceMotion.current
-    val t = rememberInfiniteTransition(label = "looking")
-    val at by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse), label = "dot")
+    // The dot only has nine places, so ten steps a second are plenty.
+    val clock by rememberAmbientClock(10)
     val width = 9
-    val pos = if (reduce) width / 2 else (at * (width - 1)).toInt()
+    val period = 2 * (width - 1)
+    val step = ((clock / 160) % period).toInt()
+    val pos = if (clock == 0L) width / 2 else if (step < width) step else period - step
     val line = (0 until width).joinToString(" ") { if (it == pos) "●" else "·" }
     Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Txt("[ $line ]", style = Hamstr.type.mono, color = c.accent, maxLines = 1)
@@ -138,8 +151,9 @@ private fun Looking() {
 }
 
 @Composable
-private fun PeerRow(p: Peer, sending: Sending?, onClick: () -> Unit) {
+private fun PeerRow(p: Peer, sending: Sending?, left: Boolean, onClick: () -> Unit) {
     val c = Hamstr.colors
+    val dim by animateFloatAsState(if (p.online) 1f else 0.55f, Specs.blend(), label = "dim")
     val sub = if (p.online) {
         val ways = buildList {
             if (Via.Wifi in p.via) add(stringResource(Res.string.nearby_via_wifi))
@@ -147,12 +161,14 @@ private fun PeerRow(p: Peer, sending: Sending?, onClick: () -> Unit) {
             if (p.trusted) add(stringResource(Res.string.nearby_trusted))
         }
         ways.joinToString(" · ")
-    } else if (p.seen > 0) stringResource(Res.string.nearby_seen_ago, ago(p.seen)) else stringResource(Res.string.nearby_away)
+    } else if (left) stringResource(Res.string.nearby_gone)
+    else if (p.seen > 0) stringResource(Res.string.nearby_seen_ago, ago(p.seen)) else stringResource(Res.string.nearby_away)
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Radii.row))
             .pressable(onClick)
+            .graphicsLayer { alpha = dim }
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

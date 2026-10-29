@@ -1,5 +1,8 @@
 package app.hamstr.ui
 
+import app.hamstr.ui.components.rememberAmbientClock
+import kotlin.math.PI
+import kotlin.math.cos
 import app.hamstr.res.*
 import java.io.File
 import androidx.compose.ui.text.font.FontWeight
@@ -528,10 +531,9 @@ private fun StageLine(progress: Float, t: DownloadTask) {
     val c = Hamstr.colors
     val stage = t.stage
     val working = stage != null && !stage.waiting && stage != Stage.Resolving
-    val calm = LocalReduceMotion.current
-    val pulse = if (working && !calm) {
-        rememberInfiniteTransition(label = "stage").animateFloat(0.45f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "pulse").value
-    } else 1f
+    // A slow pulse at 20 steps a second, not every display frame; still in the background.
+    val clock by rememberAmbientClock(20, enabled = working)
+    val pulse = if (working && clock > 0) 0.45f + 0.55f * (0.5f - 0.5f * cos(clock * 2 * PI.toFloat() / 1400f)) else 1f
     ProgressLine(
         if (working) 1f else progress,
         modifier = Modifier.graphicsLayer { alpha = pulse },
@@ -554,21 +556,16 @@ private fun DoneCheck() {
 private fun EmptyState() {
     val c = Hamstr.colors
     val mark = rememberMarkState()
-    // A slow breath while it waits for food (one of its moods, so off under reduced motion).
-    val breath = remember { Animatable(0f) }
-    if (LocalFx.current.moods) LaunchedEffect(Unit) {
-        while (true) {
-            breath.animateTo(1f, tween(1800))
-            breath.animateTo(0f, tween(1800))
-        }
-    }
+    // A slow breath while it waits for food (one of its moods, so off under reduced motion),
+    // at 30 steps a second and still while the window is in the background.
+    val clock by rememberAmbientClock(30, enabled = LocalFx.current.moods)
     Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         HamstrMark(
             96.dp,
             state = mark,
             background = false,
             modifier = Modifier.graphicsLayer {
-                val s = 1f + breath.value * 0.025f
+                val s = 1f + (0.5f - 0.5f * cos(clock * 2 * PI.toFloat() / 3600f)) * 0.025f
                 scaleX = s; scaleY = s
             },
         )

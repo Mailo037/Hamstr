@@ -186,6 +186,15 @@ object Nearby {
         if (fresh && _outbox.value.any { it.to == id }) scope.launch { flush(id) }
     }
 
+    /** A transport lost a device, e.g. its Hamstr said goodbye; it's away without waiting for the timeout. */
+    fun gone(id: String, via: Via) {
+        _peers.update { all ->
+            val p = all[id] ?: return@update all
+            val rest = p.copy(via = p.via - via)
+            if (rest.online || remembered(id)) all + (id to rest) else all - id
+        }
+    }
+
     /** Sends a link; if the device is away or doesn't answer, it waits in the outbox. */
     // Runs in Nearby's own scope, so closing the sheet (or the share window) doesn't cut it off.
     suspend fun send(peer: Peer, url: String, title: String?): SendResult = scope.async {

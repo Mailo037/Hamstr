@@ -12,15 +12,15 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 FEATURES = [
-    ("TRAY", "Close the window, Hamstr keeps going"),
-    ("WINDOWS", "A setup .exe, or a portable zip"),
-    ("LINUX", "The .deb is back, with a menu entry"),
-    ("SMALL FIXES", "One checksum file, a single % sign"),
+    ("LIGHTER", "Next to no CPU in the background"),
+    ("ONE HAMSTR", "A second start brings the window up"),
+    ("SEND", "Rows stay put, gone devices say so"),
+    ("YOUTUBE MUSIC", "Title, artist, length; listen and pick"),
 ]
 # A desktop_*.png is drawn as a window, behind the phone shots in front of its corner.
-SHOTS = [("desktop_about.png", "Tray"), ("stash.png", "Stash")]
+SHOTS = [("desktop_stash.png", "Stash"), ("send_gone.png", "Send")]
 
 
 
@@ -44,8 +44,10 @@ def release(shots):
 
     if SHOTS[0][0].startswith("desktop_"):
         drop(img, window(shots / SHOTS[0][0], 1180), (1080, 120), blur=50, alpha=200)
+        # The phone stands on the bottom edge, so a sheet at the bottom of its screen shows whole.
         for i, (name, _) in enumerate(SHOTS[1:]):
-            drop(img, phone(shots / name, 420), (1900 - i * 460, 330), blur=50, alpha=220)
+            f = phone(shots / name, 420)
+            drop(img, f, (1900 - i * 460, img.height - f.height - 40), blur=50, alpha=220)
         return img.convert("RGB")
 
     pw, gap, x0, top = 400, 44, 1020, 90

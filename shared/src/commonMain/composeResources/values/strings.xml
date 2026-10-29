@@ -550,6 +550,14 @@
     <string name="drm_found">Locked here, but YouTube Music has it</string>
     <string name="drm_not_found">Not on YouTube Music either.</string>
     <string name="drm_use">Stash this one instead</string>
+    <string name="drm_pick">Not sure which one it is. Listen in and pick:</string>
+    <string name="drm_more">Other matches (%1$d)</string>
+    <string name="drm_fewer">Fewer matches</string>
+    <string name="drm_listen">Listen in</string>
+    <string name="drm_stop">Stop</string>
+    <string name="drm_loading">loading…</string>
+    <string name="drm_no_preview">can’t play it here</string>
+    <string name="drm_same_length">same length</string>
     <string name="drm_stashing">Stashing it from YouTube Music</string>
 
     <!-- Settings > Hidden -->
@@ -603,6 +611,7 @@
     <string name="nearby_empty">Open Hamstr on your other device. It shows up here when it’s on the same Wi-Fi or in Bluetooth range.</string>
     <string name="nearby_empty_desktop">Open Hamstr on your other device. It shows up here when it’s on the same Wi-Fi as this computer.</string>
     <string name="nearby_away">Away · gets it when it’s back</string>
+    <string name="nearby_gone">Not available anymore · gets it when it’s back</string>
     <string name="nearby_seen_ago">Last seen %1$s · gets it when it’s back</string>
     <string name="nearby_via_wifi">Wi-Fi</string>
     <string name="nearby_via_bluetooth">Bluetooth</string>

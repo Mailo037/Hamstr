@@ -304,7 +304,9 @@ private fun MediaSheet(
                     val title = peek?.title ?: guess?.first
                     if (title != null) {
                         Spacer(Modifier.height(10.dp))
-                        ElsewhereCard(title, guess?.second.takeIf { peek?.title == null }, 0) { hit ->
+                        // The page names the artist and the length where it can (Spotify, Apple Music,
+                        // SoundCloud); a link without a title gives at least "artist/track-name".
+                        ElsewhereCard(title, peek?.artist ?: guess?.second.takeIf { peek?.title == null }, peek?.durationSec ?: 0) { hit ->
                             onStashOther(hit.url, hit.toInfo(), if (modeTouched && mode == Mode.Video) choice else choice.copy(mode = Mode.Audio))
                         }
                     }

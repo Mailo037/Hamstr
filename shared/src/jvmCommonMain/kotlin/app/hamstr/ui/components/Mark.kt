@@ -123,7 +123,7 @@ class MarkState(intro: Float = 1f) {
 fun rememberMarkState(autoBlink: Boolean = true): MarkState {
     val state = remember { MarkState() }
     val moods = LocalFx.current.moods
-    if (autoBlink && moods) LaunchedEffect(state) {
+    if (autoBlink && moods && LocalAmbient.current) LaunchedEffect(state) {
         while (true) {
             delay(Random.nextLong(2600, 6200))
             when {

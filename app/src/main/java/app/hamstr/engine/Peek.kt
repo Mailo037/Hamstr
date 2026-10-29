@@ -10,8 +10,11 @@ import java.net.URI
 import java.net.URL
 import java.net.URLEncoder
 
-/** A first look at a link: title and picture, before yt-dlp has read the formats. */
-data class Peek(val title: String?, val thumbnail: String?, val site: String?)
+/**
+ * A first look at a link: title and picture, before yt-dlp has read the formats. Music pages
+ * also name the [artist] and the length, which finds a song locked with DRM elsewhere.
+ */
+data class Peek(val title: String?, val thumbnail: String?, val site: String?, val artist: String? = null, val durationSec: Int = 0)
 
 /**
  * Reads a link's title and preview picture in a fraction of a second: from the site's
@@ -44,7 +47,8 @@ object Peeker {
         fun s(key: String) = o.optString(key).takeIf { it.isNotBlank() }
         // YouTube's hqdefault is 4:3 with black bars; mqdefault is the same picture at 16:9.
         val thumb = s("thumbnail_url")?.replace("/hqdefault.jpg", "/mqdefault.jpg")
-        return Peek(s("title"), thumb, s("provider_name"))
+        // SoundCloud names the uploader; its titles are the track's own.
+        return Peek(s("title"), thumb, s("provider_name"), artist = s("author_name").takeIf { h.endsWith("soundcloud.com") })
     }
 
     private fun openGraph(url: String): Peek? {
@@ -57,7 +61,23 @@ object Peeker {
         val title = meta("og:title", "twitter:title")
             ?: Regex("""<title[^>]*>([^<]+)</title>""", RegexOption.IGNORE_CASE).find(page)?.groupValues?.get(1)?.let(::unescape)?.trim()
         val image = meta("og:image", "og:image:url", "twitter:image")?.let { runCatching { URI(url).resolve(it).toString() }.getOrDefault(it) }
-        return Peek(title, image, meta("og:site_name"))
+        // Spotify and Apple Music: music:musician_description or the artist in the description
+        // ("Artist · Album · Song · 2021"), and music:duration in seconds. Elsewhere a schema.org
+        // duration (PT3M25S) where the page has one.
+        val artist = meta("music:musician_description", "music:musician", "og:audio:artist", "twitter:audio:artist_name")
+            ?.takeUnless { it.startsWith("http") }
+            ?: meta("og:description")?.split(" · ")?.takeIf { it.size >= 3 }?.first()?.trim()
+        val duration = meta("music:duration", "og:video:duration", "video:duration")?.toIntOrNull()
+            ?: Regex(""""duration"\s*:\s*"(PT[^"]+)"""").find(page)?.groupValues?.get(1)?.let(::isoSeconds)
+            ?: Regex("""itemprop=["']duration["'][^>]*content=["'](PT[^"']+)["']""").find(page)?.groupValues?.get(1)?.let(::isoSeconds)
+        return Peek(title, image, meta("og:site_name"), artist, duration ?: 0)
+    }
+
+    /** PT3M25S, PT1H2M or PT00H03M25S in seconds. */
+    private fun isoSeconds(s: String): Int? {
+        val m = Regex("""PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""").matchEntire(s) ?: return null
+        val (h, min, sec) = m.destructured
+        return ((h.toIntOrNull() ?: 0) * 3600 + (min.toIntOrNull() ?: 0) * 60 + (sec.toDoubleOrNull() ?: 0.0).toInt()).takeIf { it > 0 }
     }
 
     private fun fetch(url: String, limit: Int): String? {

@@ -57,5 +57,16 @@ class NearbyTest {
         assertEquals(listOf("https://example.com/a", "https://example.com/f"), stashed)
         assertTrue(Nearby.known.value.single { it.id == id }.trusted)
         assertTrue(JSONObject(File(dir, "nearby.json").readText()).getJSONArray("devices").getJSONObject(0).getBoolean("trusted"))
+
+        // A device that says goodbye is away at once: a stranger leaves the list, a known one stays as away.
+        val other = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair().public.encoded
+        val otherId = Nearby.idOf(other)
+        Nearby.seen(otherId, "Laptop", DeviceKind.Desktop, Base64.getEncoder().encodeToString(other), Via.Wifi)
+        assertTrue(Nearby.peers.value.getValue(otherId).online)
+        Nearby.gone(otherId, Via.Wifi)
+        assertFalse(otherId in Nearby.peers.value)
+        Nearby.seen(id, "Other", DeviceKind.Phone, key, Via.Wifi)
+        Nearby.gone(id, Via.Wifi)
+        assertFalse(Nearby.peers.value.getValue(id).online)
     }
 }

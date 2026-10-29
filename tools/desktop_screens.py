@@ -63,7 +63,7 @@ def demo_data(serial, work):
     data = work / "data"
     data.mkdir(parents=True, exist_ok=True)
     (data / "downloads.json").write_text(json.dumps([{k: local(v) for k, v in it.items()} for it in items]), encoding="utf8")
-    (data / "settings.properties").write_text("fx.intro=false\nappUpdates=false\ndeviceName=Studio PC\n", encoding="utf8")
+    (data / "settings.properties").write_text("fx.intro=false\nappUpdates=false\nnearby=false\ndeviceName=Studio PC\n", encoding="utf8")
     return data
 
 

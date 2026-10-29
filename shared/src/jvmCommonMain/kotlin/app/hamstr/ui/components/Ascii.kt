@@ -5,6 +5,11 @@ import androidx.compose.ui.semantics.contentDescription
 
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -120,10 +125,8 @@ fun AsciiImage(
     }
     val paint = rememberMonoPaint()
     val cellPx = with(LocalDensity.current) { cell.toPx() }
-    var time by remember { mutableLongStateOf(0L) }
-    if (animate && fx.rain && !LocalReduceMotion.current) {
-        LaunchedEffect(Unit) { while (true) withInfiniteAnimationFrameMillis { time = it } }
-    }
+    // Rain while loading, at 30 steps a second; it stands still while the window is in the background.
+    val time by rememberAmbientClock(30, enabled = animate && fx.rain)
     val image: ImageBitmap? = bitmap
     var cache by remember(bitmap) { mutableStateOf<Samples?>(null) }
 
@@ -216,41 +219,50 @@ private fun DrawScope.drawCover(image: ImageBitmap, alpha: Float = 1f) {
 
 /**
  * Calm background: a faint character raster under a warm glow, fading out downwards.
- * The only ambient motion in the app (Glyph: "calm when idle").
+ * The only ambient motion in the app (Glyph: "calm when idle"). The raster moves four times a
+ * second and is drawn into a bitmap only then; every other frame just shows that bitmap.
  */
 @Composable
 fun RasterBackground(modifier: Modifier = Modifier) {
     val showRaster = LocalFx.current.raster
     val paint = rememberMonoPaint()
     val accent = Hamstr.colors.accent
-    var time by remember { mutableLongStateOf(0L) }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    if (showRaster && !LocalReduceMotion.current) LaunchedEffect(lifecycle) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) {
-                withInfiniteAnimationFrameMillis { time = it }
-                delay(250) // Slow ambient drift needs only four updates per second.
-            }
-        }
-    }
-    Canvas(modifier) {
-        drawRect(
-            androidx.compose.ui.graphics.Brush.radialGradient(
+    val time by rememberAmbientClock(4, enabled = showRaster)
+    val cache = remember { RasterCache() }
+    Spacer(
+        modifier.drawWithCache {
+            val raster = if (showRaster) cache.draw(size, paint, time.toFloat(), 13.dp.toPx()) else null
+            val glow = androidx.compose.ui.graphics.Brush.radialGradient(
                 listOf(accent.copy(alpha = 0.16f), Color.Transparent),
                 center = Offset(size.width * 0.3f, -size.height * 0.1f),
                 radius = size.height * 1.1f,
-            ),
-        )
-        if (!showRaster) return@Canvas
-        val cell = 13.dp.toPx()
+            )
+            onDrawBehind {
+                drawRect(glow)
+                raster?.let { drawImage(it) }
+            }
+        },
+    )
+}
+
+/** The raster's bitmap, kept while the size stays and cleared before each redraw. */
+private class RasterCache {
+    private var image: ImageBitmap? = null
+    private val clear = Paint().apply { blendMode = BlendMode.Clear }
+
+    fun draw(size: Size, paint: GlyphPaint, t: Float, cell: Float): ImageBitmap? {
+        val w = size.width.toInt()
+        val h = size.height.toInt()
+        if (w <= 0 || h <= 0) return null
+        val img = image?.takeIf { it.width == w && it.height == h } ?: ImageBitmap(w, h).also { image = it }
+        val canvas = androidx.compose.ui.graphics.Canvas(img)
+        canvas.drawRect(Rect(0f, 0f, w.toFloat(), h.toFloat()), clear)
         paint.textSize = cell * 0.8f
-        val canvas = drawContext.canvas
-        val t = time.toFloat()
         var r = 0
-        while (r * cell < size.height) {
-            val fade = (1f - r * cell / size.height).pow(2.2f)
+        while (r * cell < h) {
+            val fade = (1f - r * cell / h).pow(2.2f)
             var c = 0
-            while (c * cell < size.width) {
+            while (c * cell < w) {
                 val v = (sin(c * 0.55f + t / 1800f) + sin(r * 0.7f - t / 2300f) + sin((c + r) * 0.3f + t / 3100f)) / 3f
                 val a = fade * (0.05f + max(0f, v) * 0.16f)
                 if (a >= 0.02f) {
@@ -261,6 +273,7 @@ fun RasterBackground(modifier: Modifier = Modifier) {
             }
             r++
         }
+        return img
     }
 }
 

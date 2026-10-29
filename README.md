@@ -32,7 +32,7 @@
 - Cheek fetches supported files and HLS/DASH fragments over parallel connections. Settings › Engine lets you switch to yt-dlp.
 - Files go to `Download/Hamstr` and show up in every gallery and music app.
 - With *Instant stash* on, sharing starts the download straight away, without the sheet.
-- A song that is locked with DRM (SoundCloud Go, for one) gets looked up on YouTube Music, with an offer to stash that one instead.
+- A song that is locked with DRM (Spotify, Apple Music, SoundCloud Go) gets looked up on YouTube Music by title, artist and length, with an offer to stash that one instead. Not the right one? Listen into the other matches and pick it by ear.
 
 **Send**
 - See a video on the computer and want it on the phone? *Send to a device* passes the link to another Hamstr nearby, like AirDrop. It's in the + sheet, the share sheet and every download's menu.

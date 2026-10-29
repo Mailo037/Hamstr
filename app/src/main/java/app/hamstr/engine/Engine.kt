@@ -217,23 +217,31 @@ object Engine {
     }
 
     /** A song found under another link, for one that is locked where it was shared. */
-    data class Elsewhere(val url: String, val title: String, val uploader: String?, val durationSec: Int)
+    data class Elsewhere(val url: String, val title: String, val uploader: String?, val durationSec: Int) {
+        /** How well it fits the song looked for, 0..1; see [findOnYoutubeMusic]. */
+        var fit: Float = 0f
+            internal set
+    }
 
     /**
-     * Looks a song up on YouTube Music by artist and title (then on YouTube), for links that
-     * are locked with DRM (SoundCloud Go tracks, for one). With a known length, only a hit
-     * within 15 seconds of it counts, so a cover or a remix doesn't pass for the song.
+     * Looks a song up on YouTube Music and on YouTube by artist and title, for links that are
+     * locked with DRM (Spotify, Apple Music, SoundCloud Go). Every hit is ranked by how well it
+     * fits: the length (within a few seconds is the same recording), the words of title and
+     * artist, and a penalty for covers, remixes and live takes the original doesn't name.
+     * The best come first; [best] is the first one if it fits well enough.
      */
-    suspend fun findOnYoutubeMusic(title: String, artist: String?, durationSec: Int): Elsewhere? = withContext(Dispatchers.IO) {
+    suspend fun searchElsewhere(title: String, artist: String?, durationSec: Int): List<Elsewhere> = withContext(Dispatchers.IO) {
         awaitReady()
-        val query = listOfNotNull(artist?.removeSuffix(" - Topic"), title).joinToString(" ").trim()
-        if (query.isEmpty()) return@withContext null
+        val who = artist?.removeSuffix(" - Topic")?.takeIf { it.isNotBlank() }
+        val query = listOfNotNull(who, title).joinToString(" ").trim()
+        if (query.isEmpty()) return@withContext emptyList()
         val enc = java.net.URLEncoder.encode(query, "UTF-8")
-        for (url in listOf("https://music.youtube.com/search?q=$enc#songs", "ytsearch5:$query")) {
+        val hits = LinkedHashMap<String, Elsewhere>()
+        for (url in listOf("https://music.youtube.com/search?q=$enc#songs", "ytsearch8:$query")) {
             val out = try {
                 val req = YoutubeDLRequest(url).apply {
                     addOption("--flat-playlist")
-                    addOption("--playlist-end", 5)
+                    addOption("--playlist-end", 8)
                     addOption("--socket-timeout", 15)
                     addOption("--cache-dir", extractorCacheDir.absolutePath)
                     addOption("--dump-single-json")
@@ -241,18 +249,72 @@ object Engine {
                 readRuntime { WarmYtDlp.execute(req) ?: YoutubeDL.getInstance().execute(req) }.out
             } catch (e: CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "Search failed for $url", e); continue }
             val entries = runCatching { JSONObject(out).optJSONArray("entries") }.getOrNull() ?: continue
-            val hits = (0 until entries.length()).mapNotNull { i ->
-                val e = entries.optJSONObject(i) ?: return@mapNotNull null
-                val link = e.optString("url").takeIf { it.startsWith("http") }
-                    ?: e.optString("id").takeIf { it.isNotBlank() }?.let { "https://music.youtube.com/watch?v=$it" }
-                    ?: return@mapNotNull null
-                Elsewhere(link, e.optString("title"), e.optString("channel").ifBlank { e.optString("uploader") }.ifBlank { null }, e.optDouble("duration", 0.0).toInt())
+            for (i in 0 until entries.length()) {
+                val e = entries.optJSONObject(i) ?: continue
+                val id = e.optString("id").takeIf { it.isNotBlank() } ?: continue
+                if (id in hits) continue
+                val link = e.optString("url").takeIf { it.startsWith("http") } ?: "https://music.youtube.com/watch?v=$id"
+                hits[id] = Elsewhere(link, e.optString("title"), e.optString("channel").ifBlank { e.optString("uploader") }.ifBlank { null }, e.optDouble("duration", 0.0).toInt())
             }
-            val best = if (durationSec <= 0) hits.firstOrNull()
-            else hits.filter { it.durationSec > 0 && kotlin.math.abs(it.durationSec - durationSec) <= 15 }.minByOrNull { kotlin.math.abs(it.durationSec - durationSec) }
-            if (best != null) return@withContext best
         }
-        null
+        hits.values.onEach { it.fit = fit(it, title, who, durationSec) }.sortedByDescending { it.fit }
+    }
+
+    /** The best of [searchElsewhere] when it fits well enough to offer on its own. */
+    fun best(hits: List<Elsewhere>): Elsewhere? = hits.firstOrNull()?.takeIf { it.fit >= 0.5f }
+
+    private val versionWords = listOf("cover", "remix", "live", "karaoke", "instrumental", "sped up", "slowed", "nightcore", "8d", "reverb", "acoustic", "lyrics video", "piano")
+
+    private fun words(s: String) = s.lowercase().replace(Regex("""[^\p{L}\p{N}]+"""), " ").split(' ').filter { it.length > 1 }.toSet()
+
+    private fun fit(hit: Elsewhere, title: String, artist: String?, durationSec: Int): Float {
+        val want = words(title) + words(artist.orEmpty())
+        val got = words(hit.title) + words(hit.uploader.orEmpty().removeSuffix(" - Topic"))
+        val titleWords = words(title)
+        // How much of the song's title (and artist) the hit names.
+        val named = if (want.isEmpty()) 0f else want.count { it in got } / want.size.toFloat()
+        val titled = if (titleWords.isEmpty()) 0f else titleWords.count { it in got } / titleWords.size.toFloat()
+        var score = 0.25f * named + 0.35f * titled
+        if (durationSec > 0 && hit.durationSec > 0) {
+            val off = kotlin.math.abs(hit.durationSec - durationSec)
+            score += when {
+                off <= 2 -> 0.4f
+                off <= 5 -> 0.3f
+                off <= 15 -> 0.1f
+                else -> -0.4f
+            }
+        } else score += 0.15f
+        val lower = hit.title.lowercase()
+        if (versionWords.any { it in lower && it !in title.lowercase() }) score -= 0.3f
+        return score.coerceIn(0f, 1f)
+    }
+
+    /** Looks a song up and returns the hit that fits it, if one does. */
+    suspend fun findOnYoutubeMusic(title: String, artist: String?, durationSec: Int): Elsewhere? = best(searchElsewhere(title, artist, durationSec))
+
+    /** A stream to listen into a hit before stashing it: its audio URL and the headers it needs. */
+    data class Stream(val url: String, val headers: Map<String, String>)
+
+    suspend fun previewStream(url: String): Stream? = withContext(Dispatchers.IO) {
+        awaitReady()
+        // YouTube turns some guests away ("not a bot"); the other public clients usually play.
+        val out = try {
+            YoutubeAccess.run(url) { client ->
+                val req = YoutubeDLRequest(url).apply {
+                    addOption("-f", "bestaudio[ext=m4a]/bestaudio/best")
+                    addOption("--no-playlist")
+                    addOption("--socket-timeout", 15)
+                    addOption("--cache-dir", extractorCacheDir.absolutePath)
+                    addOption("--dump-json")
+                    if (client != null) addOption("--extractor-args", "youtube:player_client=$client")
+                }
+                readRuntime { WarmYtDlp.execute(req) ?: YoutubeDL.getInstance().execute(req) }
+            }.out
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { Log.d(TAG, "No preview for $url", e); return@withContext null }
+        val o = runCatching { JSONObject(out.lines().first { it.startsWith("{") }) }.getOrNull() ?: return@withContext null
+        val stream = o.optString("url").takeIf { it.startsWith("http") } ?: return@withContext null
+        val h = o.optJSONObject("http_headers")
+        Stream(stream, h?.keys()?.asSequence()?.associateWith { h.optString(it) }.orEmpty())
     }
 
     fun cachedInfo(url: String): MediaInfo? = infos.get(url)?.info ?: previews.get(url)?.info

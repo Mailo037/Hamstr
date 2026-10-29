@@ -37,9 +37,15 @@ class LanTransport(private val onStart: () -> Unit = {}, private val onStop: () 
     private var out: MulticastSocket? = null
     private val jobs = mutableListOf<Job>()
     @Volatile private var eager = false
+    private var hooked = false
 
     override fun start(scope: CoroutineScope) {
         onStart()
+        // Quitting the app ends the process without stop(); it says goodbye on the way out.
+        if (!hooked) {
+            hooked = true
+            Runtime.getRuntime().addShutdownHook(Thread { runCatching { bye() } })
+        }
         val server = ServerSocket(0).also { server = it }
         val listen = MulticastSocket(PORT).also { listen = it }
         out = MulticastSocket().apply { broadcast = true; timeToLive = 1 }
@@ -68,6 +74,7 @@ class LanTransport(private val onStart: () -> Unit = {}, private val onStop: () 
     }
 
     override fun stop() {
+        bye()
         jobs.forEach { it.cancel() }
         jobs.clear()
         runCatching { server?.close() }
@@ -116,6 +123,11 @@ class LanTransport(private val onStart: () -> Unit = {}, private val onStop: () 
         val m = runCatching { JSONObject(text) }.getOrNull() ?: return
         if (m.optInt("hamstr") != 1) return
         val id = m.optString("id")
+        if (m.optBoolean("bye")) {
+            spots.remove(id)
+            Nearby.gone(id, via)
+            return
+        }
         val port = m.optInt("port")
         if (id == Nearby.id || port !in 1..65535) return
         val kind = runCatching { DeviceKind.valueOf(m.optString("kind")) }.getOrDefault(DeviceKind.Phone)
@@ -126,11 +138,16 @@ class LanTransport(private val onStart: () -> Unit = {}, private val onStop: () 
         if (first) beacon(from)
     }
 
+    /** Tells the others this Hamstr is leaving, so they show it as away right away. */
+    private fun bye() = beacon(null, bye = true)
+
     /** Says who this is: to [to] alone, or to the group and every network's broadcast address. */
-    private fun beacon(to: InetAddress?) {
+    private fun beacon(to: InetAddress?, bye: Boolean = false) {
         val out = out ?: return
         val port = server?.localPort ?: return
-        val bytes = Nearby.hello().put("port", port).toString().toByteArray(Charsets.UTF_8)
+        val hello = Nearby.hello().put("port", port)
+        if (bye) hello.put("bye", true)
+        val bytes = hello.toString().toByteArray(Charsets.UTF_8)
         fun send(address: InetAddress) = runCatching { out.send(DatagramPacket(bytes, bytes.size, address, PORT)) }
         if (to != null) { send(to); return }
         for (nif in interfaces()) {

@@ -14,6 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -33,6 +37,31 @@ import androidx.compose.animation.togetherWith
 
 /** True when the system animator scale is 0: decorative motion is skipped, travel snaps. */
 val LocalReduceMotion = staticCompositionLocalOf { false }
+
+/**
+ * False while nobody looks: on the desktop, while the window isn't in front (another app has
+ * the focus, it's minimized or in the tray). Ambient motion (the raster's drift, the hamster's
+ * breath and blinks, loading rain, pulses) stands still then, so Hamstr draws nothing.
+ */
+val LocalAmbient = compositionLocalOf { true }
+
+/**
+ * A clock for ambient motion that ticks [fps] times a second instead of every display frame:
+ * on a 144 or 240 Hz monitor a breath would otherwise redraw the whole window that often.
+ * It stops while [LocalAmbient] is false or motion is reduced.
+ */
+@Composable
+fun rememberAmbientClock(fps: Int, enabled: Boolean = true): State<Long> {
+    val time = remember { mutableLongStateOf(0L) }
+    if (enabled && LocalAmbient.current && !LocalReduceMotion.current) LaunchedEffect(fps) {
+        val step = 1000L / fps
+        while (true) {
+            withInfiniteAnimationFrameMillis { time.longValue = it }
+            delay(step)
+        }
+    }
+    return time
+}
 
 /**
  * The motion that recurs across the app (DESIGN.md, Motion). Entries spring, exits are

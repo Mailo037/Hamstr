@@ -116,51 +116,55 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     ) {
         RasterBackground(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
-        TitleBar(frame, onClose)
-        Row(Modifier.fillMaxSize().padding(start = 10.dp, end = 12.dp, bottom = 12.dp)) {
-            SideBar(tab, page, onTab = { tab = it }, onPage = { page = it; tab = Tab.Settings })
-            Spacer(Modifier.width(12.dp))
-            AnimatedContent(tab, Modifier.weight(1f).fillMaxHeight(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "tab") { t ->
-                when (t) {
-                    Tab.Stash -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                        Box(Modifier.widthIn(max = 880.dp)) {
-                            StashScreen(
-                                visible, engine, PaddingValues(top = 8.dp, bottom = 24.dp),
-                                onAdd = { clipboardLink()?.let(Queue::stash) ?: run { clipLink = null; adding = true } },
-                                onOpenAdd = { clipLink = clipboardLink(); adding = true },
-                                onMenu = { menuFor = it },
-                                onPlay = { t, _ -> t.filePath?.let { Files.open(File(it)) } },
-                                onHide = { list -> DownloadStore.setHidden(list.map { it.id }.toSet(), true) },
-                                onRetryEngine = Queue::retryStart,
-                                onShowAll = {},
-                            )
+            TitleBar(frame, onClose)
+            // The sheets cover what is under the title bar, not the bar itself: with one open,
+            // the window still moves, minimizes and closes, and that leaves the sheet open.
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                Row(Modifier.fillMaxSize().padding(start = 10.dp, end = 12.dp, bottom = 12.dp)) {
+                    SideBar(tab, page, onTab = { tab = it }, onPage = { page = it; tab = Tab.Settings })
+                    Spacer(Modifier.width(12.dp))
+                    AnimatedContent(tab, Modifier.weight(1f).fillMaxHeight(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "tab") { t ->
+                        when (t) {
+                            Tab.Stash -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                Box(Modifier.widthIn(max = 880.dp)) {
+                                    StashScreen(
+                                        visible, engine, PaddingValues(top = 8.dp, bottom = 24.dp),
+                                        onAdd = { clipboardLink()?.let(Queue::stash) ?: run { clipLink = null; adding = true } },
+                                        onOpenAdd = { clipLink = clipboardLink(); adding = true },
+                                        onMenu = { menuFor = it },
+                                        onPlay = { t, _ -> t.filePath?.let { Files.open(File(it)) } },
+                                        onHide = { list -> DownloadStore.setHidden(list.map { it.id }.toSet(), true) },
+                                        onRetryEngine = Queue::retryStart,
+                                        onShowAll = {},
+                                    )
+                                }
+                            }
+                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit)
                         }
                     }
-                    Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit)
+                }
+
+                Overlay(adding, onDismiss = { adding = false }) {
+                    DesktopSheet {
+                        AddSheet(
+                            clipLink,
+                            onLink = { Queue.stash(it); adding = false; tab = Tab.Stash },
+                            onFiles = { adding = false; Files.pickAndImport() },
+                            onSend = { adding = false; sending = it to null },
+                        )
+                    }
+                }
+                Overlay(menuFor != null, onDismiss = { menuFor = null }) {
+                    menuFor?.let { t -> DesktopSheet { FileMenu(t, onSend = { menuFor = null; sending = t.url to t.title }) { menuFor = null } } }
+                }
+                Overlay(sending != null, onDismiss = { sending = null }) {
+                    sending?.let { (url, title) -> DesktopSheet { SendSheet(url, title) } }
+                }
+                val request = requests.firstOrNull()
+                Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {
+                    request?.let { r -> DesktopSheet { RequestSheet(r) { tab = Tab.Stash } } }
                 }
             }
-        }
-        }
-
-        Overlay(adding, onDismiss = { adding = false }) {
-            DesktopSheet {
-                AddSheet(
-                    clipLink,
-                    onLink = { Queue.stash(it); adding = false; tab = Tab.Stash },
-                    onFiles = { adding = false; Files.pickAndImport() },
-                    onSend = { adding = false; sending = it to null },
-                )
-            }
-        }
-        Overlay(menuFor != null, onDismiss = { menuFor = null }) {
-            menuFor?.let { t -> DesktopSheet { FileMenu(t, onSend = { menuFor = null; sending = t.url to t.title }) { menuFor = null } } }
-        }
-        Overlay(sending != null, onDismiss = { sending = null }) {
-            sending?.let { (url, title) -> DesktopSheet { SendSheet(url, title) } }
-        }
-        val request = requests.firstOrNull()
-        Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {
-            request?.let { r -> DesktopSheet { RequestSheet(r) { tab = Tab.Stash } } }
         }
         ResizeEdges(frame)
     }
