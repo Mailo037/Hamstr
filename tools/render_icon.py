@@ -149,6 +149,17 @@ def desktop():
     small = tiled(solid(1024, 0.74), tile_frac=0.96)
     small.save(out / "hamstr.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     small.resize((256, 256), Image.LANCZOS).save(out / "hamstr_window.png")
+    # The Windows setup's pictures (desktop/windows/hamstr.iss), at 100 % and 200 %: the mark
+    # beside the first and last page, the small tile in the header of the others (white there).
+    setup = ROOT / "desktop/windows"
+    for k in (1, 2):
+        side = Image.new("RGB", (164 * k, 314 * k), BG)
+        side.paste(render(164 * k, 0.6).convert("RGB"), (0, (314 - 164) * k // 2))
+        side.save(setup / f"setup_side_{k}x.bmp")
+        header = Image.new("RGB", (55 * k, 55 * k), (255, 255, 255))
+        tile = small.resize((55 * k, 55 * k), Image.LANCZOS)
+        header.paste(tile, (0, 0), tile)
+        header.save(setup / f"setup_small_{k}x.bmp")
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ import app.hamstr.ui.components.LocalAmbient
 import java.awt.Dimension
 import java.awt.SystemTray
 import java.io.File
+import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
     Paths.data.mkdirs()
@@ -53,7 +54,9 @@ fun main(args: Array<String>) {
     Downloads.control = Queue
     Queue.start()
     FileChecks.refresh()
-    Updater.checkOnLaunch()
+    // Started again by an update: did the new version arrive?
+    args.firstOrNull { it.startsWith(Updater.UPDATED_FLAG) }?.let { Updater.restarted(it.removePrefix(Updater.UPDATED_FLAG)) }
+    Updater.watch()
     Nearby.init(
         PropertiesFile(File(Paths.data, "nearby.properties")), Paths.data, DeviceKind.Desktop,
         defaultName = System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "Computer",
@@ -126,4 +129,6 @@ fun main(args: Array<String>) {
             }
         }
     }
+    // Quit means gone: a thread left running would keep Hamstr's files in use for an update.
+    exitProcess(0)
 }

@@ -664,7 +664,9 @@
     <string name="desktop_about_local">Everything runs on this computer: yt-dlp, Cheek and FFmpeg come with the app, no server.</string>
     <string name="desktop_ytdlp_update">Update yt-dlp</string>
     <string name="desktop_cheek_missing">Cheek isn’t in this build; yt-dlp downloads on its own.</string>
-    <string name="desktop_update_closes">Hamstr closes and the installer puts the new version in its place.</string>
+    <string name="desktop_update_restarts">Hamstr closes for a moment and opens again as the new version.</string>
+    <string name="desktop_update_password">Confirm with your password; Hamstr then opens again as the new version.</string>
     <string name="desktop_update_opened">The installer is open; install it like the first time.</string>
-    <string name="desktop_update_page">No installer for this system in the release; click to open its page.</string>
+    <string name="desktop_update_coming">Hamstr %1$s is on its way</string>
+    <string name="desktop_update_coming_hint">Its installer for this computer is still being built; Hamstr looks again in a few minutes.</string>
 </resources>

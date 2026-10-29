@@ -192,6 +192,7 @@ private fun AboutPage(onQuit: () -> Unit) {
         SettingRow(
             when (val u = update) {
                 UpdateState.Checking -> stringResource(Res.string.set_checking)
+                is UpdateState.Coming -> stringResource(Res.string.desktop_update_coming, u.version)
                 is UpdateState.Available -> stringResource(Res.string.set_update_out, u.release.version)
                 is UpdateState.Downloading -> stringResource(Res.string.set_update_downloading, u.release.version, (u.progress * 100).toInt())
                 is UpdateState.Installing -> stringResource(Res.string.set_update_installing, u.release.version)
@@ -200,9 +201,16 @@ private fun AboutPage(onQuit: () -> Unit) {
                 UpdateState.Idle -> stringResource(Res.string.set_updates)
             },
             subtitle = when (val u = update) {
-                is UpdateState.Failed -> if (u.release == null) stringResource(Res.string.upd_no_github, u.message) else u.message
-                is UpdateState.Installing -> stringResource(if (Paths.windows) Res.string.desktop_update_closes else Res.string.desktop_update_opened)
-                is UpdateState.Available -> if (u.release.installer == null) stringResource(Res.string.desktop_update_page) else null
+                is UpdateState.Failed -> if (u.offline) stringResource(Res.string.upd_no_github, u.message) else u.message
+                is UpdateState.Installing -> stringResource(
+                    when {
+                        !u.restarts -> Res.string.desktop_update_opened
+                        Paths.windows || Paths.mac -> Res.string.desktop_update_restarts
+                        else -> Res.string.desktop_update_password
+                    },
+                )
+                is UpdateState.Coming -> stringResource(Res.string.desktop_update_coming_hint)
+                is UpdateState.Available -> null
                 else -> if (s.lastAppCheck == 0L) stringResource(Res.string.set_not_checked)
                 else stringResource(Res.string.set_last_checked) + " " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(s.lastAppCheck))
             },

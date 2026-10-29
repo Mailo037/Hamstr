@@ -83,12 +83,12 @@ For your computer:
 
 | File | For |
 | --- | --- |
-| `Hamstr-x.y.z-windows-x64.exe` | Windows 10 and 11: installs Hamstr with a Start menu entry |
+| `Hamstr-x.y.z-windows-x64.exe` | Windows 10 and 11: installs Hamstr for you, with a Start menu entry; no admin rights needed |
 | `Hamstr-x.y.z-windows-x64-portable.zip` | Windows without installing: unpack it and start `Hamstr.exe` |
 | `Hamstr-x.y.z-macos-arm64.dmg` | Macs with Apple silicon |
 | `Hamstr-x.y.z-linux-x64.deb` | Debian, Ubuntu and the like |
 
-The installers aren't signed yet, so Windows SmartScreen (*More info › Run anyway*) and macOS Gatekeeper (right-click › *Open*) ask before the first start. The desktop app updates itself too (Settings › About). `SHA256SUMS.txt` in each release lists the checksums of every file.
+The installers aren't signed yet, so Windows SmartScreen (*More info › Run anyway*) and macOS Gatekeeper (right-click › *Open*) ask before the first start. The desktop app updates itself too (Settings › About): it installs the new version and opens again. `SHA256SUMS.txt` in each release lists the checksums of every file.
 
 ## How it works
 

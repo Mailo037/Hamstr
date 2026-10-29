@@ -12,15 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 FEATURES = [
-    ("LIGHTER", "Next to no CPU in the background"),
-    ("ONE HAMSTR", "A second start brings the window up"),
-    ("SEND", "Rows stay put, gone devices say so"),
-    ("YOUTUBE MUSIC", "Title, artist, length; listen and pick"),
+    ("SETUP", "Quick, just for you, no admin prompt"),
+    ("NO RESTART", "Installing and removing never need one"),
+    ("UPDATES", "Hamstr installs them and opens again"),
+    ("PORTABLE", "The zip copy updates itself too"),
 ]
-# A desktop_*.png is drawn as a window, behind the phone shots in front of its corner.
-SHOTS = [("desktop_stash.png", "Stash"), ("send_gone.png", "Send")]
+# A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
+# setup_*.png (a window capture of the Windows setup) sits there as a window of its own.
+SHOTS = [("desktop_update.png", "Update"), ("setup_wizard.png", "Setup")]
 
 
 
@@ -46,6 +47,11 @@ def release(shots):
         drop(img, window(shots / SHOTS[0][0], 1180), (1080, 120), blur=50, alpha=200)
         # The phone stands on the bottom edge, so a sheet at the bottom of its screen shows whole.
         for i, (name, _) in enumerate(SHOTS[1:]):
+            if name.startswith("setup_"):
+                # Lower left, over the sidebar's empty end, so the window's own content stays in view.
+                f = window(shots / name, 540)
+                drop(img, f, (890, img.height - f.height - 50), blur=50, alpha=220)
+                continue
             f = phone(shots / name, 420)
             drop(img, f, (1900 - i * 460, img.height - f.height - 40), blur=50, alpha=220)
         return img.convert("RGB")

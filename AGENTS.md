@@ -31,7 +31,7 @@ Hamstr is one app on two kinds of device: the phone app (`app/`) and the desktop
 
 ## Build
 
-You need JDK 21 and the Android SDK with platform 37 (the desktop build configures the Android modules too).
+You need JDK 21 and the Android SDK with platform 37 (the desktop build configures the Android modules too). The Windows setup also needs [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
 ```bash
 ./gradlew assembleDebug
@@ -44,7 +44,9 @@ The APKs end up in `app/build/outputs/apk/debug/`, one per ABI plus a universal 
 ./gradlew :desktop:packageDistributionForCurrentOS
 ```
 
-The first runs the desktop app (`HAMSTR_OPEN=Engine`, or any other settings page, starts it on that page for screenshots); the second builds its installer for the system you are on (a setup `.exe` on Windows, `.dmg` on macOS, `.deb` on Linux) into `desktop/build/compose/binaries/`. An installer can only be built on the system it is for. Both download yt-dlp, Cheek, FFmpeg and ffprobe for this system first (`fetchTools`, into `desktop/build/tools`), checked against the checksums each release publishes; the app copies them into its own folder on first start, where yt-dlp can update itself.
+The first runs the desktop app (`HAMSTR_OPEN=Engine`, or any other settings page, starts it on that page for screenshots); the second builds its installer for the system you are on (a setup `.exe` on Windows, made by Inno Setup from `desktop/windows/hamstr.iss`; `.dmg` on macOS, `.deb` on Linux) into `desktop/build/compose/binaries/`. An installer can only be built on the system it is for. The Windows setup installs for the signed-in user into `%LOCALAPPDATA%\Programs\Hamstr`, without admin rights or Windows Installer (jpackage's MSI needed both, was slow and asked for restarts); it closes a running Hamstr itself and removes an MSI-installed 0.7.x once.
+
+The desktop app installs its own updates (`desktop/.../Updater.kt`): a helper started outside Hamstr waits for it to quit, runs the setup silently (or swaps a portable copy's files, or the app from the `.dmg`; Linux installs the `.deb` through `pkexec`) and starts Hamstr again with `--updated=<version>`. To try that end to end, serve a release JSON like GitHub's and start an installed Hamstr with `HAMSTR_RELEASES=<its URL>`, `HAMSTR_UPDATE=now` (installs what it offers, unasked) and `HAMSTR_DATA=<a test folder>`. Both download yt-dlp, Cheek, FFmpeg and ffprobe for this system first (`fetchTools`, into `desktop/build/tools`), checked against the checksums each release publishes; the app copies them into its own folder on first start, where yt-dlp can update itself.
 
 The app's version and the Cheek release both apps ship are in `gradle.properties` (`hamstr.version`, `hamstr.cheekVersion`). Cheek goes into the APK as `libcheek.so` per ABI; `cheek.dir` in `local.properties` points at a local Cheek checkout built with cargo-ndk instead. To use the pinned release even when `cheek.dir` is set, pass `-Pcheek.useRelease=true`. Downloaded Cheek binaries are checked against the release's `SHA256SUMS.txt` before packaging.
 

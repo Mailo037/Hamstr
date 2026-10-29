@@ -153,8 +153,9 @@ compose.desktop {
         jvmArgs += listOf("-Dhamstr.version=$appVersion", "-Dhamstr.cheekVersion=$cheekRelease")
 
         nativeDistributions {
-            // Windows gets a setup .exe (Start menu, Apps list, uninstall) and, from release.yml, a portable zip.
-            targetFormats(TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb)
+            // Windows' setup is Inno Setup's (packageWindowsSetup below), not jpackage's MSI; the
+            // portable zip is the same app folder, zipped by release.yml.
+            targetFormats(TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "Hamstr"
             packageVersion = appVersion
             // Windows shows this as the app's name (Task Manager, notifications, "Open with"), so it is the name.
@@ -165,11 +166,6 @@ compose.desktop {
             modules("java.net.http", "java.prefs", "jdk.crypto.ec", "jdk.unsupported")
 
             windows {
-                menuGroup = "Hamstr"
-                // Keeps updates installing over the old version instead of beside it.
-                upgradeUuid = "8e3f5d1c-2a47-4b6e-9c1d-7f0a3e5b2d94"
-                shortcut = true
-                dirChooser = true
                 iconFile = project.file("icons/hamstr.ico")
             }
             macOS {
@@ -190,4 +186,42 @@ compose.desktop {
             }
         }
     }
+}
+
+/**
+ * Windows' setup: Inno Setup over the app folder (windows/hamstr.iss). It installs for the
+ * signed-in user without admin rights or Windows Installer, which jpackage's MSI needed and
+ * which made installing slow and removing it ask for a restart. Needs Inno Setup 6: ISCC on
+ * the PATH, in its usual folders, or named by the ISCC variable.
+ */
+val packageWindowsSetup by tasks.registering(Exec::class) {
+    description = "Builds Hamstr's Windows setup with Inno Setup"
+    group = "compose desktop"
+    dependsOn("createDistributable")
+    val app = layout.buildDirectory.dir("compose/binaries/main/app/Hamstr")
+    val out = layout.buildDirectory.dir("compose/binaries/main/exe")
+    val script = file("windows/hamstr.iss")
+    inputs.dir(app)
+    inputs.dir(script.parentFile)
+    outputs.dir(out)
+    val local = System.getenv("LOCALAPPDATA")
+    executable = listOfNotNull(
+        System.getenv("ISCC"),
+        local?.let { "$it/Programs/Inno Setup 6/ISCC.exe" },
+        "C:/Program Files (x86)/Inno Setup 6/ISCC.exe",
+        "C:/Program Files/Inno Setup 6/ISCC.exe",
+    ).firstOrNull { File(it).exists() } ?: "ISCC.exe"
+    args(
+        "/Qp",
+        "/DVersion=$appVersion",
+        "/DNumericVersion=${appVersion.substringBefore('-')}",
+        "/DSource=${app.get().asFile}",
+        "/DOutput=${out.get().asFile}",
+        script,
+    )
+    doFirst { out.get().asFile.deleteRecursively() }
+}
+
+if (hostOs == "windows") {
+    tasks.matching { it.name == "packageDistributionForCurrentOS" }.configureEach { dependsOn(packageWindowsSetup) }
 }

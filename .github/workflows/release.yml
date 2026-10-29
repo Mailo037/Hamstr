@@ -96,12 +96,16 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Installer
+      # Windows' setup is made with Inno Setup (desktop/windows/hamstr.iss).
+      - name: Inno Setup
+        if: runner.os == 'Windows'
         shell: bash
         run: |
-          ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${GITHUB_REF_NAME#v}"
-          # Windows also gets the app folder as a zip, to unpack and run without installing.
-          if [ "$RUNNER_OS" = "Windows" ]; then ./gradlew --no-daemon :desktop:createDistributable -Phamstr.version="${GITHUB_REF_NAME#v}"; fi
+          if [ ! -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then choco install innosetup -y --no-progress; fi
+
+      - name: Installer
+        shell: bash
+        run: ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${GITHUB_REF_NAME#v}"
 
       - name: Publish
         shell: bash
@@ -113,6 +117,7 @@ jobs:
           for f in desktop/build/compose/binaries/main/*/*; do
             case "$f" in *.exe|*.dmg|*.deb) cp "$f" "dist/Hamstr-$VERSION-${{ matrix.name }}.${f##*.}" ;; esac
           done
+          # Windows also gets the app folder as a zip, to unpack and run without installing.
           if [ "$RUNNER_OS" = "Windows" ]; then
             (cd desktop/build/compose/binaries/main/app && 7z a -tzip "$GITHUB_WORKSPACE/dist/Hamstr-$VERSION-${{ matrix.name }}-portable.zip" Hamstr > /dev/null)
           fi
