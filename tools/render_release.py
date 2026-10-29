@@ -10,16 +10,18 @@ import sys
 import pathlib
 from PIL import Image, ImageDraw
 
-from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster
+from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 FEATURES = [
-    ("NEARBY", "Send a link to your other Hamstr, like AirDrop"),
-    ("WI-FI + BLUETOOTH", "Finds devices by itself, asks once, then trusts"),
-    ("DESKTOP", "Hamstr for Windows, macOS and Linux"),
-    ("SMALL FIXES", "No more stray backslashes in the text"),
+    ("TRAY", "Close the window, Hamstr keeps going"),
+    ("WINDOWS", "A setup .exe, or a portable zip"),
+    ("LINUX", "The .deb is back, with a menu entry"),
+    ("SMALL FIXES", "One checksum file, a single % sign"),
 ]
-SHOTS = [("send.png", "Send"), ("share_send.png", "Share"), ("menu.png", "Menu")]
+# A desktop_*.png is drawn as a window, behind the phone shots in front of its corner.
+SHOTS = [("desktop_about.png", "Tray"), ("stash.png", "Stash")]
+
 
 
 
@@ -39,6 +41,12 @@ def release(shots):
         d.text((186, y), title, font=font("jetbrains_mono_600.ttf", 32), fill=INK)
         d.text((186, y + 46), sub, font=font("inter_400.ttf", 34), fill=MUTED)
         y += 132
+
+    if SHOTS[0][0].startswith("desktop_"):
+        drop(img, window(shots / SHOTS[0][0], 1180), (1080, 120), blur=50, alpha=200)
+        for i, (name, _) in enumerate(SHOTS[1:]):
+            drop(img, phone(shots / name, 420), (1900 - i * 460, 330), blur=50, alpha=220)
+        return img.convert("RGB")
 
     pw, gap, x0, top = 400, 44, 1020, 90
     bf = font("jetbrains_mono_600.ttf", 28)

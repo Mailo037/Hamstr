@@ -47,8 +47,8 @@ val UpdateState.release: Release?
 
 /**
  * The desktop's updates, from the same GitHub Releases as the phone's: the release carries an
- * installer per system (release.yml), checked against its SHA256SUMS file. On Windows the MSI
- * replaces the app in place, so Hamstr closes for it; elsewhere the system's installer opens.
+ * installer per system (release.yml), checked against the release's SHA256SUMS.txt. On Windows
+ * the setup replaces the app in place, so Hamstr closes for it; elsewhere the system's installer opens.
  */
 object Updater {
     private const val TAG = "HamstrUpdater"
@@ -63,7 +63,7 @@ object Updater {
         else -> "linux"
     } + "-" + if (System.getProperty("os.arch").lowercase().let { it == "aarch64" || it == "arm64" }) "arm64" else "x64"
     private val extension = when {
-        Paths.windows -> "msi"
+        Paths.windows -> "exe"
         Paths.mac -> "dmg"
         else -> "deb"
     }
@@ -107,8 +107,8 @@ object Updater {
                 release.sums?.let { verify(file, it) }
                 _state.value = UpdateState.Installing(release)
                 if (Paths.windows) {
-                    // Hamstr's own files are in use while it runs; the MSI takes over from here.
-                    ProcessBuilder("msiexec", "/i", file.absolutePath).start()
+                    // Hamstr's own files are in use while it runs; the setup takes over from here.
+                    ProcessBuilder(file.absolutePath).start()
                     quit()
                 } else {
                     Files.open(file)
@@ -136,9 +136,9 @@ object Updater {
             if (conn.responseCode != 200) error("HTTP ${conn.responseCode}")
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             val assets = json.getJSONArray("assets").let { a -> (0 until a.length()).map(a::getJSONObject) }
-            // Hamstr-<version>-<system>.<msi|dmg|deb>; no installer for this system leaves the release page.
+            // Hamstr-<version>-<system>.<exe|dmg|deb>; no installer for this system leaves the release page.
             val installer = assets.firstOrNull { it.getString("name").endsWith("-$system.$extension") }
-            val sums = assets.firstOrNull { it.getString("name") == "SHA256SUMS-$system.txt" }
+            val sums = assets.firstOrNull { it.getString("name") == "SHA256SUMS.txt" }
             return Release(
                 version = json.getString("tag_name").removePrefix("v"),
                 page = json.getString("html_url"),

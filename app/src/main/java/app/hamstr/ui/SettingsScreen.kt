@@ -787,7 +787,8 @@ private fun AboutPage(onUpdate: () -> Unit) {
             when (val u = update) {
                 UpdateState.Checking -> stringResource(R.string.set_checking)
                 is UpdateState.Available -> stringResource(R.string.set_update_out, u.release.version)
-                is UpdateState.Downloading -> stringResource(R.string.set_update_downloading, u.release.version, (u.progress * 100).toInt())
+                // Through Compose resources like the desktop: the string has a plain %, which Android would format.
+                is UpdateState.Downloading -> org.jetbrains.compose.resources.stringResource(Res.string.set_update_downloading, u.release.version, (u.progress * 100).toInt())
                 is UpdateState.Installing -> stringResource(R.string.set_update_installing, u.release.version)
                 is UpdateState.Failed -> stringResource(R.string.set_update_failed)
                 UpdateState.UpToDate -> stringResource(R.string.set_up_to_date)

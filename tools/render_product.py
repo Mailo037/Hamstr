@@ -2,8 +2,10 @@
 
     python tools/render_product.py <screenshots dir>
 
-Expects stash.png, share.png, player.png, library.png, settings.png (1080x2400) in that
-folder and writes docs/images/hero.png and docs/images/screens.png.
+Expects stash.png, share.png, player.png, library.png, settings.png (1080x2400) from
+tools/demo_screens.py and desktop_stash.png, desktop_devices.png, desktop_appearance.png
+from tools/desktop_screens.py in that folder, and writes docs/images/hero.png,
+docs/images/screens.png and docs/images/desktop.png.
 """
 import random
 import sys
@@ -69,6 +71,19 @@ def phone(shot, width):
     return frame
 
 
+def window(shot, width):
+    """A desktop screenshot as a window: rounded corners and a thin edge, like Windows 11 draws it."""
+    s = Image.open(shot).convert("RGBA")
+    s = s.resize((width, round(s.height * width / s.width)), Image.LANCZOS)
+    r = max(8, width // 70)
+    mask = Image.new("L", s.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, s.width - 1, s.height - 1), r, fill=255)
+    frame = Image.new("RGBA", s.size, (0, 0, 0, 0))
+    frame.paste(s, (0, 0), mask)
+    ImageDraw.Draw(frame).rounded_rectangle((0, 0, s.width - 1, s.height - 1), r, outline=LINE + (255,), width=2)
+    return frame
+
+
 def drop(img, frame, xy, blur=40, alpha=170):
     x, y = xy
     shadow = Image.new("RGBA", img.size, (0, 0, 0, 0))
@@ -97,19 +112,18 @@ def hero(shots):
     d.text((132, 440), "Hamstr", font=font("inter_600.ttf", 168), fill=INK)
     d.text((142, 668), "Share a link. Keep the file.", font=font("inter_500.ttf", 58), fill=INK)
     sub = font("inter_400.ttf", 38)
-    d.text((142, 762), "yt-dlp and FFmpeg run on the phone.", font=sub, fill=MUTED)
+    d.text((142, 762), "yt-dlp and FFmpeg run right on your devices.", font=sub, fill=MUTED)
     d.text((142, 814), "No server, no account, no Material.", font=sub, fill=MUTED)
     bf = font("jetbrains_mono_600.ttf", 30)
     x = 142
-    for label, hot in (("Android 8+", False), ("1800+ sites", True), ("GPL-3.0", False)):
+    for label, hot in (("Android 8+", False), ("Windows · macOS · Linux", True), ("GPL-3.0", False)):
         x += badge(d, (x, 930), label, bf, ACCENT if hot else GHOST)
 
-    pw = 500
-    back_l, back_r = (phone(shots / n, pw) for n in ("share.png", "player.png"))
-    drop(img, back_l, (1150, 230))
-    drop(img, back_r, (1850, 230))
-    big = phone(shots / "stash.png", 570)
-    drop(img, big, (1465, 100), blur=50, alpha=210)
+    # The desktop window behind, the phone in front of its corner: one stash on both.
+    win = window(shots / "desktop_stash.png", 1120)
+    drop(img, win, (1080, 170), blur=50, alpha=200)
+    big = phone(shots / "stash.png", 470)
+    drop(img, big, (1880, 300), blur=50, alpha=220)
     # Fade the phones out at the bottom edge into the canvas.
     fade = Image.new("RGBA", (W, 300), (0, 0, 0, 0))
     fd = ImageDraw.Draw(fade)
@@ -138,9 +152,28 @@ def row(shots):
     return img.convert("RGB")
 
 
+def desktop(shots):
+    names = [("desktop_stash.png", "Stash"), ("desktop_devices.png", "Devices"), ("desktop_appearance.png", "Appearance")]
+    ww, gap, pad = 760, 56, 90
+    W = pad * 2 + ww * len(names) + gap * (len(names) - 1)
+    H = 70 + window(shots / names[0][0], ww).height + 120
+    img = Image.new("RGBA", (W, H), CANVAS + (255,))
+    glow(img, (W // 2, 120), 700, ACCENT, 26)
+    raster(img, 30, 380, seed=5)
+    d = ImageDraw.Draw(img)
+    bf = font("jetbrains_mono_600.ttf", 30)
+    for i, (n, label) in enumerate(names):
+        f = window(shots / n, ww)
+        x = pad + i * (ww + gap)
+        drop(img, f, (x, 70), blur=34, alpha=150)
+        d.text((x + ww / 2, 70 + f.height + 50), f"[ {label.upper()} ]", font=bf, fill=ACCENT if i == 0 else MUTED, anchor="mm")
+    return img.convert("RGB")
+
+
 if __name__ == "__main__":
     shots = pathlib.Path(sys.argv[1])
     OUT.mkdir(parents=True, exist_ok=True)
     hero(shots).save(OUT / "hero.png", optimize=True)
     row(shots).save(OUT / "screens.png", optimize=True)
+    desktop(shots).save(OUT / "desktop.png", optimize=True)
     print("ok")

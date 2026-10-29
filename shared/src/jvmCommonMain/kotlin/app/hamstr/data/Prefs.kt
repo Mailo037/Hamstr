@@ -56,6 +56,9 @@ data class Settings(
     val nearby: Boolean = true,
     val nearbyBluetooth: Boolean = true,
     val deviceName: String = "",
+    // Desktop: closing the window keeps Hamstr in the tray; start with the computer, in the tray.
+    val trayOnClose: Boolean = true,
+    val startWithSystem: Boolean = false,
 ) {
     fun defaultChoice() = Choice(mode, height, container, audioFormat, subtitles)
 
@@ -124,6 +127,8 @@ object Prefs {
             nearby = sp.getBoolean("nearby", true),
             nearbyBluetooth = sp.getBoolean("nearbyBluetooth", true),
             deviceName = sp.getString("deviceName", "")!!,
+            trayOnClose = sp.getBoolean("trayOnClose", true),
+            startWithSystem = sp.getBoolean("startWithSystem", false),
         )
     }
 
@@ -173,6 +178,8 @@ object Prefs {
             .putBoolean("nearby", s.nearby)
             .putBoolean("nearbyBluetooth", s.nearbyBluetooth)
             .putString("deviceName", s.deviceName)
+            .putBoolean("trayOnClose", s.trayOnClose)
+            .putBoolean("startWithSystem", s.startWithSystem)
             .apply()
     }
 }

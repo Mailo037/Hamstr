@@ -2,7 +2,8 @@ name: Release
 
 # Push a tag like v0.2.0 and this builds signed APKs (one per ABI plus a universal one)
 # and publishes them as a GitHub release. Hamstr's in-app updater installs from there.
-# The desktop installers (.msi, .dmg, .deb) are built on each system and added to it.
+# The desktop app is built on each system and added to it: a setup .exe and a portable .zip
+# for Windows, a .dmg for macOS, a .deb for Linux. SHA256SUMS.txt then covers every file.
 on:
   push:
     tags: ["v*"]
@@ -97,7 +98,10 @@ jobs:
 
       - name: Installer
         shell: bash
-        run: ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${GITHUB_REF_NAME#v}"
+        run: |
+          ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${GITHUB_REF_NAME#v}"
+          # Windows also gets the app folder as a zip, to unpack and run without installing.
+          if [ "$RUNNER_OS" = "Windows" ]; then ./gradlew --no-daemon :desktop:createDistributable -Phamstr.version="${GITHUB_REF_NAME#v}"; fi
 
       - name: Publish
         shell: bash
@@ -107,9 +111,27 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir dist
           for f in desktop/build/compose/binaries/main/*/*; do
-            case "$f" in *.msi|*.dmg|*.deb) cp "$f" "dist/Hamstr-$VERSION-${{ matrix.name }}.${f##*.}" ;; esac
+            case "$f" in *.exe|*.dmg|*.deb) cp "$f" "dist/Hamstr-$VERSION-${{ matrix.name }}.${f##*.}" ;; esac
           done
-          cd dist
-          if command -v sha256sum >/dev/null; then sha256sum * > "SHA256SUMS-${{ matrix.name }}.txt"; else shasum -a 256 * > "SHA256SUMS-${{ matrix.name }}.txt"; fi
-          ls -la
-          gh release upload "$GITHUB_REF_NAME" *
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            (cd desktop/build/compose/binaries/main/app && 7z a -tzip "$GITHUB_WORKSPACE/dist/Hamstr-$VERSION-${{ matrix.name }}-portable.zip" Hamstr > /dev/null)
+          fi
+          ls -la dist
+          gh release upload "$GITHUB_REF_NAME" dist/*
+
+  # One checksum file for the whole release: the APKs' plus every desktop file.
+  checksums:
+    needs: [release, desktop]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir all && cd all
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "Hamstr-*"
+          sha256sum Hamstr-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$GITHUB_REF_NAME" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber

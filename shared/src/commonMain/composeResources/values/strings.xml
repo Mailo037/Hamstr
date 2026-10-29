@@ -257,9 +257,9 @@
     <string name="stash_empty_text">Share a link from YouTube, Instagram, TikTok, SoundCloud … to Hamstr, or tap + to paste a link or add files from your phone.</string>
     <string name="stash_empty_text_desktop">Paste a link from YouTube, Instagram, TikTok, SoundCloud … with Ctrl+V, or click + to add a link or files from this computer.</string>
     <string name="status_queued">queued</string>
-    <string name="status_queued_at">queued · %1$d %%</string>
+    <string name="status_queued_at" formatted="false">queued · %1$d %</string>
     <string name="status_loading">loading</string>
-    <string name="status_paused">paused · %1$d %%</string>
+    <string name="status_paused" formatted="false">paused · %1$d %</string>
     <string name="status_paused_short">paused</string>
     <string name="status_downloading">downloading</string>
     <string name="status_failed">failed</string>
@@ -427,7 +427,7 @@
     <string name="set_updates">Updates</string>
     <string name="set_checking">Checking …</string>
     <string name="set_update_out">Hamstr %1$s is out</string>
-    <string name="set_update_downloading">Downloading %1$s · %2$d %%</string>
+    <string name="set_update_downloading" formatted="false">Downloading %1$s · %2$d %</string>
     <string name="set_update_installing">Installing %1$s …</string>
     <string name="set_update_failed">Update failed</string>
     <string name="set_up_to_date">You’re up to date</string>
@@ -594,6 +594,7 @@
     <string name="widget_mark_description">The hamster: tap it to stash the link you copied</string>
     <string name="widget_nothing_playing">Nothing playing</string>
     <string name="widget_open_library">Tap to pick something from the library</string>
+    <!-- status_queued_at, status_paused and set_update_downloading carry a plain %: Compose resources don't turn %% into %, so both apps read them through Res. -->
     <!-- Nearby: sending links to other Hamstr apps -->
     <string name="nearby_send">Send to a device</string>
     <string name="nearby_send_short">Send</string>
@@ -640,6 +641,14 @@
     <string name="kind_phone">Phone</string>
     <string name="kind_desktop">Computer</string>
     <!-- Desktop app only -->
+    <string name="tray_open">Open Hamstr</string>
+    <string name="tray_paste">Stash copied link</string>
+    <string name="tray_quit">Quit Hamstr</string>
+    <string name="set_this_computer">This computer</string>
+    <string name="set_tray">Keep running in the tray</string>
+    <string name="set_tray_hint">Closing the window leaves Hamstr in the tray: downloads go on and your other devices can still send links</string>
+    <string name="set_autostart">Start with this computer</string>
+    <string name="set_autostart_hint">Hamstr starts in the tray when you sign in</string>
     <string name="desktop_open">Open</string>
     <string name="desktop_show_in_folder">Show in folder</string>
     <string name="desktop_open_folder">Click to open the folder</string>

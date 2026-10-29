@@ -162,6 +162,9 @@ def main():
         d.status_bar(False)
 
     tools = ROOT / "tools"
+    # The README pictures show the desktop app too; on Windows its screenshots come from the same demo.
+    if sys.platform == "win32":
+        subprocess.run([sys.executable, str(tools / "desktop_screens.py"), "--out", str(out)] + (["--serial", a.serial] if a.serial else []), check=True)
     for script in ("render_product.py", "render_release.py"):
         subprocess.run([sys.executable, str(tools / script), str(out)], check=True, cwd=tools)
 

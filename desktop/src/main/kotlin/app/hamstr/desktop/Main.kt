@@ -21,10 +21,26 @@ import app.hamstr.nearby.DeviceKind
 import app.hamstr.nearby.LanTransport
 import app.hamstr.nearby.Nearby
 import app.hamstr.ui.theme.HamstrTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.window.Notification
+import androidx.compose.ui.window.Tray
+import androidx.compose.ui.window.rememberTrayState
+import app.hamstr.engine.MediaLinks
+import app.hamstr.res.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 import java.awt.Dimension
+import java.awt.SystemTray
 import java.io.File
 
-fun main() {
+fun main(args: Array<String>) {
     Paths.data.mkdirs()
     Prefs.init(PropertiesFile(File(Paths.data, "settings.properties")))
     Positions.init(PropertiesFile(File(Paths.data, "positions.properties")))
@@ -38,12 +54,43 @@ fun main() {
         defaultName = System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "Computer",
         transports = listOf(LanTransport()),
     )
-    Nearby.onLink = { url, _, _ -> Queue.stash(url) }
     val icon = Thread.currentThread().contextClassLoader.getResourceAsStream("hamstr_window.png")?.use { BitmapPainter(loadImageBitmap(it)) }
+    // Not every Linux desktop has a tray; there closing the window quits as before.
+    val tray = SystemTray.isSupported()
+    val startHidden = Autostart.TRAY_FLAG in args && tray
+    CoroutineScope(Dispatchers.IO).launch {
+        Prefs.settings.map { it.startWithSystem }.distinctUntilChanged().collect(Autostart::set)
+    }
 
     application {
+        var visible by remember { mutableStateOf(!startHidden) }
+        val trayState = rememberTrayState()
+        val show = { visible = true }
+        val close = { if (tray && Prefs.settings.value.trayOnClose) visible = false else exitApplication() }
+        val received = stringResource(Res.string.nearby_received, "%s")
+        LaunchedEffect(Unit) {
+            Nearby.onLink = { url, title, from ->
+                Queue.stash(url)
+                if (tray) trayState.sendNotification(Notification(received.replace("%s", from.name), title ?: url))
+            }
+        }
+        if (tray) {
+            Tray(
+                icon = icon ?: painterResource(Res.drawable.ic_download),
+                state = trayState,
+                tooltip = "Hamstr",
+                onAction = show,
+                menu = {
+                    Item(stringResource(Res.string.tray_open), onClick = show)
+                    Item(stringResource(Res.string.tray_paste), onClick = { Files.clipboardText()?.let(MediaLinks::find)?.let(Queue::stash) })
+                    Separator()
+                    Item(stringResource(Res.string.tray_quit), onClick = ::exitApplication)
+                },
+            )
+        }
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = close,
+            visible = visible,
             state = rememberWindowState(size = DpSize(1120.dp, 760.dp), position = WindowPosition(Alignment.Center)),
             title = "Hamstr",
             icon = icon,
@@ -54,7 +101,9 @@ fun main() {
         ) {
             val frame = remember { WindowFrame(window) }
             // A device asking to send a link brings the window up, where the question waits.
-            LaunchedEffect(Unit) { Nearby.requests.collect { if (it.isNotEmpty()) { window.isMinimized = false; window.toFront() } } }
+            LaunchedEffect(Unit) { Nearby.requests.collect { if (it.isNotEmpty()) { visible = true; window.isMinimized = false; window.toFront() } } }
+            // Opened again from the tray: in front, not behind whatever was there.
+            LaunchedEffect(visible) { if (visible) { window.isMinimized = false; window.toFront() } }
             LaunchedEffect(Unit) {
                 window.minimumSize = Dimension(760, 520)
                 frame.round()
@@ -64,7 +113,7 @@ fun main() {
                     putClientProperty("apple.awt.windowTitleVisible", false)
                 }
             }
-            HamstrTheme { DesktopApp(frame, onClose = ::exitApplication) }
+            HamstrTheme { DesktopApp(frame, onClose = close, onQuit = ::exitApplication) }
         }
     }
 }

@@ -85,7 +85,7 @@ private enum class Tab(val label: StringResource, val icon: DrawableResource) {
  * next to it, and the shared sheets over everything.
  */
 @Composable
-fun DesktopApp(frame: WindowFrame, onClose: () -> Unit) {
+fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     val c = Hamstr.colors
     val tasks by DownloadStore.tasks.collectAsState()
     val engine by Queue.engine.collectAsState()
@@ -136,7 +136,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit) {
                             )
                         }
                     }
-                    Tab.Settings -> DesktopSettings(page, engine, onQuit = onClose)
+                    Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit)
                 }
             }
         }

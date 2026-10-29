@@ -3,12 +3,13 @@ import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import org.tukaani.xz.XZInputStream
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 buildscript {
     repositories { mavenCentral() }
-    // Unpacks the Linux FFmpeg build, a .tar.xz (see FetchTools).
+    // Unpacks the Linux FFmpeg build, a .tar.xz (see FetchTools). XZ goes through xz itself:
+    // Gradle ships its own commons-compress, whose XZ support can't see this classpath.
     dependencies {
         classpath("org.apache.commons:commons-compress:1.28.0")
         classpath("org.tukaani:xz:1.10")
@@ -126,7 +127,7 @@ abstract class FetchTools @Inject constructor() : DefaultTask() {
                     }
                 }
             } else {
-                TarArchiveInputStream(XZCompressorInputStream(archive.inputStream())).use { t ->
+                TarArchiveInputStream(XZInputStream(archive.inputStream())).use { t ->
                     generateSequence { t.nextEntry }.forEach { e ->
                         wanted.entries.firstOrNull { e.name.endsWith(it.key) }?.let { put(it.value, t.readBytes()) }
                     }
@@ -152,10 +153,12 @@ compose.desktop {
         jvmArgs += listOf("-Dhamstr.version=$appVersion", "-Dhamstr.cheekVersion=$cheekRelease")
 
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
+            // Windows gets a setup .exe (Start menu, Apps list, uninstall) and, from release.yml, a portable zip.
+            targetFormats(TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "Hamstr"
             packageVersion = appVersion
-            description = "Share a link. Keep the file."
+            // Windows shows this as the app's name (Task Manager, notifications, "Open with"), so it is the name.
+            description = "Hamstr"
             vendor = "Hamstr"
             licenseFile = rootProject.file("LICENSE")
             appResourcesRootDir = fetchTools.flatMap { it.outputDir }
@@ -171,6 +174,8 @@ compose.desktop {
             }
             macOS {
                 bundleID = "app.hamstr.desktop"
+                dockName = "Hamstr"
+                appCategory = "public.app-category.utilities"
                 // DMGs want a major version above 0; 0.6.1 ships as 1.6.1 there.
                 packageVersion = appVersion.split('.').let { (major, minor, patch) -> "${major.toInt().coerceAtLeast(1)}.$minor.${patch.substringBefore('-')}" }
                 iconFile = project.file("icons/hamstr.icns")
@@ -178,6 +183,10 @@ compose.desktop {
             linux {
                 packageName = "hamstr"
                 iconFile = project.file("icons/hamstr.png")
+                // A launcher entry in the app menu, like any installed app.
+                shortcut = true
+                appCategory = "AudioVideo"
+                menuGroup = "AudioVideo"
             }
         }
     }

@@ -6,13 +6,20 @@
   <a href="https://github.com/Mailo037/Hamstr/releases/latest"><img src="https://img.shields.io/github/v/release/Mailo037/Hamstr?style=flat-square&color=FF9A3C&labelColor=1E1E1E&label=release" alt="Latest release"></a>
   <a href="https://github.com/Mailo037/Hamstr/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/Mailo037/Hamstr/build.yml?branch=main&style=flat-square&labelColor=1E1E1E&label=build" alt="Build"></a>
   <img src="https://img.shields.io/badge/android-8.0%2B-EEEEEE?style=flat-square&labelColor=1E1E1E" alt="Android 8.0+">
+  <img src="https://img.shields.io/badge/desktop-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-EEEEEE?style=flat-square&labelColor=1E1E1E" alt="Windows, macOS and Linux">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Mailo037/Hamstr?style=flat-square&color=AAAAAA&labelColor=1E1E1E" alt="GPL-3.0"></a>
 </p>
 
-**Hamstr** stashes videos and music the way a hamster stashes food: share a link from any app, and the file lands on your phone. [Cheek](https://github.com/Mailo037/cheek) is the default download engine, with [yt-dlp](https://github.com/yt-dlp/yt-dlp) resolving media links and [FFmpeg](https://ffmpeg.org) handling merging and conversion. All three run right on the device, so there is no server in between, no account and no tracking. It works like [Seal](https://github.com/JunkFood02/Seal) or [YTDLnis](https://github.com/deniscerri/ytdlnis), but has a design of its own instead of Material.
+**Hamstr** stashes videos and music the way a hamster stashes food: share a link from any app, and the file lands on your phone. On a computer, paste the link into Hamstr for Windows, macOS or Linux. [Cheek](https://github.com/Mailo037/cheek) is the default download engine, with [yt-dlp](https://github.com/yt-dlp/yt-dlp) resolving media links and [FFmpeg](https://ffmpeg.org) handling merging and conversion. All three run right on the device, so there is no server in between, no account and no tracking. It works like [Seal](https://github.com/JunkFood02/Seal) or [YTDLnis](https://github.com/deniscerri/ytdlnis), but has a design of its own instead of Material.
 
 <p align="center">
   <img src="docs/images/screens.png" alt="Stash, share sheet, player, library and settings" width="100%">
+</p>
+
+**On your computer** Hamstr looks and works the same: the stash, the settings, Cheek, yt-dlp and FFmpeg built in. Ctrl+V anywhere stashes a copied link. Close the window and it waits in the tray, where downloads keep going and your phone can still send it links.
+
+<p align="center">
+  <img src="docs/images/desktop.png" alt="Hamstr on the desktop: stash, devices and appearance" width="100%">
 </p>
 
 ## What it does
@@ -26,6 +33,12 @@
 - Files go to `Download/Hamstr` and show up in every gallery and music app.
 - With *Instant stash* on, sharing starts the download straight away, without the sheet.
 - A song that is locked with DRM (SoundCloud Go, for one) gets looked up on YouTube Music, with an offer to stash that one instead.
+
+**Send**
+- See a video on the computer and want it on the phone? *Send to a device* passes the link to another Hamstr nearby, like AirDrop. It's in the + sheet, the share sheet and every download's menu.
+- Hamstr apps on the same Wi-Fi find each other by themselves; phones also find each other over Bluetooth.
+- The first link from a device asks; *Always allow* lets that device's links go straight into the stash. A link for a device that is away waits until it shows up.
+- Every message is signed with the sending device's own key. Nothing goes through a server.
 
 **Play**
 - A built-in player for video and audio. Swipe it down and it becomes a mini player above the tabs: swipe it sideways to turn through the queue, pull it down to stop, hold it for the queue.
@@ -64,7 +77,18 @@ Get the APK from the [latest release](https://github.com/Mailo037/Hamstr/release
 | `Hamstr-x.y.z-x86_64.apk` | Emulators and Chromebooks |
 | `Hamstr-x.y.z-universal.apk` | Any device; bigger, because it carries every ABI |
 
-Android asks once whether your browser may install apps. Later updates come through Hamstr itself. `SHA256SUMS.txt` in each release lists the checksums.
+Android asks once whether your browser may install apps. Later updates come through Hamstr itself.
+
+For your computer:
+
+| File | For |
+| --- | --- |
+| `Hamstr-x.y.z-windows-x64.exe` | Windows 10 and 11: installs Hamstr with a Start menu entry |
+| `Hamstr-x.y.z-windows-x64-portable.zip` | Windows without installing: unpack it and start `Hamstr.exe` |
+| `Hamstr-x.y.z-macos-arm64.dmg` | Macs with Apple silicon |
+| `Hamstr-x.y.z-linux-x64.deb` | Debian, Ubuntu and the like |
+
+The installers aren't signed yet, so Windows SmartScreen (*More info › Run anyway*) and macOS Gatekeeper (right-click › *Open*) ask before the first start. The desktop app updates itself too (Settings › About). `SHA256SUMS.txt` in each release lists the checksums of every file.
 
 ## How it works
 

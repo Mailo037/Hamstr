@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -167,6 +168,18 @@ private fun AboutPage(onQuit: () -> Unit) {
         Divider()
         SettingRow(stringResource(Res.string.set_source), subtitle = "github.com/${Updater.REPO}", onClick = { Files.browse("https://github.com/${Updater.REPO}") }) {
             Icon(Res.drawable.ic_open_in_new, tint = c.ghost, size = 18.dp)
+        }
+    }
+    // What only an installed app on a computer does: the tray and starting at sign-in.
+    val tray = remember { java.awt.SystemTray.isSupported() }
+    if (tray || Autostart.available) {
+        Spacer(Modifier.height(16.dp))
+        SettingLabel(stringResource(Res.string.set_this_computer), Modifier.padding(horizontal = 6.dp))
+        Spacer(Modifier.height(8.dp))
+        Group {
+            if (tray) FxRow(stringResource(Res.string.set_tray), stringResource(Res.string.set_tray_hint), s.trayOnClose) { v -> Prefs.edit { it.copy(trayOnClose = v) } }
+            if (tray && Autostart.available) Divider()
+            if (Autostart.available) FxRow(stringResource(Res.string.set_autostart), stringResource(Res.string.set_autostart_hint), s.startWithSystem) { v -> Prefs.edit { it.copy(startWithSystem = v) } }
         }
     }
     Spacer(Modifier.height(16.dp))
