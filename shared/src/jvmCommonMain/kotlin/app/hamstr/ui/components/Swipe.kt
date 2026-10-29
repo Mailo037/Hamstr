@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import app.hamstr.Platform
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.launch
@@ -56,6 +57,9 @@ data class SwipeAction(
  * While it moves, the row carries [background] (what is behind it at rest), so it slides
  * over the action like a card instead of showing it through; the action's name only
  * shows once there is room for all of it.
+ *
+ * With [icons] (on the desktop, where nobody swipes with a mouse) the actions sit as icons at
+ * the row's end instead.
  */
 @Composable
 fun SwipeRow(
@@ -63,8 +67,16 @@ fun SwipeRow(
     end: SwipeAction?,
     modifier: Modifier = Modifier,
     background: Color = Hamstr.colors.canvas,
+    icons: Boolean = Platform.desktop,
     content: @Composable () -> Unit,
 ) {
+    if (icons) {
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { content() }
+            for (a in listOfNotNull(start, end)) IconButton(a.icon, a.label, a.onTrigger, tint = a.color, background = Color.Transparent)
+        }
+        return
+    }
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val startAction by rememberUpdatedState(start)

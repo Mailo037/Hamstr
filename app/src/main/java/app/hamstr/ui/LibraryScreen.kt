@@ -1,5 +1,7 @@
 package app.hamstr.ui
 
+import androidx.compose.foundation.combinedClickable
+import app.hamstr.ui.components.onRightClick
 import app.hamstr.res.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -129,6 +131,8 @@ fun LibraryScreen(
     onPlayNext: (DownloadTask) -> Unit,
     onFavorite: (DownloadTask) -> Unit,
     onPlaylist: (String) -> Unit,
+    /** Holding a playlist: its quick actions. */
+    onPlaylistMenu: (String) -> Unit,
     onNewPlaylist: () -> Unit,
     onAddToPlaylist: (List<DownloadTask>) -> Unit,
     onHide: (List<DownloadTask>) -> Unit,
@@ -276,7 +280,7 @@ fun LibraryScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.Bottom,
                     ) {
-                        playlists.forEach { p -> app.hamstr.ui.PlaylistTile(p, 148.dp, { onPlaylist(p.id) }, square = p.songs || (songs && p.items.isNotEmpty())) }
+                        playlists.forEach { p -> app.hamstr.ui.PlaylistTile(p, 148.dp, { onPlaylist(p.id) }, square = p.songs || (songs && p.items.isNotEmpty()), onLongClick = { onPlaylistMenu(p.id) }) }
                         app.hamstr.ui.NewPlaylistTile(148.dp, onNewPlaylist, square = songs)
                     }
                 }
@@ -289,10 +293,10 @@ fun LibraryScreen(
         // Playlists among the files: tiles in the grid, rows in the songs list.
         if (placement == PlaylistPlacement.Grid && !selecting) {
             if (songs) items(playlists, key = { "plrow:" + it.id }, span = { GridItemSpan(2) }) { p ->
-                PlaylistRow(p, Modifier.animateItem(fadeInSpec = Specs.listIn(), fadeOutSpec = Specs.listOut())) { onPlaylist(p.id) }
+                PlaylistRow(p, Modifier.animateItem(fadeInSpec = Specs.listIn(), fadeOutSpec = Specs.listOut()), onLongClick = { onPlaylistMenu(p.id) }) { onPlaylist(p.id) }
             } else {
                 items(playlists, key = { "pltile:" + it.id }) { p ->
-                    PlaylistTile(p, Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut())) { onPlaylist(p.id) }
+                    PlaylistTile(p, Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut()), onLongClick = { onPlaylistMenu(p.id) }) { onPlaylist(p.id) }
                 }
             }
         }
@@ -379,9 +383,9 @@ fun LibraryScreen(
 
 /** A playlist as a tile among the files: the fan as wide as a file's picture. */
 @Composable
-private fun PlaylistTile(p: app.hamstr.data.Playlist, modifier: Modifier, onClick: () -> Unit) {
+private fun PlaylistTile(p: app.hamstr.data.Playlist, modifier: Modifier, onLongClick: () -> Unit, onClick: () -> Unit) {
     val c = Hamstr.colors
-    Column(modifier.clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
+    Column(modifier.clip(RoundedCornerShape(14.dp)).pressable(onClick, onLongClick = onLongClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
             PlaylistFan(p.items, if (p.songs) Modifier.fillMaxHeight() else Modifier.fillMaxWidth(), square = p.songs)
         }
@@ -395,11 +399,13 @@ private fun PlaylistTile(p: app.hamstr.data.Playlist, modifier: Modifier, onClic
 }
 
 /** A playlist in the songs list: a small square fan, its name and how many songs. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PlaylistRow(p: app.hamstr.data.Playlist, modifier: Modifier, onClick: () -> Unit) {
+private fun PlaylistRow(p: app.hamstr.data.Playlist, modifier: Modifier, onLongClick: () -> Unit, onClick: () -> Unit) {
     val c = Hamstr.colors
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.row)).clickable(onClick = onClick).padding(start = 6.dp, top = 6.dp, bottom = 6.dp, end = 12.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.row)).onRightClick(onLongClick).combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(start = 6.dp, top = 6.dp, bottom = 6.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PlaylistFan(p.items, Modifier.size(52.dp), square = true)

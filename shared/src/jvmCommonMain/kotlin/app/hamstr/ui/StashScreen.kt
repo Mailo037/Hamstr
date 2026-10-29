@@ -103,6 +103,7 @@ import kotlinx.coroutines.delay
 import app.hamstr.ui.components.PictureLabel
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.iconSwap
+import app.hamstr.ui.components.onRightClick
 
 /** How many finished downloads the stash lists; the library has all of them. */
 private const val SHELF = 60
@@ -125,7 +126,18 @@ fun StashScreen(
     val active = tasks.filter { it.status != Status.Done && it.status != Status.Canceled }
     val done = tasks.filter { it.status == Status.Done }
     val shelf = remember(done) { collapseVersions(done) }
-    val heads = remember(shelf) { shelf.map { it.first } }
+    val albums = remember(shelf) { shelfOf(shelf) }
+    val heads = remember(albums) { albums.flatMap { e -> if (e is Shelf.Album) e.tracks.map { it.head } else listOf((e as Shelf.One).head) } }
+    // Albums that show their songs.
+    var openAlbums by remember { mutableStateOf(emptySet<String>()) }
+    val shelfRows = remember(albums, openAlbums) {
+        albums.take(SHELF).flatMap { e ->
+            when (e) {
+                is Shelf.One -> listOf(ShelfRow.Item(e, null))
+                is Shelf.Album -> listOf(ShelfRow.Head(e)) + if (e.group in openAlbums) e.tracks.map { ShelfRow.Item(it, e) } else emptyList()
+            }
+        }
+    }
     val totalBytes = done.sumOf { it.sizeBytes }
     val running = tasks.count { it.status.active }
     val mark = rememberMarkState()
@@ -256,7 +268,7 @@ fun StashScreen(
                             }
                             is ActiveRow.More -> MoreRow(r.count) { openGroups = openGroups + r.group }
                             is ActiveRow.Item -> Box(Modifier.padding(start = if (r.nested) 12.dp else 0.dp)) {
-                                SwipeRow(start = primarySwipe(r.task), end = cancelSwipe(r.task, onHide)) {
+                                SwipeRow(start = primarySwipe(r.task), end = cancelSwipe(r.task, onHide), icons = false) {
                                     TaskRow(r.task, highlighted = r.task.status == Status.Running, onClick = { onMenu(r.task) }, onLongClick = { onMenu(r.task) })
                                 }
                             }
@@ -268,21 +280,49 @@ fun StashScreen(
                 item(key = "h_done") {
                     SectionHeader(stringResource(Res.string.stash_stashed), trailing = "${done.size}", modifier = Modifier.padding(horizontal = 12.dp).animateItem())
                 }
-                itemsIndexed(shelf.take(SHELF), key = { _, e -> e.first.id }) { i, (t, versions) ->
-                    val gone = t.id in missing
-                    GroupedItem(i, minOf(shelf.size, SHELF)) {
-                        SwipeRow(
-                            start = if (gone) null else SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.player_play), c.accent) { onPlay(t, heads) },
-                            end = SwipeAction(Res.drawable.ic_visibility_off, stringResource(Res.string.stash_hide), c.muted, removes = true) { onHide(versions) },
-                        ) {
-                            TaskRow(
-                                t, versions = versions, gone = gone, resume = positions[t.id]?.fraction,
-                                onClick = { if (gone) onMenu(t) else onPlay(t, heads) }, onLongClick = { onMenu(t) },
-                            )
+                itemsIndexed(shelfRows, key = { _, r -> r.key }) { i, r ->
+                    GroupedItem(i, shelfRows.size) {
+                        when (r) {
+                            is ShelfRow.Head -> {
+                                val album = r.album
+                                val playable = album.tracks.map { it.head }.filter { it.id !in missing }
+                                SwipeRow(
+                                    start = playable.firstOrNull()?.let { first ->
+                                        SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.player_play), c.accent) { onPlay(first, playable) }
+                                    },
+                                    end = SwipeAction(Res.drawable.ic_visibility_off, stringResource(Res.string.stash_hide), c.muted, removes = true) {
+                                        onHide(album.tracks.flatMap { it.versions })
+                                    },
+                                    icons = false,
+                                ) {
+                                    AlbumRow(album, expanded = album.group in openAlbums) {
+                                        openAlbums = if (album.group in openAlbums) openAlbums - album.group else openAlbums + album.group
+                                    }
+                                }
+                            }
+                            is ShelfRow.Item -> {
+                                val t = r.entry.head
+                                val versions = r.entry.versions
+                                val gone = t.id in missing
+                                // An album's song plays on through the album.
+                                val queue = r.album?.tracks?.map { it.head } ?: heads
+                                Box(Modifier.padding(start = if (r.album != null) 12.dp else 0.dp)) {
+                                    SwipeRow(
+                                        start = if (gone) null else SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.player_play), c.accent) { onPlay(t, queue) },
+                                        end = SwipeAction(Res.drawable.ic_visibility_off, stringResource(Res.string.stash_hide), c.muted, removes = true) { onHide(versions) },
+                                        icons = false,
+                                    ) {
+                                        TaskRow(
+                                            t, versions = versions, gone = gone, resume = positions[t.id]?.fraction,
+                                            onClick = { if (gone) onMenu(t) else onPlay(t, queue) }, onLongClick = { onMenu(t) },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                if (shelf.size > SHELF) item(key = "all") {
+                if (albums.size > SHELF) item(key = "all") {
                     Box(
                         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).clip(RoundedCornerShape(Radii.row))
                             .clickable(onClick = onShowAll).heightIn(min = 48.dp).padding(horizontal = 12.dp),
@@ -328,6 +368,82 @@ private fun activeRows(tasks: List<DownloadTask>, active: List<DownloadTask>, op
         if (shown.size < waiting.size) out += ActiveRow.More(g, waiting.size - shown.size)
     }
     return out
+}
+
+/** The Stashed section's entries: a file (with its other qualities), or what arrived together as one album. */
+private sealed interface Shelf {
+    data class One(val head: DownloadTask, val versions: List<DownloadTask>) : Shelf
+    data class Album(val group: String, val title: String, val tracks: List<One>) : Shelf
+}
+
+/** Its rows: an album's own row, and its songs below it while it is open. */
+private sealed interface ShelfRow {
+    val key: String
+
+    data class Head(val album: Shelf.Album) : ShelfRow { override val key get() = "a:${album.group}" }
+    data class Item(val entry: Shelf.One, val album: Shelf.Album?) : ShelfRow { override val key get() = entry.head.id }
+}
+
+/**
+ * Files that arrived together (an album, a playlist) stay together once they are in, under the
+ * same title the Downloading section showed them with; at the place of the newest one.
+ */
+private fun shelfOf(shelf: List<Pair<DownloadTask, List<DownloadTask>>>): List<Shelf> {
+    val groups = shelf.filter { it.first.group != null }.groupBy { it.first.group!! }.filterValues { it.size > 1 }
+    val seen = HashSet<String>()
+    return shelf.mapNotNull { (t, versions) ->
+        val g = t.group
+        val members = g?.let(groups::get) ?: return@mapNotNull Shelf.One(t, versions)
+        if (!seen.add(g)) return@mapNotNull null
+        // In album order, the order they were queued in.
+        Shelf.Album(g, t.groupTitle ?: t.title, members.sortedBy { it.first.createdAt }.map { Shelf.One(it.first, it.second) })
+    }
+}
+
+/** A stashed album: its cover, how many songs and how big, and the songs below it when opened. */
+@Composable
+private fun AlbumRow(album: Shelf.Album, expanded: Boolean, onToggle: () -> Unit) {
+    val c = Hamstr.colors
+    val tracks = album.tracks.map { it.head }
+    val bitmap = rememberImage(tracks.firstNotNullOfOrNull { it.thumbnail }, 160)
+    val turn by animateFloatAsState(if (expanded) 180f else 0f, Specs.blend(), label = "chevron")
+    val count = tracks.size
+    val what = when {
+        tracks.all { it.choice.mode == Mode.Audio } -> pluralStringResource(Res.plurals.stash_album_songs, count, count)
+        tracks.all { it.choice.mode == Mode.Video } -> pluralStringResource(Res.plurals.share_list_videos, count, count)
+        else -> pluralStringResource(Res.plurals.lib_files, count, count)
+    }
+    val by = tracks.mapNotNull { it.uploader }.distinct().singleOrNull()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Radii.row))
+            .clickable(onClick = onToggle)
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.surface)) {
+            AsciiImage(bitmap = bitmap, reveal = 1f, rain = 0f, cell = 5.dp, modifier = Modifier.size(52.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Txt(album.title, style = Hamstr.type.bodyMedium, maxLines = 1)
+            Spacer(Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Badge(what)
+                Txt(
+                    listOfNotNull(
+                        by,
+                        album.tracks.sumOf { e -> e.versions.sumOf { it.sizeBytes } }.takeIf { it > 0 }?.let(::formatBytes),
+                        ago(tracks.maxOf { it.finishedAt }).ifEmpty { null },
+                    ).joinToString(" · "),
+                    style = Hamstr.type.small, color = c.ghost, maxLines = 1,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Icon(Res.drawable.ic_expand_more, tint = c.muted, size = 20.dp, modifier = Modifier.padding(7.dp).graphicsLayer { rotationZ = turn })
+    }
 }
 
 /** A playlist on its way: how many are in, one bar for all of it, and pause or resume for the whole group. */
@@ -463,6 +579,7 @@ fun TaskRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(Radii.row))
             .background(if (highlighted) c.surface else c.overlay)
+            .onRightClick(onLongClick)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -1,5 +1,8 @@
 package app.hamstr
 
+import app.hamstr.ui.PlaylistFan
+import app.hamstr.ui.components.Badge
+import androidx.compose.ui.res.pluralStringResource
 import org.jetbrains.compose.resources.stringResource as sharedString
 import org.jetbrains.compose.resources.DrawableResource
 import app.hamstr.res.*
@@ -290,6 +293,8 @@ private fun App(inPip: Boolean) {
     // A new list (for these files, maybe none) or a rename of the list with this id.
     var newList by remember { mutableStateOf<List<DownloadTask>?>(null) }
     var renameList by rememberSaveable { mutableStateOf<String?>(null) }
+    // A held playlist's quick actions.
+    var playlistMenu by rememberSaveable { mutableStateOf<String?>(null) }
     var clipLink by remember { mutableStateOf<String?>(null) }
     var notifyAsk by rememberSaveable { mutableStateOf(false) }
     var queueSheet by rememberSaveable { mutableStateOf(false) }
@@ -373,6 +378,13 @@ private fun App(inPip: Boolean) {
             val playing = Playback.current.value != null
             val ok = if (next) Playback.playNext(context, t) else Playback.addToQueue(context, t)
             if (ok && playing) hint(resources.getString(if (next) R.string.queued_next else R.string.queued_end, t.title))
+        }
+    }
+    // A whole playlist, in its order: right after what plays now, or at the end; with nothing playing it just plays.
+    val enqueueAll: (List<DownloadTask>, Boolean, String) -> Unit = { list, next, name ->
+        if (Playback.current.value == null) playList(list.first(), list) else scope.launch {
+            for (t in if (next) list.reversed() else list) if (next) Playback.playNext(context, t) else Playback.addToQueue(context, t)
+            hint(resources.getString(if (next) R.string.queued_next else R.string.queued_end, name))
         }
     }
     val favorite: (DownloadTask) -> Unit = { t ->
@@ -481,7 +493,7 @@ private fun App(inPip: Boolean) {
                     visible, padding,
                     onMenu = { menuFor = it }, onPlay = play, onPlayList = playList,
                     onPlayNext = { enqueue(it, true) }, onFavorite = favorite,
-                    onPlaylist = { playlistFor = it }, onNewPlaylist = { newList = emptyList() }, onAddToPlaylist = { addToList = it },
+                    onPlaylist = { playlistFor = it }, onPlaylistMenu = { playlistMenu = it }, onNewPlaylist = { newList = emptyList() }, onAddToPlaylist = { addToList = it },
                     onHide = hide, onDelete = delete, onShare = share,
                 )
                 Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true }, onDelete = delete, onHint = { hint(it) })
@@ -567,6 +579,19 @@ private fun App(inPip: Boolean) {
                     onRename = { renameList = id },
                     onDeleteFiles = delete,
                     onClose = { playlistFor = null },
+                    onHint = { hint(it) },
+                )
+            }
+        }
+        Overlay(visible = playlistMenu != null, onDismiss = { playlistMenu = null }) {
+            playlistMenu?.let { id ->
+                PlaylistMenu(
+                    id,
+                    onPlay = playList,
+                    onQueue = enqueueAll,
+                    onRename = { playlistMenu = null; renameList = id },
+                    onDeleteFiles = delete,
+                    onClose = { playlistMenu = null },
                     onHint = { hint(it) },
                 )
             }
@@ -780,9 +805,7 @@ private fun TaskMenu(
             // Locked with DRM where it was shared: maybe YouTube Music has it.
             if (why.title == Res.string.err_drm) {
                 Spacer(Modifier.height(6.dp))
-                val guess = remember(t.url) { app.hamstr.ui.guessFromLink(t.url) }
-                val title = t.title.takeIf { it.isNotBlank() && !it.startsWith("http") } ?: guess?.first
-                if (title != null) app.hamstr.ui.ElsewhereCard(title, t.uploader ?: guess?.second, t.durationSec) { hit ->
+                app.hamstr.ui.ElsewhereCard(t.url, t.title, t.uploader, t.durationSec) { hit ->
                     DownloadService.stash(context, hit.url, hit.toInfo(), t.choice.copy(mode = Mode.Audio))
                     onCopied(resources.getString(R.string.drm_stashing))
                     onClose()
@@ -893,6 +916,73 @@ private fun RowScope.ActionTile(icon: DrawableResource, label: String, accent: B
         Icon(icon, tint = if (accent) c.onAccent else c.ink, size = 22.dp)
         Spacer(Modifier.height(6.dp))
         Txt(label, style = Hamstr.type.small, color = if (accent) c.onAccent else c.muted, maxLines = 1)
+    }
+}
+
+/**
+ * Holding a playlist: what is done with it as a whole, without opening it. Play or shuffle
+ * it, share its files, queue them, rename it, or delete it (its files stay; a downloaded
+ * one can take its files along).
+ */
+@Composable
+private fun PlaylistMenu(
+    id: String,
+    onPlay: (DownloadTask, List<DownloadTask>) -> Unit,
+    onQueue: (List<DownloadTask>, Boolean, String) -> Unit,
+    onRename: () -> Unit,
+    onDeleteFiles: (List<DownloadTask>) -> Unit,
+    onClose: () -> Unit,
+    onHint: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    val p = rememberPlaylist(id)
+    LaunchedEffect(p == null) { if (p == null) onClose() }
+    if (p == null) return
+    val items = p.items
+    val name = p.name.ifEmpty { stringResource(R.string.lib_playlist) }
+    var confirm by remember(id) { mutableStateOf(false) }
+    Sheet {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+            PlaylistFan(items, Modifier.width(if (p.songs) 72.dp else 104.dp), square = p.songs)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Txt(name, style = Hamstr.type.section, maxLines = 2)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Badge(pluralStringResource(R.plurals.lib_files, items.size, items.size), accent = true)
+                    if (items.isNotEmpty()) Badge(formatBytes(items.sumOf { it.sizeBytes }))
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        if (items.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionTile(Res.drawable.ic_play_arrow, stringResource(R.string.pl_play), accent = true) { onPlay(items.first(), items); onClose() }
+                ActionTile(Res.drawable.ic_shuffle, stringResource(R.string.pl_shuffle)) { val s = items.shuffled(); onPlay(s.first(), s); onClose() }
+                ActionTile(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { Playback.shareFiles(context, items); onClose() }
+            }
+            Spacer(Modifier.height(10.dp))
+            MenuGroup {
+                MenuRow(Res.drawable.ic_play_next, stringResource(R.string.play_next)) { onQueue(items, true, name); onClose() }
+                MenuRow(Res.drawable.ic_add_queue, stringResource(R.string.add_to_queue)) { onQueue(items, false, name); onClose() }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+        MenuGroup { MenuRow(Res.drawable.ic_edit, stringResource(R.string.pl_rename)) { onRename() } }
+        Spacer(Modifier.height(10.dp))
+        MenuGroup {
+            MenuRow(Res.drawable.ic_delete, stringResource(if (confirm) R.string.pl_delete_confirm else R.string.pl_delete), danger = true) {
+                if (!confirm) confirm = true else {
+                    Playlists.delete(id)
+                    onHint(resources.getString(R.string.pl_deleted))
+                    onClose()
+                }
+            }
+            if (p.downloaded && items.isNotEmpty()) {
+                MenuRow(Res.drawable.ic_delete, stringResource(R.string.pl_delete_files), danger = true) { onDeleteFiles(items); onClose() }
+            }
+        }
     }
 }
 

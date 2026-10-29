@@ -233,7 +233,9 @@ object Engine {
     suspend fun searchElsewhere(title: String, artist: String?, durationSec: Int): List<Elsewhere> = withContext(Dispatchers.IO) {
         awaitReady()
         val who = artist?.removeSuffix(" - Topic")?.takeIf { it.isNotBlank() }
-        val query = listOfNotNull(who, title).joinToString(" ").trim()
+        // "#JerseyClub" and the like are tags on the title, not words of the song's name.
+        val name = title.replace(Regex("""\s*#[\p{L}\p{N}_]+"""), "").trim().ifEmpty { title }
+        val query = listOfNotNull(who, name).joinToString(" ").trim()
         if (query.isEmpty()) return@withContext emptyList()
         val enc = java.net.URLEncoder.encode(query, "UTF-8")
         val hits = LinkedHashMap<String, Elsewhere>()
@@ -257,7 +259,7 @@ object Engine {
                 hits[id] = Elsewhere(link, e.optString("title"), e.optString("channel").ifBlank { e.optString("uploader") }.ifBlank { null }, e.optDouble("duration", 0.0).toInt())
             }
         }
-        hits.values.onEach { it.fit = fit(it, title, who, durationSec) }.sortedByDescending { it.fit }
+        hits.values.onEach { it.fit = fit(it, name, who, durationSec) }.sortedByDescending { it.fit }
     }
 
     /** The best of [searchElsewhere] when it fits well enough to offer on its own. */

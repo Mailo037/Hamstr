@@ -24,13 +24,39 @@ data class Peek(val title: String?, val thumbnail: String?, val site: String?, v
 object Peeker {
     private const val MAX_PAGE = 512 * 1024
 
-    suspend fun peek(url: String): Peek? = withTimeoutOrNull(5_000) {
+    suspend fun peek(url: String, timeoutMs: Long = 5_000): Peek? = withTimeoutOrNull(timeoutMs) {
         runInterruptible(Dispatchers.IO) {
-            runCatching { oembed(url) ?: openGraph(url) }.getOrNull()?.takeIf { it.title != null || it.thumbnail != null }
+            runCatching { spotify(url) ?: oembed(url) ?: openGraph(url) }.getOrNull()?.takeIf { it.title != null || it.thumbnail != null }
         }
     }
 
     private fun host(url: String) = runCatching { URI(url).host?.lowercase()?.removePrefix("www.")?.removePrefix("m.") }.getOrNull().orEmpty()
+
+    private val spotifyPath = Regex("""^/(?:intl-[a-z-]+/)?(track|album|episode|playlist)/([A-Za-z0-9]+)""")
+
+    /**
+     * Spotify: the page at its plain address (a shared link with ?si= first goes through a chain
+     * of redirects), else Spotify's embed page, which names the song, the artist and the length
+     * for its own player.
+     */
+    private fun spotify(url: String): Peek? {
+        if (host(url) != "open.spotify.com") return null
+        val (kind, id) = spotifyPath.find(runCatching { URI(url).path }.getOrNull().orEmpty())?.destructured ?: return null
+        runCatching { openGraph("https://open.spotify.com/$kind/$id") }.getOrNull()?.takeIf { it.title != null }?.let { return it }
+        val page = fetch("https://open.spotify.com/embed/$kind/$id", MAX_PAGE) ?: return null
+        val data = Regex("""<script id="__NEXT_DATA__" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1) ?: return null
+        val e = JSONObject(data).optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")
+            ?.optJSONObject("data")?.optJSONObject("entity") ?: return null
+        fun s(o: JSONObject?, key: String) = o?.optString(key)?.takeIf { it.isNotBlank() }
+        return Peek(
+            title = s(e, "title") ?: s(e, "name") ?: return null,
+            thumbnail = e.optJSONObject("visualIdentity")?.optJSONArray("image")?.optJSONObject(0)?.let { s(it, "url") },
+            site = "Spotify",
+            artist = s(e.optJSONArray("artists")?.optJSONObject(0), "name"),
+            durationSec = (e.optLong("duration") / 1000).toInt(),
+        )
+    }
 
     private fun oembed(url: String): Peek? {
         val h = host(url)

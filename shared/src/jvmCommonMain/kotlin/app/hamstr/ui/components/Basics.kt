@@ -10,6 +10,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
@@ -123,7 +126,29 @@ fun Modifier.pressable(
         .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
         .offset(y = dy)
         .scale(scale)
+        .onRightClick(onLongClick.takeIf { enabled })
         .combinedClickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onLongClick = onLongClick, onClick = onClick)
+}
+
+/**
+ * A right-click does what a long press does: on the desktop (and with a mouse on a phone) the
+ * menu a long press opens is one click away. Taken before the click handlers see the press.
+ */
+@Composable
+fun Modifier.onRightClick(action: (() -> Unit)?): Modifier {
+    if (action == null) return this
+    val current by rememberUpdatedState(action)
+    return pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val e = awaitPointerEvent(PointerEventPass.Initial)
+                if (e.type == PointerEventType.Press && e.buttons.isSecondaryPressed) {
+                    e.changes.forEach { it.consume() }
+                    current()
+                }
+            }
+        }
+    }
 }
 
 enum class ButtonKind { Primary, Neutral, Ghost }

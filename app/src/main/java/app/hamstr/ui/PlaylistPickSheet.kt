@@ -1,5 +1,7 @@
 package app.hamstr.ui
 
+import androidx.compose.animation.core.animateDpAsState
+import app.hamstr.ui.components.Specs
 import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -139,6 +141,8 @@ internal fun PlaylistPickSheet(
                     else -> null
                 },
                 badgeAccent = e.available,
+                // Stashed as songs, the list shows them as songs.
+                square = mode == Mode.Audio,
             )
         }
         Spacer(Modifier.height(14.dp))
@@ -169,9 +173,13 @@ internal fun PickRow(
     enabled: Boolean = true,
     badge: String? = null,
     badgeAccent: Boolean = false,
+    /** Songs: a square cover, cut from the middle of the video's picture. */
+    square: Boolean = false,
 ) {
     val c = Hamstr.colors
     val bitmap = rememberImage(thumbnail, 200)
+    val coverW by animateDpAsState(if (square) 44.dp else 64.dp, Specs.blend(), label = "coverW")
+    val coverH by animateDpAsState(if (square) 44.dp else 36.dp, Specs.blend(), label = "coverH")
     Row(
         Modifier
             .fillMaxWidth()
@@ -184,8 +192,8 @@ internal fun PickRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Txt(if (checked) "[×]" else "[ ]", style = Hamstr.type.mono, color = if (checked) c.accent else c.ghost)
-        Box(Modifier.size(width = 64.dp, height = 36.dp).clip(RoundedCornerShape(Radii.thumb))) {
-            AsciiImage(bitmap = bitmap, reveal = 1f, cell = 4.dp, modifier = Modifier.size(width = 64.dp, height = 36.dp))
+        Box(Modifier.size(width = coverW, height = coverH).clip(RoundedCornerShape(Radii.thumb))) {
+            AsciiImage(bitmap = bitmap, reveal = 1f, cell = 4.dp, modifier = Modifier.size(width = coverW, height = coverH))
         }
         Column(Modifier.weight(1f)) {
             Txt(title, style = Hamstr.type.bodyMedium, maxLines = 2)

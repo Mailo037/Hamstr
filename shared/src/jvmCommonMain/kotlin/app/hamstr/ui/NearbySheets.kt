@@ -1,5 +1,8 @@
 package app.hamstr.ui
 
+import androidx.compose.runtime.key
+import app.hamstr.ui.components.SwipeAction
+import app.hamstr.ui.components.SwipeRow
 import app.hamstr.ui.components.rememberAmbientClock
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -265,11 +268,19 @@ fun NearbySettings(bluetooth: (@Composable () -> Unit)? = null) {
                 add(stringResource(if (k.trusted) Res.string.set_device_trusted else Res.string.set_device_asks))
                 if (waiting > 0) add(stringResource(Res.string.nearby_waiting, waiting))
             }.joinToString(" · ")
-            SettingRow(k.name, subtitle = sub) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (live?.online == true) Icon(if (Via.Wifi in live.via) Res.drawable.ic_wifi else Res.drawable.ic_bluetooth, tint = c.accent, size = 16.dp)
-                    if (!k.trusted) HButton(stringResource(Res.string.set_trust), { Nearby.trust(live ?: k, true) })
-                    HButton(stringResource(Res.string.set_forget), { Nearby.forget(k.id) }, kind = ButtonKind.Ghost)
+            // Swipe it away to forget it, like a row in the stash; an icon on the desktop.
+            key(k.id) {
+                SwipeRow(
+                    start = null,
+                    end = SwipeAction(Res.drawable.ic_close, stringResource(Res.string.set_forget), c.red, removes = true) { Nearby.forget(k.id) },
+                    background = c.overlay,
+                ) {
+                    SettingRow(k.name, subtitle = sub) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (live?.online == true) Icon(if (Via.Wifi in live.via) Res.drawable.ic_wifi else Res.drawable.ic_bluetooth, tint = c.accent, size = 16.dp)
+                            if (!k.trusted) HButton(stringResource(Res.string.set_trust), { Nearby.trust(live ?: k, true) })
+                        }
+                    }
                 }
             }
         }

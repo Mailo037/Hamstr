@@ -341,9 +341,9 @@ fun NameSheet(title: String, initial: String, action: String, onDone: (String) -
 
 /** A playlist in the library's row: the fanned covers, its name and how many files. */
 @Composable
-fun PlaylistTile(p: Playlist, width: Dp, onClick: () -> Unit, square: Boolean = p.songs) {
+fun PlaylistTile(p: Playlist, width: Dp, onClick: () -> Unit, square: Boolean = p.songs, onLongClick: (() -> Unit)? = null) {
     // A square fan as tall as a wide one would be too big; it gets narrower instead.
-    Column(Modifier.width(if (square) width * 0.72f else width).clip(RoundedCornerShape(14.dp)).pressable(onClick)) {
+    Column(Modifier.width(if (square) width * 0.72f else width).clip(RoundedCornerShape(14.dp)).pressable(onClick, onLongClick = onLongClick)) {
         PlaylistFan(p.items, Modifier.fillMaxWidth(), square = square)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp)) {

@@ -1,5 +1,8 @@
 package app.hamstr.ui
 
+import androidx.compose.runtime.key
+import app.hamstr.ui.components.SwipeAction
+import app.hamstr.ui.components.SwipeRow
 import org.jetbrains.compose.resources.DrawableResource
 import app.hamstr.res.*
 import app.hamstr.data.DownloadStore
@@ -451,24 +454,31 @@ private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) 
     Group {
         hidden.forEachIndexed { i, t ->
             if (i > 0) Divider()
-            Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
-                    AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(52.dp))
+            // Like the stash: swipe right to show it again, left to delete it (icons on a desktop).
+            key(t.id) {
+                SwipeRow(
+                    start = SwipeAction(Res.drawable.ic_restore, stringResource(R.string.hidden_restore), c.accent, removes = true) {
+                        DownloadStore.setHidden(setOf(t.id), false)
+                        onHint(restored)
+                    },
+                    end = SwipeAction(Res.drawable.ic_delete, stringResource(R.string.menu_delete), c.red, removes = true) { onDelete(listOf(t)) },
+                    background = c.overlay,
+                ) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
+                            AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(52.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2)
+                            Spacer(Modifier.height(2.dp))
+                            Txt(
+                                listOfNotNull(t.uploader ?: t.source, t.sizeBytes.takeIf { it > 0 }?.let(::formatBytes)).joinToString(" · "),
+                                style = Hamstr.type.small, color = c.ghost, maxLines = 1,
+                            )
+                        }
+                    }
                 }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2)
-                    Spacer(Modifier.height(2.dp))
-                    Txt(
-                        listOfNotNull(t.uploader ?: t.source, t.sizeBytes.takeIf { it > 0 }?.let(::formatBytes)).joinToString(" · "),
-                        style = Hamstr.type.small, color = c.ghost, maxLines = 1,
-                    )
-                }
-                IconButton(Res.drawable.ic_restore, stringResource(R.string.hidden_restore), {
-                    DownloadStore.setHidden(setOf(t.id), false)
-                    onHint(restored)
-                }, tint = c.accent, background = Color.Transparent)
-                IconButton(Res.drawable.ic_delete, stringResource(R.string.menu_delete), { onDelete(listOf(t)) }, tint = c.red, background = Color.Transparent)
             }
         }
     }

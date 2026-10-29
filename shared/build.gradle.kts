@@ -48,7 +48,12 @@ kotlin {
             }
         }
         val desktopTest by getting {
-            dependencies { implementation(kotlin("test")) }
+            dependencies {
+                implementation(kotlin("test"))
+                // Compose UI tests (mouse and touch input) on this computer's Skia.
+                implementation(compose.desktop.currentOs)
+                implementation(compose.desktop.uiTestJUnit4)
+            }
         }
     }
 }

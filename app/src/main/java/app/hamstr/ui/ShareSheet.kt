@@ -300,15 +300,11 @@ private fun MediaSheet(
                 // Locked here, maybe free on YouTube Music: offer that one instead. Taking it closes
                 // the sheet and stashes it right away, as a song unless Video was picked on purpose.
                 if (why.title == Res.string.err_drm) {
-                    val guess = remember(url) { guessFromLink(url) }
-                    val title = peek?.title ?: guess?.first
-                    if (title != null) {
-                        Spacer(Modifier.height(10.dp))
-                        // The page names the artist and the length where it can (Spotify, Apple Music,
-                        // SoundCloud); a link without a title gives at least "artist/track-name".
-                        ElsewhereCard(title, peek?.artist ?: guess?.second.takeIf { peek?.title == null }, peek?.durationSec ?: 0) { hit ->
-                            onStashOther(hit.url, hit.toInfo(), if (modeTouched && mode == Mode.Video) choice else choice.copy(mode = Mode.Audio))
-                        }
+                    Spacer(Modifier.height(10.dp))
+                    // The page names the song, the artist and the length where it can (Spotify, Apple
+                    // Music, SoundCloud); without them the card reads the page again itself.
+                    ElsewhereCard(url, peek?.title, peek?.artist, peek?.durationSec ?: 0) { hit ->
+                        onStashOther(hit.url, hit.toInfo(), if (modeTouched && mode == Mode.Video) choice else choice.copy(mode = Mode.Audio))
                     }
                 }
                 if (s.message.isNotBlank()) {

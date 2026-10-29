@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import app.hamstr.R
 import app.hamstr.engine.Engine
 import app.hamstr.engine.MediaInfo
+import app.hamstr.engine.Peeker
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
@@ -53,13 +54,19 @@ import app.hamstr.ui.theme.Radii
 
 private sealed interface Search {
     data object Looking : Search
-    data class Found(val hits: List<Engine.Elsewhere>) : Search
+    /** [length]: the locked song's, for marking hits of the same length. */
+    data class Found(val hits: List<Engine.Elsewhere>, val length: Int) : Search
     data object Nothing : Search
 }
 
-/** "artist/track-name" from a SoundCloud-style link, for when the site gave no title. */
+/**
+ * "artist/track-name" from a SoundCloud link, for when the site gave no title. Only there: a
+ * Spotify or Apple Music path is "intl-de/track/<id>", which would search for "intl de track".
+ */
 fun guessFromLink(url: String): Pair<String, String?>? {
-    val parts = runCatching { java.net.URI(url).path }.getOrNull()?.trim('/')?.split('/')?.filter { it.isNotBlank() } ?: return null
+    val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+    if (uri.host?.lowercase()?.endsWith("soundcloud.com") != true) return null
+    val parts = uri.path?.trim('/')?.split('/')?.filter { it.isNotBlank() } ?: return null
     if (parts.size < 2) return null
     fun words(s: String) = s.replace(Regex("[-_]+"), " ").trim()
     return words(parts[1]) to words(parts[0])
@@ -72,17 +79,26 @@ fun Engine.Elsewhere.toInfo() = MediaInfo(url, title, null, null, durationSec, u
  * Under a song that is locked with DRM: looks for the same song on YouTube Music (and YouTube)
  * by title, artist and length. A hit that fits well is offered on its own; the other matches
  * open below it, each with a button to listen in, so the right one can be picked by ear.
+ * Without a [title] (the first look at [url] found none or ran out of time) it reads the link's
+ * page again, with more time; it never searches for the link itself.
  */
 @Composable
-fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (Engine.Elsewhere) -> Unit) {
+fun ElsewhereCard(url: String, title: String?, artist: String?, durationSec: Int, onUse: (Engine.Elsewhere) -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preview = remember { Preview(context, scope) }
     DisposableEffect(preview) { onDispose { preview.release() } }
-    var search by remember(title, artist) { mutableStateOf<Search>(Search.Looking) }
-    LaunchedEffect(title, artist) {
-        search = Engine.searchElsewhere(title, artist, durationSec).takeIf { it.isNotEmpty() }?.let { Search.Found(it) } ?: Search.Nothing
+    var search by remember(url, title, artist) { mutableStateOf<Search>(Search.Looking) }
+    LaunchedEffect(url, title, artist) {
+        val known = title?.takeIf { it.isNotBlank() && !it.startsWith("http") }
+        val song = if (known != null) Triple(known, artist, durationSec) else {
+            Peeker.peek(url, timeoutMs = 12_000)?.let { p -> p.title?.let { Triple(it, p.artist, p.durationSec) } }
+                ?: guessFromLink(url)?.let { Triple(it.first, it.second, 0) }
+        }
+        search = song?.let { (name, by, length) ->
+            Engine.searchElsewhere(name, by, length).takeIf { it.isNotEmpty() }?.let { Search.Found(it, length) }
+        } ?: Search.Nothing
     }
     val use = { hit: Engine.Elsewhere -> preview.stop(); onUse(hit) }
     AnimatedContent(search, transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "elsewhere") { s ->
@@ -98,7 +114,7 @@ fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (Engi
                     Txt(stringResource(if (best != null) R.string.drm_found else R.string.drm_pick), style = Hamstr.type.bodyMedium, color = c.accent)
                     Spacer(Modifier.height(6.dp))
                     if (best != null) {
-                        HitRow(best, durationSec, preview, onUse = null)
+                        HitRow(best, s.length, preview, onUse = null)
                         Spacer(Modifier.height(8.dp))
                         HButton(stringResource(R.string.drm_use), { use(best) }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_download)
                     }
@@ -113,7 +129,7 @@ fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (Engi
                             }
                         }
                         AnimatedVisibility(open, enter = expandVertically(Specs.blend()) + fadeIn(Specs.appear()), exit = shrinkVertically(Specs.blend()) + fadeOut(Specs.disappear())) {
-                            Column { others.forEach { HitRow(it, durationSec, preview, onUse = use) } }
+                            Column { others.forEach { HitRow(it, s.length, preview, onUse = use) } }
                         }
                     }
                 }

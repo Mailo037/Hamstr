@@ -12,16 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.7.3"
+VERSION = "0.7.4"
 FEATURES = [
-    ("SETUP", "Quick, just for you, no admin prompt"),
-    ("NO RESTART", "Installing and removing never need one"),
-    ("UPDATES", "Hamstr installs them and opens again"),
-    ("PORTABLE", "The zip copy updates itself too"),
+    ("ALBUMS", "One row in the stash, the songs inside"),
+    ("PLAYLISTS", "Hold one: play, share, rename, delete"),
+    ("DESKTOP", "Right-click menus, icons for swipes"),
+    ("SPOTIFY", "Locked songs found by their real name"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
-# setup_*.png (a window capture of the Windows setup) sits there as a window of its own.
-SHOTS = [("desktop_update.png", "Update"), ("setup_wizard.png", "Setup")]
+# second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
+SHOTS = [("desktop_album.png", "Stash"), ("desktop_devices_crop.png", "Devices")]
 
 
 
@@ -47,7 +47,7 @@ def release(shots):
         drop(img, window(shots / SHOTS[0][0], 1180), (1080, 120), blur=50, alpha=200)
         # The phone stands on the bottom edge, so a sheet at the bottom of its screen shows whole.
         for i, (name, _) in enumerate(SHOTS[1:]):
-            if name.startswith("setup_"):
+            if name.startswith(("setup_", "desktop_")):
                 # Lower left, over the sidebar's empty end, so the window's own content stays in view.
                 f = window(shots / name, 540)
                 drop(img, f, (890, img.height - f.height - 50), blur=50, alpha=220)
