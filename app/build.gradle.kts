@@ -19,8 +19,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Releases are cut from tags: CI passes v1.2.3 in as -Phamstr.version=1.2.3.
-val appVersion = providers.gradleProperty("hamstr.version").getOrElse("0.6.1")
+// Releases are cut from tags: CI passes v1.2.3 in as -Phamstr.version=1.2.3; the default is in gradle.properties.
+val appVersion = providers.gradleProperty("hamstr.version").get()
 val (major, minor, patch) = appVersion.substringBefore('-').split('.').map(String::toInt)
 
 // The release key lives outside git: signing/keystore.properties next to the .jks, written
@@ -30,9 +30,10 @@ val signingProps = Properties().apply {
 }
 
 // cheek, the Rust download engine (github.com/Mailo037/cheek), goes into the APK as
-// libcheek.so per ABI. Builds take a pinned release; `cheek.dir` in local.properties points
+// libcheek.so per ABI. Builds take the release pinned in gradle.properties (the desktop app
+// takes the same one); `cheek.dir` in local.properties points
 // at a local checkout built with cargo-ndk instead.
-val cheekVersion = "0.2.2"
+val cheekVersion = providers.gradleProperty("hamstr.cheekVersion").get()
 val cheekTargets = mapOf("arm64-v8a" to "aarch64-linux-android", "armeabi-v7a" to "armv7-linux-androideabi", "x86_64" to "x86_64-linux-android")
 val cheekLocal = if (providers.gradleProperty("cheek.useRelease").getOrElse("false").toBoolean()) null else Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
@@ -250,6 +251,10 @@ android {
         buildConfig = true
     }
 
+    // Strings, fonts and icons are shared with the desktop app (shared/src/commonMain/composeResources);
+    // the same files are Android resources too, so R.string and R.drawable keep working here.
+    sourceSets.getByName("main").res.directories.add("../shared/src/commonMain/composeResources")
+
     // youtubedl-android runs bundled executables (python, ffmpeg) straight from the
     // native library dir, so they must be extracted at install time.
     packaging {
@@ -263,6 +268,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.ui:ui")

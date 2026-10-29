@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from render_icon import render as render_mark
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FONTS = ROOT / "app/src/main/res/font"
+FONTS = ROOT / "shared/src/commonMain/composeResources/font"
 OUT = ROOT / "docs/images"
 
 CANVAS, OVERLAY, LINE = (20, 20, 20), (30, 30, 30), (54, 54, 54)

@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,7 +85,7 @@ internal fun CineSrcSeasonSheet(target: CineSrcTarget, onEpisode: (String) -> Un
                                 Spacer(Modifier.height(2.dp))
                                 Txt(error.orEmpty(), style = Hamstr.type.mono, color = c.muted, maxLines = 3)
                                 Spacer(Modifier.height(8.dp))
-                                HButton(stringResource(R.string.cinesrc_retry), { retry++ }, icon = R.drawable.ic_refresh)
+                                HButton(stringResource(R.string.cinesrc_retry), { retry++ }, icon = Res.drawable.ic_refresh)
                             }
                             current == null -> Txt(stringResource(R.string.cinesrc_loading), color = c.muted, modifier = Modifier.padding(vertical = 24.dp))
                             current.episodes.isEmpty() -> Txt(stringResource(R.string.cinesrc_empty), color = c.muted, modifier = Modifier.padding(vertical = 24.dp))
@@ -135,7 +136,7 @@ internal fun CineSrcSeasonSheet(target: CineSrcTarget, onEpisode: (String) -> Un
                     }
                 },
                 Modifier.weight(2f), kind = ButtonKind.Primary,
-                icon = if (selected.size == 1) R.drawable.ic_chevron_right else R.drawable.ic_download,
+                icon = if (selected.size == 1) Res.drawable.ic_chevron_right else Res.drawable.ic_download,
                 enabled = current != null && selected.isNotEmpty() && error == null && !queued,
             )
         }

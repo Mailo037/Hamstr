@@ -98,14 +98,7 @@ object Importer {
         return Uri.fromFile(out).toString()
     }
 
-    internal fun freeName(dir: File, name: String): File {
-        val base = name.substringBeforeLast('.', name)
-        val ext = name.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
-        var f = File(dir, name)
-        var n = 1
-        while (f.exists()) f = File(dir, "$base ($n)$ext").also { n++ }
-        return f
-    }
+    internal fun freeName(dir: File, name: String) = FileNames.freeName(dir, name)
 
     internal suspend fun scan(context: Context, file: File): Uri? = withTimeoutOrNull(10_000) {
         suspendCancellableCoroutine { cont ->

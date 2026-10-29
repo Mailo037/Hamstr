@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeOut
@@ -207,28 +208,28 @@ fun LibraryScreen(
                     if (sel) {
                         val files = filesOf(selected)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            IconButton(R.drawable.ic_close, stringResource(R.string.lib_select_done), { selected = emptySet() }, tint = c.ink)
+                            IconButton(Res.drawable.ic_close, stringResource(R.string.lib_select_done), { selected = emptySet() }, tint = c.ink)
                             Txt(stringResource(R.string.lib_selected, files.size), style = Hamstr.type.small, color = c.muted, maxLines = 1, modifier = Modifier.weight(1f).padding(start = 6.dp))
-                            IconButton(R.drawable.ic_select_all, stringResource(R.string.lib_select_all), {
+                            IconButton(Res.drawable.ic_select_all, stringResource(R.string.lib_select_all), {
                                 selected = (if (songs) done else tiles.map { it.task }).map { it.family }.toSet()
                             })
-                            IconButton(R.drawable.ic_playlist_add, stringResource(R.string.pl_add), {
+                            IconButton(Res.drawable.ic_playlist_add, stringResource(R.string.pl_add), {
                                 // One entry per video: its other qualities would only play it twice.
                                 onAddToPlaylist(files.groupBy { it.family }.map { (_, v) -> v.firstOrNull { it.versionOf == null } ?: v.first() })
                                 selected = emptySet()
                             })
-                            IconButton(R.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(files) })
-                            IconButton(R.drawable.ic_visibility_off, stringResource(R.string.menu_hide), { onHide(files); selected = emptySet() })
-                            IconButton(R.drawable.ic_delete, stringResource(R.string.menu_delete), { onDelete(files); selected = emptySet() }, tint = c.red)
+                            IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(files) })
+                            IconButton(Res.drawable.ic_visibility_off, stringResource(R.string.menu_hide), { onHide(files); selected = emptySet() })
+                            IconButton(Res.drawable.ic_delete, stringResource(R.string.menu_delete), { onDelete(files); selected = emptySet() }, tint = c.red)
                         }
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Txt(stringResource(R.string.tab_library), style = Hamstr.type.title, modifier = Modifier.weight(1f))
                             // Playlists among the files have no tile of their own to start one, so it sits up here.
-                            if (placement == PlaylistPlacement.Grid) IconButton(R.drawable.ic_playlist_add, stringResource(R.string.pl_new), onNewPlaylist, tint = c.ink)
-                            IconButton(R.drawable.ic_sort, stringResource(R.string.lib_sort), { sorting = !sorting }, tint = if (sorting || sort != LibrarySort.Newest) c.accent else c.ink)
+                            if (placement == PlaylistPlacement.Grid) IconButton(Res.drawable.ic_playlist_add, stringResource(R.string.pl_new), onNewPlaylist, tint = c.ink)
+                            IconButton(Res.drawable.ic_sort, stringResource(R.string.lib_sort), { sorting = !sorting }, tint = if (sorting || sort != LibrarySort.Newest) c.accent else c.ink)
                             IconButton(
-                                if (searching) R.drawable.ic_close else R.drawable.ic_search,
+                                if (searching) Res.drawable.ic_close else Res.drawable.ic_search,
                                 stringResource(if (searching) R.string.lib_close_search else R.string.lib_search),
                                 { searching = !searching; if (!searching) query = "" },
                                 tint = c.ink,
@@ -318,7 +319,7 @@ fun LibraryScreen(
                         onLongClick = { toggle(t.family) },
                     ) {
                         if (selecting) SelectMark(true, on)
-                        else IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) }, tint = c.ghost, background = Color.Transparent, size = 40.dp)
+                        else IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) }, tint = c.ghost, background = Color.Transparent, size = 40.dp)
                     }
                 }
             }
@@ -340,7 +341,7 @@ fun LibraryScreen(
             ) {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).background(c.black)) {
                     AsciiImage(
-                        bitmap = rememberBitmap(t.thumbnail, 360),
+                        bitmap = rememberImage(t.thumbnail, 360),
                         reveal = 1f,
                         modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (gone) 0.35f else 1f },
                     )
@@ -368,7 +369,7 @@ fun LibraryScreen(
                         Box(
                             Modifier.offset(x = 14.dp).size(48.dp).pressable({ onMenu(t) }, label = stringResource(R.string.player_more), pressedScale = 0.92f),
                             contentAlignment = Alignment.TopCenter,
-                        ) { Icon(R.drawable.ic_more_vert, tint = c.ghost, size = 18.dp, modifier = Modifier.padding(top = 2.dp)) }
+                        ) { Icon(Res.drawable.ic_more_vert, tint = c.ghost, size = 18.dp, modifier = Modifier.padding(top = 2.dp)) }
                     }
                 }
             }
@@ -386,7 +387,7 @@ private fun PlaylistTile(p: app.hamstr.data.Playlist, modifier: Modifier, onClic
         }
         Spacer(Modifier.height(7.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp)) {
-            Icon(if (p.favorites) R.drawable.ic_favorite else R.drawable.ic_queue_music, tint = c.accent, size = 14.dp, modifier = Modifier.padding(end = 4.dp))
+            Icon(if (p.favorites) Res.drawable.ic_favorite else Res.drawable.ic_queue_music, tint = c.accent, size = 14.dp, modifier = Modifier.padding(end = 4.dp))
             Txt(p.name.ifEmpty { stringResource(R.string.lib_playlist) }, style = Hamstr.type.bodyMedium, maxLines = 1)
         }
         Txt(pluralStringResource(R.plurals.lib_files, p.items.size, p.items.size), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp))
@@ -408,18 +409,18 @@ private fun PlaylistRow(p: app.hamstr.data.Playlist, modifier: Modifier, onClick
             Spacer(Modifier.height(2.dp))
             Txt(pluralStringResource(R.plurals.lib_files, p.items.size, p.items.size), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
         }
-        Icon(if (p.favorites) R.drawable.ic_favorite else R.drawable.ic_chevron_right, tint = if (p.favorites) c.accent else c.ghost, size = 18.dp)
+        Icon(if (p.favorites) Res.drawable.ic_favorite else Res.drawable.ic_chevron_right, tint = if (p.favorites) c.accent else c.ghost, size = 18.dp)
     }
 }
 
 @Composable
-private fun playNextAction(run: () -> Unit) = SwipeAction(R.drawable.ic_play_next, stringResource(R.string.play_next), Hamstr.colors.accent, onTrigger = run)
+private fun playNextAction(run: () -> Unit) = SwipeAction(Res.drawable.ic_play_next, stringResource(R.string.play_next), Hamstr.colors.accent, onTrigger = run)
 
 @Composable
 private fun favoriteAction(t: DownloadTask, favorites: Set<String>, run: () -> Unit): SwipeAction {
     val on = t.id in favorites
     return SwipeAction(
-        if (on) R.drawable.ic_favorite_border else R.drawable.ic_favorite,
+        if (on) Res.drawable.ic_favorite_border else Res.drawable.ic_favorite,
         stringResource(if (on) R.string.fav_remove else R.string.fav_add),
         Hamstr.colors.accent, onTrigger = run,
     )
@@ -441,5 +442,5 @@ private fun SelectMark(selecting: Boolean, on: Boolean, modifier: Modifier = Mod
             .background(lerp(Color.Black.copy(alpha = 0.45f), c.accent, p))
             .border(2.dp, lerp(Color.White.copy(alpha = 0.8f), c.accent, p), CircleShape),
         contentAlignment = Alignment.Center,
-    ) { if (on) Icon(R.drawable.ic_check, tint = c.onAccent, size = 16.dp) }
+    ) { if (on) Icon(Res.drawable.ic_check, tint = c.onAccent, size = 16.dp) }
 }

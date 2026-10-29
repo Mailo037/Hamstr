@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,7 +46,7 @@ fun RenameSheet(task: DownloadTask, onRename: (String) -> Unit) {
         SheetHeader(stringResource(R.string.rename_title))
         Spacer(Modifier.height(16.dp))
         SheetField(
-            value, { value = it }, stringResource(R.string.rename_hint), R.drawable.ic_edit,
+            value, { value = it }, stringResource(R.string.rename_hint), Res.drawable.ic_edit,
             modifier = Modifier.focusRequester(focus),
             suffix = ext.takeIf { it.isNotEmpty() }?.let { ".$it" },
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
@@ -54,7 +55,7 @@ fun RenameSheet(task: DownloadTask, onRename: (String) -> Unit) {
         Spacer(Modifier.height(12.dp))
         HButton(
             stringResource(R.string.menu_rename), { submit() }, Modifier.fillMaxWidth(),
-            kind = ButtonKind.Primary, icon = R.drawable.ic_edit, enabled = name.isNotEmpty() && name != start,
+            kind = ButtonKind.Primary, icon = Res.drawable.ic_edit, enabled = name.isNotEmpty() && name != start,
         )
     }
 }

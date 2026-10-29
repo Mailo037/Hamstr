@@ -142,7 +142,22 @@ def main():
         d.tap("Close player")
         d.tap("Settings")
         d.shot(out / "settings.png", settle=2.5)
+        d.tap("Devices")
+        d.shot(out / "devices.png", settle=2)
+        d.sh("input", "keyevent", "BACK")
         d.tap("Stash")
+
+        # The send sheet with a few made-up devices around (DemoActivity --es nearby on).
+        d.sh("am", "start", "-f", "0x10008000", "-n", f"{PKG}/.demo.DemoActivity", "--es", "nearby", "on")  # a new task, or Android only brings the old one up
+        time.sleep(2)
+        d.sh("am", "start", "-a", "android.intent.action.SEND", "-t", "text/plain",
+             "--es", "android.intent.extra.TEXT", a.share, "-n", f"{PKG}/.ShareActivity")
+        d.find("Send to a device")
+        d.shot(out / "share_send.png", settle=3)
+        d.tap("Send to a device")
+        d.find("Pixel 9")
+        d.shot(out / "send.png", settle=2.5)
+        d.sh("input", "keyevent", "BACK")
     finally:
         d.status_bar(False)
 

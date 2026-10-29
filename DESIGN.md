@@ -7,8 +7,9 @@ needs something else (touch targets, sheets instead of dialogs, gestures), this 
 
 Values live in code, not here: colours, type and radii in `ui/theme/Theme.kt`, motion in
 `ui/components/Motion.kt`, scroll fades in `ui/components/EdgeFade.kt`, sheets in
-`ui/components/Sheet.kt`, chips in `ui/components/Chips.kt`. The last section lists the
-places that break these rules.
+`ui/components/Sheet.kt`, chips in `ui/components/Chips.kt`, all under
+`shared/src/jvmCommonMain/kotlin/app/hamstr/`, so the phone and the desktop draw the same. The
+last section lists the places that break these rules.
 
 ## Principles
 
@@ -366,9 +367,28 @@ Always through `LocalHapticFeedback`, so the switch in Settings silences them.
   timer, speed, lyrics and queue under it. A lit mode is accent with a dot under it.
 - Settings > Appearance > Size scales the density (0.9, 1, 1.1), so every dp and sp moves together.
 
+### Desktop
+
+The desktop app (`desktop/`) is the sideways layout for a pointer instead of a finger. Everything
+above holds; these differ, because a mouse is precise and a window is wide:
+
+- The window has no system frame: a 34 dp title bar on the canvas carries the hamster as solid
+  cells (glyphs blur at that size), the name in `small`/`muted`, and 42 dp window buttons whose
+  glyphs are 10 dp lines; hover lifts them to `hover`, close turns red. Dragging the bar moves the
+  window, a double click maximises it. The corners are rounded like the system's (Windows 11 via
+  DWM, clipped on Linux, native on macOS, where the traffic lights stay).
+- The side bar is always there: a 216 dp `overlay` panel (16 radius, 4 padding, 12 pill) with
+  40 dp tabs. Settings opens its category pages as 36 dp rows right under the tab; the open one
+  lifts to `surface`. The page itself fills the rest, at most 640 dp wide.
+- Sheets stay sheets, at most 600 dp wide and centred; the stash is at most 880 dp wide.
+- Ctrl+V (⌘V) anywhere stashes the copied link, the desktop's share button; Esc closes sheets.
+- Touch targets may be smaller than 48 dp where only a pointer reaches them (window buttons,
+  side bar rows); shared components keep their sizes.
+
 ## Text and accessibility
 
-- User-facing text lives in `res/values/strings.xml`.
+- User-facing text lives in `shared/src/commonMain/composeResources/values/strings.xml`, shared by
+  both apps.
 - Icon-only controls carry a label; decorative text that animates (decode) exposes the
   real text to screen readers.
 - Colour never carries meaning alone, and touch targets stay at 48 dp.

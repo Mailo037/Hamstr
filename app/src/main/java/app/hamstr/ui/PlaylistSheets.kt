@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -142,15 +143,15 @@ fun PlaylistSheet(
                     if (p.downloaded) Badge(stringResource(R.string.pl_downloaded))
                 }
             }
-            IconButton(R.drawable.ic_edit, stringResource(R.string.pl_rename), onRename)
+            IconButton(Res.drawable.ic_edit, stringResource(R.string.pl_rename), onRename)
         }
         Spacer(Modifier.height(12.dp))
         if (items.isEmpty()) {
             Txt(stringResource(R.string.pl_empty), color = c.muted, modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp))
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HButton(stringResource(R.string.pl_play), { onPlay(items.first(), items) }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = R.drawable.ic_play_arrow)
-                HButton(stringResource(R.string.pl_shuffle), { val s = items.shuffled(); onPlay(s.first(), s) }, Modifier.weight(1f), icon = R.drawable.ic_shuffle)
+                HButton(stringResource(R.string.pl_play), { onPlay(items.first(), items) }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = Res.drawable.ic_play_arrow)
+                HButton(stringResource(R.string.pl_shuffle), { val s = items.shuffled(); onPlay(s.first(), s) }, Modifier.weight(1f), icon = Res.drawable.ic_shuffle)
             }
             Spacer(Modifier.height(8.dp))
             LazyColumn(
@@ -173,7 +174,7 @@ fun PlaylistSheet(
                     ) {
                         SwipeRow(
                             start = null,
-                            end = SwipeAction(R.drawable.ic_close, stringResource(R.string.pl_remove), c.red, removes = true) { remove() },
+                            end = SwipeAction(Res.drawable.ic_close, stringResource(R.string.pl_remove), c.red, removes = true) { remove() },
                             background = c.overlay,
                         ) {
                             Row(
@@ -219,13 +220,13 @@ fun PlaylistSheet(
                                             }
                                         },
                                     contentAlignment = Alignment.Center,
-                                ) { Icon(R.drawable.ic_drag_handle, tint = c.ghost, size = 20.dp) }
+                                ) { Icon(Res.drawable.ic_drag_handle, tint = c.ghost, size = 20.dp) }
                                 SongRow(
                                     t, now = playing?.id == t.id, wide = !p.songs,
                                     onClick = { onPlay(t, items) }, onLongClick = { onMenu(t) },
                                     modifier = Modifier.weight(1f),
                                 ) {
-                                    IconButton(R.drawable.ic_close, stringResource(R.string.pl_remove), remove, tint = c.ghost, background = Color.Transparent, size = 40.dp)
+                                    IconButton(Res.drawable.ic_close, stringResource(R.string.pl_remove), remove, tint = c.ghost, background = Color.Transparent, size = 40.dp)
                                 }
                             }
                         }
@@ -244,10 +245,10 @@ fun PlaylistSheet(
                         onClose()
                     }
                 },
-                Modifier.weight(1f), kind = ButtonKind.Ghost, icon = R.drawable.ic_delete,
+                Modifier.weight(1f), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete,
             )
             if (p.downloaded && items.isNotEmpty()) {
-                HButton(stringResource(R.string.pl_delete_files), { onDeleteFiles(items); onClose() }, Modifier.weight(1f), kind = ButtonKind.Ghost, icon = R.drawable.ic_delete)
+                HButton(stringResource(R.string.pl_delete_files), { onDeleteFiles(items); onClose() }, Modifier.weight(1f), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete)
             }
         }
     }
@@ -278,7 +279,7 @@ fun AddToPlaylistSheet(files: List<DownloadTask>, onNew: () -> Unit, onDone: (St
             item {
                 ChoiceRow(onNew) {
                     Box(Modifier.size(width = 64.dp, height = 36.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.accent), contentAlignment = Alignment.Center) {
-                        Icon(R.drawable.ic_add, tint = c.onAccent, size = 20.dp)
+                        Icon(Res.drawable.ic_add, tint = c.onAccent, size = 20.dp)
                     }
                     Spacer(Modifier.width(12.dp))
                     Txt(stringResource(R.string.pl_new), style = Hamstr.type.bodyMedium, color = c.accent)
@@ -300,7 +301,7 @@ fun AddToPlaylistSheet(files: List<DownloadTask>, onNew: () -> Unit, onDone: (St
                             style = Hamstr.type.small, color = if (inIt) c.accent else c.ghost,
                         )
                     }
-                    if (inIt) Icon(R.drawable.ic_check, tint = c.accent, size = 20.dp, modifier = Modifier.padding(end = 8.dp))
+                    if (inIt) Icon(Res.drawable.ic_check, tint = c.accent, size = 20.dp, modifier = Modifier.padding(end = 8.dp))
                 }
             }
         }
@@ -328,13 +329,13 @@ fun NameSheet(title: String, initial: String, action: String, onDone: (String) -
         SheetHeader(title)
         Spacer(Modifier.height(16.dp))
         SheetField(
-            value, { value = it }, stringResource(R.string.pl_name), R.drawable.ic_playlist_add,
+            value, { value = it }, stringResource(R.string.pl_name), Res.drawable.ic_playlist_add,
             modifier = Modifier.focusRequester(focus),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
         )
         Spacer(Modifier.height(12.dp))
-        HButton(action, { submit() }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_check, enabled = name.isNotEmpty() && name != initial)
+        HButton(action, { submit() }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_check, enabled = name.isNotEmpty() && name != initial)
     }
 }
 
@@ -346,7 +347,7 @@ fun PlaylistTile(p: Playlist, width: Dp, onClick: () -> Unit, square: Boolean = 
         PlaylistFan(p.items, Modifier.fillMaxWidth(), square = square)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp)) {
-            if (p.favorites) Icon(R.drawable.ic_favorite, tint = Hamstr.colors.accent, size = 14.dp, modifier = Modifier.padding(end = 4.dp))
+            if (p.favorites) Icon(Res.drawable.ic_favorite, tint = Hamstr.colors.accent, size = 14.dp, modifier = Modifier.padding(end = 4.dp))
             Txt(p.name.ifEmpty { stringResource(R.string.lib_playlist) }, style = Hamstr.type.bodyMedium, maxLines = 1)
         }
         Txt(pluralStringResource(R.plurals.lib_files, p.items.size, p.items.size), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 2.dp))
@@ -361,7 +362,7 @@ fun NewPlaylistTile(width: Dp, onClick: () -> Unit, square: Boolean = false) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(if (square) 1f else 16f / 9f).clip(RoundedCornerShape(14.dp)).border(2.dp, c.line, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center,
-        ) { Icon(R.drawable.ic_add, tint = c.accent, size = 28.dp) }
+        ) { Icon(Res.drawable.ic_add, tint = c.accent, size = 28.dp) }
         Spacer(Modifier.height(6.dp))
         Txt(stringResource(R.string.pl_new), style = Hamstr.type.bodyMedium, color = c.accent, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp))
     }
@@ -395,7 +396,7 @@ fun SongRow(
             Modifier.size(width = if (wide) 74.dp else 52.dp, height = if (wide) 42.dp else 52.dp)
                 .clip(RoundedCornerShape(Radii.thumb)).background(c.black),
         ) {
-            AsciiImage(rememberBitmap(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 1f))
+            AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxWidth().aspectRatio(if (wide) 16f / 9f else 1f))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

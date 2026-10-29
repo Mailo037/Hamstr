@@ -1,5 +1,6 @@
 package app.hamstr
 
+import app.hamstr.data.Downloads
 import app.hamstr.widget.Widgets
 import android.app.Application
 import app.hamstr.data.DownloadFiles
@@ -7,6 +8,7 @@ import app.hamstr.data.DownloadStore
 import app.hamstr.data.Playlists
 import app.hamstr.data.Positions
 import app.hamstr.data.Prefs
+import app.hamstr.data.init
 import app.hamstr.engine.DownloadService
 import app.hamstr.engine.Engine
 import app.hamstr.engine.Network
@@ -24,9 +26,11 @@ class HamstrApp : Application() {
         DownloadFiles.finishPending(this)
         DownloadFiles.fixAudioKinds()
         DownloadService.channels(this)
+        Downloads.control = DownloadService.control(this)
         Engine.start(this)
         Updater.init(this)
         Widgets.start(this)
+        app.hamstr.nearby.PhoneNearby.start(this)
         app.hamstr.ui.AppIcon.shortcuts(this, Prefs.settings.value.accent)
     }
 }

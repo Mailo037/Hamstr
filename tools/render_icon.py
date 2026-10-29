@@ -18,7 +18,7 @@ GRID = [
 ]
 INK, ACCENT, BG = (238, 238, 238), (255, 154, 60), (10, 10, 9)
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FONT = ROOT / "app/src/main/res/font/jetbrains_mono_600.ttf"
+FONT = ROOT / "shared/src/commonMain/composeResources/font/jetbrains_mono_600.ttf"
 
 
 # The launcher has one icon per accent preset (data/Prefs.kt ACCENTS); AppIcon picks the nearest.
@@ -111,7 +111,51 @@ STYLED = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
+def solid(size, content_frac, accent=ACCENT, ink=INK):
+    """The grid as solid cells: the glyphs of the mark blur into grey at taskbar size, cells
+    stay a hamster. Eyes are holes, cheeks are accent cells."""
+    img = Image.new("RGBA", (size, size), BG + (255,))
+    d = ImageDraw.Draw(img)
+    cols, rows = len(GRID[0]), len(GRID)
+    cell = size * content_frac / cols
+    ox, oy = (size - cell * cols) / 2, (size - cell * rows) / 2
+    for r, line in enumerate(GRID):
+        for c, ch in enumerate(line):
+            if ch in "#*":
+                x, y = ox + c * cell, oy + r * cell
+                d.rectangle([x, y, x + cell - 1, y + cell - 1], fill=accent if ch == "*" else ink)
+    return img
+
+
+def tiled(picture, size=1024, tile_frac=824 / 1024):
+    """[picture] on a rounded tile; macOS draws its icons on 824 of 1024 px, Windows edge to edge."""
+    tile, radius = round(size * tile_frac), round(size * tile_frac * 0.225)
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([(size - tile) // 2] * 2 + [(size + tile) // 2 - 1] * 2, radius, fill=255)
+    img.paste(picture, (0, 0), mask)
+    return img
+
+
+def desktop():
+    """The desktop app's icons (desktop/icons): the ASCII mark where icons are big (the
+    PNG Linux takes, the .icns macOS takes) and the solid cells where they are small (the
+    .ico Windows takes, and the window's own icon in the title bar and taskbar)."""
+    out = ROOT / "desktop/icons"
+    out.mkdir(parents=True, exist_ok=True)
+    mark = tiled(render(1024, 0.56))
+    mark.save(out / "hamstr.png")
+    mark.save(out / "hamstr.icns")
+    small = tiled(solid(1024, 0.74), tile_frac=0.96)
+    small.save(out / "hamstr.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    small.resize((256, 256), Image.LANCZOS).save(out / "hamstr_window.png")
+
+
 if __name__ == "__main__":
+    if sys.argv[1:] == ["desktop"]:
+        desktop()
+        print("ok")
+        sys.exit()
     res = ROOT / "app/src/main/res"
     dens = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
     for suffix, accent in PRESETS.items():
@@ -139,4 +183,5 @@ if __name__ == "__main__":
     (res / "values/icon_colors.xml").write_text("\n".join(colors + ["</resources>", ""]), encoding="utf-8")
     (res / "drawable/ic_stat_hamstr.xml").write_text(stat_vector(), encoding="utf-8")
     render(1024, 0.7).save(ROOT / "design/assets/icon_mark.png")
+    desktop()
     print("ok")

@@ -1,6 +1,8 @@
 package app.hamstr.ui
 
-import android.graphics.Bitmap
+import org.jetbrains.compose.resources.stringResource as sharedString
+import app.hamstr.res.*
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -115,6 +117,7 @@ fun ShareSheet(
     onOpen: (DownloadTask) -> Unit,
     onStashVersion: (DownloadTask, Choice) -> Unit,
     onBatchQueued: () -> Unit = onDismiss,
+    onSend: ((String, String?) -> Unit)? = null,
 ) {
     val target = remember(url) { runCatching { app.hamstr.engine.CineSrcTarget.parse(url) }.getOrNull()?.takeIf { it.needsEpisodes } }
     var episodeUrl by remember(url) { mutableStateOf<String?>(null) }
@@ -126,7 +129,7 @@ fun ShareSheet(
             SingleMediaShareSheet(mediaUrl, { info, choice -> onStash(mediaUrl, info, choice) },
                 onStashOther = onStash,
                 onDismiss = { if (episodeUrl != null) episodeUrl = null else onDismiss() }, onOpen = onOpen, onStashVersion = onStashVersion,
-                onBatchQueued = onBatchQueued)
+                onBatchQueued = onBatchQueued, onSend = onSend)
         }
     }
 }
@@ -140,6 +143,7 @@ private fun SingleMediaShareSheet(
     onOpen: (DownloadTask) -> Unit,
     onStashVersion: (DownloadTask, Choice) -> Unit,
     onBatchQueued: () -> Unit,
+    onSend: ((String, String?) -> Unit)?,
 ) {
     // A playlist is known only once yt-dlp has listed it; until then the usual sheet loads.
     val listed = Engine.cachedInfo(url)?.takeIf { it.entries != null }
@@ -152,7 +156,7 @@ private fun SingleMediaShareSheet(
             onBatchQueued()
         }, onDismiss = onDismiss)
     } else {
-        MediaSheet(url, onStash, onStashOther, onDismiss, onOpen, onStashVersion, onPlaylist = { playlist = it })
+        MediaSheet(url, onStash, onStashOther, onDismiss, onOpen, onStashVersion, onPlaylist = { playlist = it }, onSend = onSend)
     }
 }
 
@@ -165,6 +169,7 @@ private fun MediaSheet(
     onOpen: (DownloadTask) -> Unit,
     onStashVersion: (DownloadTask, Choice) -> Unit,
     onPlaylist: (MediaInfo) -> Unit,
+    onSend: ((String, String?) -> Unit)?,
 ) {
     val c = Hamstr.colors
     val context = LocalContext.current
@@ -212,8 +217,8 @@ private fun MediaSheet(
     LaunchedEffect(info) { if (info != null && !modeTouched && looksLikeAudio(url, info)) mode = Mode.Audio }
 
     // The site's own picture shows first; yt-dlp's takes over when it's in.
-    val infoBitmap: Bitmap? = rememberBitmap(info?.thumbnail)
-    val peekBitmap: Bitmap? = rememberBitmap(peek?.thumbnail)
+    val infoBitmap: ImageBitmap? = rememberImage(info?.thumbnail)
+    val peekBitmap: ImageBitmap? = rememberImage(peek?.thumbnail)
     val bitmap = infoBitmap ?: peekBitmap
 
     // rain 1 -> 0 once a picture is in, then the image wipes in from the top.
@@ -289,12 +294,12 @@ private fun MediaSheet(
             }
             is InfoState.Failed -> {
                 val why = Failures.explain(s.message)
-                Txt(stringResource(why.title), style = Hamstr.type.section)
+                Txt(sharedString(why.title), style = Hamstr.type.section)
                 Spacer(Modifier.height(3.dp))
-                Txt(stringResource(why.hint), style = Hamstr.type.small, color = c.muted)
+                Txt(sharedString(why.hint), style = Hamstr.type.small, color = c.muted)
                 // Locked here, maybe free on YouTube Music: offer that one instead. Taking it closes
                 // the sheet and stashes it right away, as a song unless Video was picked on purpose.
-                if (why.title == R.string.err_drm) {
+                if (why.title == Res.string.err_drm) {
                     val guess = remember(url) { guessFromLink(url) }
                     val title = peek?.title ?: guess?.first
                     if (title != null) {
@@ -311,7 +316,7 @@ private fun MediaSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Txt(stringResource(R.string.err_details), style = Hamstr.type.badge, color = c.ghost)
-                        Icon(R.drawable.ic_expand_more, tint = c.ghost, size = 16.dp)
+                        Icon(Res.drawable.ic_expand_more, tint = c.ghost, size = 16.dp)
                     }
                     AnimatedVisibility(details, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                         Txt(s.message, style = Hamstr.type.mono, color = c.red, maxLines = 6, modifier = Modifier.padding(top = 2.dp))
@@ -325,7 +330,7 @@ private fun MediaSheet(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.control)).background(c.surface).padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(if (here.isNotEmpty()) R.drawable.ic_check_circle else R.drawable.ic_download, tint = c.accent, size = 18.dp)
+                Icon(if (here.isNotEmpty()) Res.drawable.ic_check_circle else Res.drawable.ic_download, tint = c.accent, size = 18.dp)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Txt(
@@ -338,7 +343,7 @@ private fun MediaSheet(
                         style = Hamstr.type.small, color = c.ghost, maxLines = 1,
                     )
                 }
-                head?.let { HButton(stringResource(R.string.share_open), { onOpen(exact ?: it) }, kind = ButtonKind.Ghost, icon = R.drawable.ic_play_arrow) }
+                head?.let { HButton(stringResource(R.string.share_open), { onOpen(exact ?: it) }, kind = ButtonKind.Ghost, icon = Res.drawable.ic_play_arrow) }
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -390,7 +395,7 @@ private fun MediaSheet(
                     Txt(stringResource(R.string.share_custom_hint), style = Hamstr.type.small, color = c.ghost)
                     Spacer(Modifier.height(6.dp))
                     SheetField(
-                        custom, { custom = it }, stringResource(R.string.share_custom_placeholder), R.drawable.ic_code,
+                        custom, { custom = it }, stringResource(R.string.share_custom_placeholder), Res.drawable.ic_code,
                         mono = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                     )
@@ -407,7 +412,7 @@ private fun MediaSheet(
                 // Offline: it can still be queued; it starts on its own once the phone is back online.
                 !net.online -> HButton(
                     stringResource(R.string.share_stash_later), { keepChoice(); onStash(stashInfo, choice) },
-                    primary, kind = ButtonKind.Primary, icon = R.drawable.ic_download,
+                    primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_download,
                 )
                 s is InfoState.Failed -> {
                     val fix = Failures.explain(s.message).fix
@@ -427,21 +432,26 @@ private fun MediaSheet(
                                 reload++
                             } else if (!updating) reload++
                         },
-                        primary, kind = ButtonKind.Primary, icon = R.drawable.ic_refresh, enabled = !updating && fix != Fix.None,
+                        primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_refresh, enabled = !updating && fix != Fix.None,
                     )
                 }
-                exact != null -> HButton(stringResource(R.string.share_open_it), { onOpen(exact) }, primary, kind = ButtonKind.Primary, icon = R.drawable.ic_play_arrow)
+                exact != null -> HButton(stringResource(R.string.share_open_it), { onOpen(exact) }, primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_play_arrow)
                 head != null -> HButton(
                     stringResource(R.string.share_stash_too, if (mode == Mode.Audio) audio else heightLabel(height)),
                     { keepChoice(); onStashVersion(head, choice) },
-                    primary, kind = ButtonKind.Primary, icon = R.drawable.ic_download,
+                    primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_download,
                 )
                 else -> HButton(
                     if (size != null) stringResource(R.string.share_stash_sized, size) else stringResource(R.string.share_stash),
                     { keepChoice(); onStash(stashInfo, choice) },
-                    primary, kind = ButtonKind.Primary, icon = R.drawable.ic_download,
+                    primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_download,
                 )
             }
+        }
+        // Or hand the link to another Hamstr nearby, like AirDrop.
+        if (onSend != null) {
+            Spacer(Modifier.height(8.dp))
+            HButton(stringResource(R.string.nearby_send), { onSend(url, stashInfo?.title) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_send)
         }
     }
 }
@@ -453,7 +463,7 @@ private fun ExpandRow(title: String, value: String, expanded: Boolean, onToggle:
         SettingRow(title, onClick = onToggle) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Txt(value, color = Hamstr.colors.muted)
-                Icon(R.drawable.ic_expand_more, tint = Hamstr.colors.muted, size = 18.dp)
+                Icon(Res.drawable.ic_expand_more, tint = Hamstr.colors.muted, size = 18.dp)
             }
         }
         AnimatedVisibility(expanded, enter = expandVertically(Specs.blend()) + fadeIn(Specs.blend()), exit = shrinkVertically(tween(150)) + fadeOut(tween(150))) {
@@ -462,11 +472,3 @@ private fun ExpandRow(title: String, value: String, expanded: Boolean, onToggle:
     }
 }
 
-fun formatDuration(sec: Int): String = if (sec >= 3600) "%d:%02d:%02d".format(sec / 3600, sec / 60 % 60, sec % 60) else "%d:%02d".format(sec / 60, sec % 60)
-
-fun formatBytes(b: Long): String = when {
-    b >= 1L shl 30 -> "%.1f GB".format(b / (1L shl 30).toDouble())
-    b >= 1L shl 20 -> "%.0f MB".format(b / (1L shl 20).toDouble())
-    b >= 1L shl 10 -> "%.0f KB".format(b / 1024.0)
-    else -> "$b B"
-}

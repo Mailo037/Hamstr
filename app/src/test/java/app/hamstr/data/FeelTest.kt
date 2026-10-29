@@ -1,6 +1,6 @@
 package app.hamstr.data
 
-import app.hamstr.R
+import app.hamstr.res.*
 import app.hamstr.engine.Failures
 import app.hamstr.engine.Fix
 import org.junit.Assert.assertEquals
@@ -22,14 +22,14 @@ class FeelTest {
 
     @Test
     fun failuresInPlainWords() {
-        assertEquals(R.string.err_private, Failures.explain("[youtube] abc: Private video. Sign in if you've been granted access").title)
-        assertEquals(R.string.err_age, Failures.explain("Sign in to confirm your age. This video may be inappropriate for some users.").title)
-        assertEquals(R.string.err_login, Failures.explain("Sign in to confirm you're not a bot").title)
-        assertEquals(R.string.err_gone, Failures.explain("Video unavailable. This video has been removed by the uploader").title)
-        assertEquals(R.string.err_unsupported, Failures.explain("Unsupported URL: https://example.com").title)
+        assertEquals(Res.string.err_private, Failures.explain("[youtube] abc: Private video. Sign in if you've been granted access").title)
+        assertEquals(Res.string.err_age, Failures.explain("Sign in to confirm your age. This video may be inappropriate for some users.").title)
+        assertEquals(Res.string.err_login, Failures.explain("Sign in to confirm you're not a bot").title)
+        assertEquals(Res.string.err_gone, Failures.explain("Video unavailable. This video has been removed by the uploader").title)
+        assertEquals(Res.string.err_unsupported, Failures.explain("Unsupported URL: https://example.com").title)
         assertEquals(Fix.UpdateYtDlp, Failures.explain("[youtube] abc: Unable to extract nsig function").fix)
-        assertEquals(R.string.err_full, Failures.explain("OSError: [Errno 28] No space left on device").title)
-        assertEquals(R.string.err_unknown, Failures.explain("").title)
+        assertEquals(Res.string.err_full, Failures.explain("OSError: [Errno 28] No space left on device").title)
+        assertEquals(Res.string.err_unknown, Failures.explain("").title)
     }
 
     @Test

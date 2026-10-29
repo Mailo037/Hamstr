@@ -1,5 +1,8 @@
 package app.hamstr
 
+import org.jetbrains.compose.resources.stringResource as sharedString
+import org.jetbrains.compose.resources.DrawableResource
+import app.hamstr.res.*
 import androidx.compose.ui.platform.LocalWindowInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.hamstr.ui.PlaylistSheet
@@ -111,13 +114,15 @@ import kotlinx.coroutines.launch
 import app.hamstr.ui.LibraryScreen
 import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
+import app.hamstr.ui.SendSheet
+import app.hamstr.ui.RequestSheet
 import app.hamstr.ui.QualitySheet
 import app.hamstr.ui.RenameSheet
 import app.hamstr.ui.InfoSheet
 import app.hamstr.ui.InfoAction
 import app.hamstr.ui.formatBytes
 import app.hamstr.ui.formatBadge
-import app.hamstr.ui.rememberBitmap
+import app.hamstr.ui.rememberImage
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
@@ -172,7 +177,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         askStorage(this, storagePermission::launch)
-        Engine.warmUp()
         Updater.checkOnLaunch(this)
         addOnPictureInPictureModeChangedListener { inPip.value = it.isInPictureInPictureMode }
         inPip.value = isInPictureInPictureMode
@@ -250,10 +254,10 @@ fun askStorage(activity: ComponentActivity, storage: (String) -> Unit) {
     }
 }
 
-private enum class Tab(val label: Int, val icon: Int) {
-    Stash(R.string.tab_stash, R.drawable.ic_download),
-    Library(R.string.tab_library, R.drawable.ic_grid_view),
-    Settings(R.string.tab_settings, R.drawable.ic_settings),
+private enum class Tab(val label: Int, val icon: DrawableResource) {
+    Stash(R.string.tab_stash, Res.drawable.ic_download),
+    Library(R.string.tab_library, Res.drawable.ic_grid_view),
+    Settings(R.string.tab_settings, Res.drawable.ic_settings),
 }
 
 /** A short message at the bottom, optionally with one action (Undo, Open, Retry). */
@@ -272,6 +276,9 @@ private fun App(inPip: Boolean) {
     var introDone by rememberSaveable { mutableStateOf(!fx.intro || MainActivity.pendingAction.value != null) }
     var sheetUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
+    // A link on its way to another Hamstr nearby, and the question from one that wants to send.
+    var sendLink by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    val requests by app.hamstr.nearby.Nearby.requests.collectAsState()
     var qualityFor by remember { mutableStateOf<DownloadTask?>(null) }
     var renameFor by remember { mutableStateOf<DownloadTask?>(null) }
     var infoFor by remember { mutableStateOf<DownloadTask?>(null) }
@@ -594,6 +601,7 @@ private fun App(inPip: Boolean) {
                 clipboardLink = clipLink,
                 onLink = { url -> addSheet = false; sheetUrl = url },
                 onFiles = { addSheet = false; pickFiles.launch(arrayOf("*/*")) },
+                onSend = { url -> addSheet = false; sendLink = url to null },
             )
         }
         val stashed = {
@@ -610,6 +618,7 @@ private fun App(inPip: Boolean) {
                     onDismiss = { sheetUrl = null },
                     onOpen = { t -> sheetUrl = null; play(t, library()) },
                     onStashVersion = { of, choice -> DownloadService.stashVersion(context, of, choice, replace = false); stashed() },
+                    onSend = { link, title -> sheetUrl = null; sendLink = link to title },
                 )
             }
         }
@@ -637,6 +646,7 @@ private fun App(inPip: Boolean) {
                     onDelete = { menuFor = null; delete(listOf(it)) },
                     onAgain = { menuFor = null; again(it) },
                     onCopied = { hint(it) },
+                    onSend = { menuFor = null; sendLink = it.url to it.title },
                 )
             }
         }
@@ -658,12 +668,12 @@ private fun App(inPip: Boolean) {
                     onCopy = { copy(context, it); hint(resources.getString(R.string.info_copied)) },
                     // The same changes the file menu offers, right where the value is shown.
                     actions = buildMap {
-                        if (present) put(R.string.info_name, InfoAction(R.drawable.ic_edit, R.string.menu_rename) { infoFor = null; renameFor = t })
-                        if (present && canHaveVersions(t)) put(R.string.info_quality, InfoAction(R.drawable.ic_movie, R.string.menu_quality) { infoFor = null; qualityFor = t })
-                        if (t.url.startsWith("http")) put(R.string.info_link, InfoAction(R.drawable.ic_open_in_new, R.string.info_open_link) {
+                        if (present) put(R.string.info_name, InfoAction(Res.drawable.ic_edit, R.string.menu_rename) { infoFor = null; renameFor = t })
+                        if (present && canHaveVersions(t)) put(R.string.info_quality, InfoAction(Res.drawable.ic_movie, R.string.menu_quality) { infoFor = null; qualityFor = t })
+                        if (t.url.startsWith("http")) put(R.string.info_link, InfoAction(Res.drawable.ic_open_in_new, R.string.info_open_link) {
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(t.url))) }
                         })
-                        if (present) put(R.string.info_file, InfoAction(R.drawable.ic_open_in_new, R.string.menu_open_with) { Playback.openWith(context, t) })
+                        if (present) put(R.string.info_file, InfoAction(Res.drawable.ic_open_in_new, R.string.menu_open_with) { Playback.openWith(context, t) })
                     },
                 )
             }
@@ -678,6 +688,13 @@ private fun App(inPip: Boolean) {
                     onDone = { msg -> qualityFor = null; hint(msg) },
                 )
             }
+        }
+        Overlay(visible = sendLink != null, onDismiss = { sendLink = null }) {
+            sendLink?.let { (url, title) -> SendSheet(url, title) }
+        }
+        val request = requests.firstOrNull()
+        Overlay(visible = request != null, onDismiss = { request?.let { app.hamstr.nearby.Nearby.answer(it, accept = false) } }) {
+            request?.let { r -> RequestSheet(r) { tab = Tab.Stash } }
         }
         Overlay(visible = updateSheet, onDismiss = { updateSheet = false }) {
             UpdateSheet(
@@ -714,6 +731,7 @@ private fun TaskMenu(
     onDelete: (DownloadTask) -> Unit,
     onAgain: (DownloadTask) -> Unit,
     onCopied: (String) -> Unit,
+    onSend: (DownloadTask) -> Unit,
 ) {
     val c = Hamstr.colors
     val context = LocalContext.current
@@ -735,9 +753,9 @@ private fun TaskMenu(
             // What happened, in plain words, with the engine's own message underneath.
             val why = Failures.explain(t.error)
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.row)).background(c.surface).padding(12.dp)) {
-                Txt(stringResource(why.title), style = Hamstr.type.bodyMedium, color = c.red)
+                Txt(sharedString(why.title), style = Hamstr.type.bodyMedium, color = c.red)
                 Spacer(Modifier.height(2.dp))
-                Txt(stringResource(why.hint), style = Hamstr.type.small, color = c.muted)
+                Txt(sharedString(why.hint), style = Hamstr.type.small, color = c.muted)
                 t.error?.let {
                     Spacer(Modifier.height(8.dp))
                     Txt(it, style = Hamstr.type.mono, color = c.ghost)
@@ -755,12 +773,12 @@ private fun TaskMenu(
                                 onClose()
                             }
                         },
-                        Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_refresh, enabled = !updating,
+                        Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_refresh, enabled = !updating,
                     )
                 }
             }
             // Locked with DRM where it was shared: maybe YouTube Music has it.
-            if (why.title == R.string.err_drm) {
+            if (why.title == Res.string.err_drm) {
                 Spacer(Modifier.height(6.dp))
                 val guess = remember(t.url) { app.hamstr.ui.guessFromLink(t.url) }
                 val title = t.title.takeIf { it.isNotBlank() && !it.startsWith("http") } ?: guess?.first
@@ -772,12 +790,12 @@ private fun TaskMenu(
             }
             Spacer(Modifier.height(6.dp))
             t.error?.let { err ->
-                MenuRow(R.drawable.ic_content_paste, stringResource(R.string.err_copy)) { copy(context, err); onCopied(resources.getString(R.string.err_copied)) }
+                MenuRow(Res.drawable.ic_content_paste, stringResource(R.string.err_copy)) { copy(context, err); onCopied(resources.getString(R.string.err_copied)) }
             }
         }
         if (gone && t.status == Status.Done) {
             Txt(stringResource(R.string.file_gone_long), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
-            MenuRow(R.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) }
+            MenuRow(Res.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) }
         }
         val copyLink = { copy(context, t.url); onCopied(resources.getString(R.string.info_copied)); onClose() }
         if (file != null) {
@@ -786,46 +804,48 @@ private fun TaskMenu(
             // The everyday actions as tiles, then what changes the file, then what removes it.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionTile(
-                    if (playable) R.drawable.ic_play_arrow else R.drawable.ic_open_in_new,
+                    if (playable) Res.drawable.ic_play_arrow else Res.drawable.ic_open_in_new,
                     stringResource(if (playable) R.string.menu_tile_play else R.string.menu_tile_view),
                     accent = true,
                 ) { onPlay(t); onClose() }
-                ActionTile(R.drawable.ic_share, stringResource(R.string.menu_tile_share)) { Playback.shareFile(context, t); onClose() }
-                ActionTile(R.drawable.ic_open_in_new, stringResource(R.string.menu_tile_open)) { Playback.openWith(context, t); onClose() }
-                ActionTile(R.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
+                ActionTile(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { Playback.shareFile(context, t); onClose() }
+                ActionTile(Res.drawable.ic_open_in_new, stringResource(R.string.menu_tile_open)) { Playback.openWith(context, t); onClose() }
+                ActionTile(Res.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
             }
             Spacer(Modifier.height(10.dp))
             if (playable) {
                 val lists by Playlists.lists.collectAsState()
                 val fav = remember(lists, t.id) { Playlists.isFavorite(t) }
                 MenuGroup {
-                    MenuRow(R.drawable.ic_play_next, stringResource(R.string.play_next)) { onPlayNext(t) }
-                    MenuRow(R.drawable.ic_add_queue, stringResource(R.string.add_to_queue)) { onAddToQueue(t) }
-                    MenuRow(if (fav) R.drawable.ic_favorite else R.drawable.ic_favorite_border, stringResource(if (fav) R.string.fav_remove else R.string.fav_add)) { onFavorite(t) }
+                    MenuRow(Res.drawable.ic_play_next, stringResource(R.string.play_next)) { onPlayNext(t) }
+                    MenuRow(Res.drawable.ic_add_queue, stringResource(R.string.add_to_queue)) { onAddToQueue(t) }
+                    MenuRow(if (fav) Res.drawable.ic_favorite else Res.drawable.ic_favorite_border, stringResource(if (fav) R.string.fav_remove else R.string.fav_add)) { onFavorite(t) }
                 }
                 Spacer(Modifier.height(10.dp))
             }
             MenuGroup {
-                if (canHaveVersions(t)) MenuRow(R.drawable.ic_movie, stringResource(R.string.menu_quality)) { onQuality(t) }
-                if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(R.drawable.ic_music_note, stringResource(R.string.menu_save_audio)) { onSaveAudio(t) }
-                if (playable) MenuRow(R.drawable.ic_playlist_add, stringResource(R.string.pl_add)) { onAddToPlaylist(t) }
-                MenuRow(R.drawable.ic_edit, stringResource(R.string.menu_rename)) { onRename(t) }
-                MenuRow(R.drawable.ic_info, stringResource(R.string.menu_info)) { onInfo(t) }
+                if (canHaveVersions(t)) MenuRow(Res.drawable.ic_movie, stringResource(R.string.menu_quality)) { onQuality(t) }
+                if (canSaveAudio(t, tasks.filter { it.family == t.family })) MenuRow(Res.drawable.ic_music_note, stringResource(R.string.menu_save_audio)) { onSaveAudio(t) }
+                if (playable) MenuRow(Res.drawable.ic_playlist_add, stringResource(R.string.pl_add)) { onAddToPlaylist(t) }
+                MenuRow(Res.drawable.ic_edit, stringResource(R.string.menu_rename)) { onRename(t) }
+                MenuRow(Res.drawable.ic_info, stringResource(R.string.menu_info)) { onInfo(t) }
+                if (t.url.startsWith("http")) MenuRow(Res.drawable.ic_send, stringResource(R.string.nearby_send)) { onSend(t) }
             }
             Spacer(Modifier.height(10.dp))
         } else {
-            MenuRow(R.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
+            MenuRow(Res.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
+            if (t.url.startsWith("http")) MenuRow(Res.drawable.ic_send, stringResource(R.string.nearby_send)) { onSend(t) }
         }
         if (t.status == Status.Failed || t.status == Status.Paused) {
-            MenuRow(R.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
+            MenuRow(Res.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
         }
         when {
-            t.status.active -> MenuRow(R.drawable.ic_close, stringResource(R.string.menu_cancel)) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
+            t.status.active -> MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_cancel)) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
             file != null -> MenuGroup {
-                MenuRow(R.drawable.ic_visibility_off, stringResource(R.string.menu_hide), subtitle = stringResource(R.string.menu_hide_hint)) { onHide(listOf(t)) }
-                MenuRow(R.drawable.ic_delete, stringResource(R.string.menu_delete), danger = true) { onDelete(t) }
+                MenuRow(Res.drawable.ic_visibility_off, stringResource(R.string.menu_hide), subtitle = stringResource(R.string.menu_hide_hint)) { onHide(listOf(t)) }
+                MenuRow(Res.drawable.ic_delete, stringResource(R.string.menu_delete), danger = true) { onDelete(t) }
             }
-            else -> MenuRow(R.drawable.ic_close, stringResource(R.string.menu_remove)) { onHide(listOf(t)) }
+            else -> MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_remove)) { onHide(listOf(t)) }
         }
     }
 }
@@ -836,11 +856,11 @@ private fun MenuHeader(t: DownloadTask, showPicture: Boolean) {
     val c = Hamstr.colors
     Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (showPicture) {
-            val bitmap = rememberBitmap(t.thumbnail, 240)
+            val bitmap = rememberImage(t.thumbnail, 240)
             // A song's cover is square, as everywhere else songs show.
             val song = kindOf(t) == Kind.Audio
             Box(Modifier.width(if (song) 56.dp else 88.dp).aspectRatio(if (song) 1f else 16f / 9f).clip(RoundedCornerShape(10.dp)).background(c.black)) {
-                bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                bitmap?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             }
             Spacer(Modifier.width(12.dp))
         }
@@ -859,7 +879,7 @@ private fun MenuHeader(t: DownloadTask, showPicture: Boolean) {
 
 /** A button in the menu's top row: icon over a short label. */
 @Composable
-private fun RowScope.ActionTile(icon: Int, label: String, accent: Boolean = false, onClick: () -> Unit) {
+private fun RowScope.ActionTile(icon: DrawableResource, label: String, accent: Boolean = false, onClick: () -> Unit) {
     val c = Hamstr.colors
     Column(
         Modifier
@@ -886,7 +906,7 @@ private fun MenuGroup(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun MenuRow(icon: Int, label: String, danger: Boolean = false, subtitle: String? = null, onClick: () -> Unit) {
+private fun MenuRow(icon: DrawableResource, label: String, danger: Boolean = false, subtitle: String? = null, onClick: () -> Unit) {
     val c = Hamstr.colors
     Row(
         Modifier

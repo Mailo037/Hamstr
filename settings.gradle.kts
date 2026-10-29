@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Hamstr"
-include(":app")
+include(":app", ":shared", ":desktop")

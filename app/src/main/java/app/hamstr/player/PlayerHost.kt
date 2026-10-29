@@ -1,5 +1,7 @@
 package app.hamstr.player
 
+import org.jetbrains.compose.resources.DrawableResource
+import app.hamstr.res.*
 import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -86,6 +88,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -107,6 +110,9 @@ import androidx.media3.common.VideoSize
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import app.hamstr.R
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import app.hamstr.data.DownloadTask
 import app.hamstr.ui.components.AsciiImage
 import app.hamstr.ui.components.Badge
@@ -121,7 +127,7 @@ import app.hamstr.ui.components.rememberVelocityStretch
 import app.hamstr.ui.components.stretchX
 import app.hamstr.ui.formatBadge
 import app.hamstr.ui.canHaveVersions
-import app.hamstr.ui.rememberBitmap
+import app.hamstr.ui.rememberImage
 import app.hamstr.ui.theme.Hamstr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -167,6 +173,9 @@ fun rememberPlayerUi(player: Player?): PlayerUi {
             override fun onRepeatModeChanged(repeatMode: Int) { ui.repeat = repeatMode }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { ui.shuffle = shuffleModeEnabled }
             override fun onEvents(player: Player, events: Player.Events) {
+                // Paused seeks and newly prepared media update through events, without polling.
+                ui.position = player.currentPosition
+                ui.duration = player.duration.coerceAtLeast(0L)
                 ui.hasNext = player.hasNextMediaItem()
                 ui.hasPrevious = player.hasPreviousMediaItem()
                 ui.nextIndex = player.nextMediaItemIndex
@@ -185,11 +194,16 @@ fun rememberPlayerUi(player: Player?): PlayerUi {
         player.videoSize.takeIf { it.width > 0 && it.height > 0 }?.let { ui.aspect = it.width * it.pixelWidthHeightRatio / it.height }
         onDispose { player.removeListener(listener) }
     }
-    LaunchedEffect(player) {
-        while (player != null) {
-            ui.position = player.currentPosition
-            ui.duration = player.duration.coerceAtLeast(0L)
-            delay(200)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(player, lifecycle, ui.isPlaying) {
+        if (player == null) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            do {
+                ui.position = player.currentPosition
+                ui.duration = player.duration.coerceAtLeast(0L)
+                if (!player.isPlaying) break
+                delay(200)
+            } while (player.isPlaying)
         }
     }
     return ui
@@ -394,16 +408,16 @@ fun PlayerHost(
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(R.drawable.ic_expand_more, stringResource(R.string.player_minimize), { Playback.minimize() }, tint = c.ink)
+                    IconButton(Res.drawable.ic_expand_more, stringResource(R.string.player_minimize), { Playback.minimize() }, tint = c.ink)
                     Spacer(Modifier.width(12.dp))
                     Txt(
                         stringResource(when (kind) { Kind.Video -> R.string.player_video; Kind.Audio -> R.string.player_now_playing; Kind.Image -> R.string.player_image; Kind.Other -> R.string.player_file }),
                         style = Hamstr.type.bodyMedium, color = c.muted, modifier = Modifier.weight(1f),
                     )
-                    if (kind == Kind.Video || kind == Kind.Audio) IconButton(R.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue)
-                    else IconButton(R.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
-                    IconButton(R.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(activity ?: return@IconButton, t) })
-                    IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
+                    if (kind == Kind.Video || kind == Kind.Audio) IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue)
+                    else IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
+                    IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(activity ?: return@IconButton, t) })
+                    IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
                 }
                 // Info + controls under the media (beside it in landscape). They scroll only when
                 // the screen is too short; otherwise a drag here still shrinks the player.
@@ -427,7 +441,7 @@ fun PlayerHost(
                             (t.uploader?.let(app.hamstr.data.Lyrics::cleanArtist) ?: t.source)?.let { who ->
                                 Spacer(Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(R.drawable.ic_person, tint = c.ghost, size = 16.dp)
+                                    Icon(Res.drawable.ic_person, tint = c.ghost, size = 16.dp)
                                     Spacer(Modifier.width(6.dp))
                                     Txt(who, style = Hamstr.type.body, color = c.muted, maxLines = 1)
                                 }
@@ -445,7 +459,7 @@ fun PlayerHost(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Badge(formatBadge(t), accent = true)
-                            Icon(R.drawable.ic_expand_more, tint = c.accent, size = 16.dp)
+                            Icon(Res.drawable.ic_expand_more, tint = c.accent, size = 16.dp)
                         }
                     }
                     Spacer(Modifier.height(18.dp))
@@ -462,8 +476,8 @@ fun PlayerHost(
                             Txt(stringResource(R.string.player_cant_show, file?.extension ?: "?"), color = c.muted)
                             Spacer(Modifier.height(14.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                HButton(stringResource(R.string.menu_open_with), { activity?.let { Playback.openWith(it, t) } }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = R.drawable.ic_open_in_new)
-                                HButton(stringResource(R.string.menu_share_file), { activity?.let { Playback.shareFile(it, t) } }, Modifier.weight(1f), icon = R.drawable.ic_share)
+                                HButton(stringResource(R.string.menu_open_with), { activity?.let { Playback.openWith(it, t) } }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = Res.drawable.ic_open_in_new)
+                                HButton(stringResource(R.string.menu_share_file), { activity?.let { Playback.shareFile(it, t) } }, Modifier.weight(1f), icon = Res.drawable.ic_share)
                             }
                         }
                     }
@@ -572,10 +586,10 @@ fun PlayerHost(
                         Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2)
                     }
                     Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(R.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue, tint = c.muted, background = Color.Transparent)
+                        IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue, tint = c.muted, background = Color.Transparent)
                         if (playable) PlayPause(ui.isPlaying, size = 44.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
                         IconButton(
-                            R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() },
+                            Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() },
                             tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent,
                         )
                     }
@@ -588,7 +602,7 @@ fun PlayerHost(
                         if (swipeX.value > 0f) previous?.let { MiniSlot(it, null, picture = true, inset = inset, mediaH = miniMediaH, modifier = Modifier.offset { IntOffset((swipeX.value - slot).roundToInt(), 0) }) }
                     }
                     if (playable) PlayPause(ui.isPlaying, size = if (style == MiniStyle.Compact) 36.dp else 40.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
-                    if (ui.hasNext) IconButton(R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() }, background = Color.Transparent)
+                    if (ui.hasNext) IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() }, background = Color.Transparent)
                     else Spacer(Modifier.width(6.dp))
                 }
                 // Concentric with the bar's 18 dp corners (the media sits 4 dp in, at 14 dp);
@@ -636,7 +650,7 @@ fun PlayerHost(
                 Kind.Image -> ImageView(file, zoomable = ev > 0.98f)
                 Kind.Other -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(R.drawable.ic_description, tint = c.accent, size = lerp(22f, 64f, ev).dp)
+                        Icon(Res.drawable.ic_description, tint = c.accent, size = lerp(22f, 64f, ev).dp)
                         if (ev > 0.5f) Badge(file?.extension ?: stringResource(R.string.player_file), accent = true)
                     }
                 }
@@ -710,7 +724,7 @@ private fun VideoSurface(
                     Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(R.drawable.ic_expand_more, stringResource(R.string.player_minimize), onMinimize, tint = Color.White, background = Color.Transparent)
+                    IconButton(Res.drawable.ic_expand_more, stringResource(R.string.player_minimize), onMinimize, tint = Color.White, background = Color.Transparent)
                     Spacer(Modifier.width(4.dp))
                     Column(Modifier.weight(1f)) {
                         Txt(t.title, style = Hamstr.type.bodyMedium, color = Color.White, maxLines = 1)
@@ -722,23 +736,23 @@ private fun VideoSurface(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Badge(formatBadge(t), accent = true)
-                                Icon(R.drawable.ic_expand_more, tint = c.accent, size = 16.dp)
+                                Icon(Res.drawable.ic_expand_more, tint = c.accent, size = 16.dp)
                             } else Badge(formatBadge(t))
                         }
                     }
                     // One pill for the actions, so they read as a group rather than loose buttons.
                     Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.35f))) {
                         val none = Color.Transparent
-                        IconButton(R.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(context, t) }, tint = Color.White, background = none)
-                        IconButton(R.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(context, t) }, tint = Color.White, background = none)
-                        IconButton(R.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = none)
-                        if (forced) IconButton(R.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = none)
+                        IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(context, t) }, tint = Color.White, background = none)
+                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(context, t) }, tint = Color.White, background = none)
+                        IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = none)
+                        if (forced) IconButton(Res.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = none)
                     }
                 }
                 Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(R.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
+                    IconButton(Res.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
                     PlayPause(ui.isPlaying, size = 64.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
-                    IconButton(R.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
+                    IconButton(Res.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
                 }
                 Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 14.dp)) {
                     Scrubber(controller, ui)
@@ -762,7 +776,7 @@ private fun Modifier.aspectFit(aspect: Float): Modifier = this.layout { measurab
 /** Audio cover: the thumbnail; tap it and it dissolves into ASCII (and back). */
 @Composable
 private fun Cover(t: DownloadTask, ev: Float) {
-    val bitmap = rememberBitmap(t.thumbnail, 720)
+    val bitmap = rememberImage(t.thumbnail, 720)
     val reveal = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
     AsciiImage(
@@ -843,20 +857,20 @@ private fun Transport(
         }
         // In a queue the side buttons skip between files; for one file they jump 10 s.
         if (queue.size > 1) {
-            IconButton(R.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
+            IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
         } else {
-            IconButton(R.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
+            IconButton(Res.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
         }
         Spacer(Modifier.width(10.dp))
         PlayPause(ui.isPlaying, size = 68.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
         Spacer(Modifier.width(10.dp))
         if (queue.size > 1) {
-            IconButton(R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 48.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
+            IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 48.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
         } else {
-            IconButton(R.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
+            IconButton(Res.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
         }
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            if (video) IconButton(R.drawable.ic_fullscreen, stringResource(R.string.player_fullscreen), onFullscreen)
+            if (video) IconButton(Res.drawable.ic_fullscreen, stringResource(R.string.player_fullscreen), onFullscreen)
         }
     }
     Spacer(Modifier.height(14.dp))
@@ -881,7 +895,7 @@ private fun Transport(
                 },
             )
             ToggleChip(
-                if (ui.repeat == Player.REPEAT_MODE_ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat,
+                if (ui.repeat == Player.REPEAT_MODE_ONE) Res.drawable.ic_repeat_one else Res.drawable.ic_repeat,
                 repeatLabel, on = ui.repeat != Player.REPEAT_MODE_OFF,
             ) {
                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
@@ -891,12 +905,12 @@ private fun Transport(
                     else -> Player.REPEAT_MODE_OFF
                 }
             }
-            if (queue.size > 1) ToggleChip(R.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle) {
+            if (queue.size > 1) ToggleChip(Res.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle) {
                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 controller.shuffleModeEnabled = !ui.shuffle
             }
             ToggleChip(
-                R.drawable.ic_timer,
+                Res.drawable.ic_timer,
                 when (val s = sleep) {
                     is Playback.Sleep.At -> fmt((s.endsAt - now).coerceAtLeast(0))
                     Playback.Sleep.EndOfTrack -> stringResource(R.string.sleep_end_short)
@@ -904,14 +918,14 @@ private fun Transport(
                 },
                 on = sleep != null, mono = sleep is Playback.Sleep.At, onClick = onSleep,
             )
-            if (lyrics != null) ToggleChip(R.drawable.ic_lyrics, stringResource(R.string.lyrics), on = lyrics) {
+            if (lyrics != null) ToggleChip(Res.drawable.ic_lyrics, stringResource(R.string.lyrics), on = lyrics) {
                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 onLyrics()
             }
             val current by Playback.current.collectAsState()
             val at = queue.indexOfFirst { it.id == current?.id } + 1
             ToggleChip(
-                R.drawable.ic_queue_music,
+                Res.drawable.ic_queue_music,
                 if (queue.size > 1) "$at / ${queue.size}" else stringResource(R.string.queue_title),
                 on = false, mono = queue.size > 1, onClick = onQueue,
             )
@@ -921,7 +935,7 @@ private fun Transport(
 
 /** A small pill that is lit while its mode is on. */
 @Composable
-private fun ToggleChip(icon: Int, label: String, on: Boolean, mono: Boolean = false, onClick: () -> Unit) {
+private fun ToggleChip(icon: DrawableResource, label: String, on: Boolean, mono: Boolean = false, onClick: () -> Unit) {
     val c = Hamstr.colors
     val p = animateSelection(on)
     Row(
@@ -956,7 +970,7 @@ fun PlayPause(playing: Boolean, size: Dp, onClick: () -> Unit) {
             targetState = playing,
             transitionSpec = { iconSwap() },
             label = "playPause",
-        ) { p -> Icon(if (p) R.drawable.ic_pause else R.drawable.ic_play_arrow, tint = c.onAccent, size = size * 0.45f) }
+        ) { p -> Icon(if (p) Res.drawable.ic_pause else Res.drawable.ic_play_arrow, tint = c.onAccent, size = size * 0.45f) }
     }
 }
 
@@ -1021,7 +1035,7 @@ private fun MiniSlot(t: DownloadTask, ui: PlayerUi?, picture: Boolean, inset: Fl
     Row(modifier.fillMaxSize().padding(start = with(density) { inset.toDp() }), verticalAlignment = Alignment.CenterVertically) {
         // What plays now is drawn by the morphing media on top; only a turning queue needs pictures here.
         Box(Modifier.width(w).height(h).clip(RoundedCornerShape(14.dp)).background(if (picture) c.black else Color.Transparent)) {
-            if (picture) AsciiImage(rememberBitmap(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxSize())
+            if (picture) AsciiImage(rememberImage(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxSize())
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -1044,7 +1058,7 @@ private fun FavoriteButton(t: DownloadTask) {
     val name = stringResource(R.string.pl_favorites)
     AnimatedContent(fav, transitionSpec = { iconSwap() }, label = "favorite") { on ->
         IconButton(
-            if (on) R.drawable.ic_favorite else R.drawable.ic_favorite_border,
+            if (on) Res.drawable.ic_favorite else Res.drawable.ic_favorite_border,
             stringResource(if (on) R.string.fav_remove else R.string.fav_add),
             {
                 haptics.performHapticFeedback(if (on) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
@@ -1082,15 +1096,15 @@ private fun LyricsPanel(t: DownloadTask, controller: Player, ui: PlayerUi, onEdi
                 Modifier.align(Alignment.Center).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(R.drawable.ic_lyrics, tint = c.ghost, size = 32.dp)
+                Icon(Res.drawable.ic_lyrics, tint = c.ghost, size = 32.dp)
                 Spacer(Modifier.height(10.dp))
                 Txt(stringResource(R.string.lyrics_none), style = Hamstr.type.bodyMedium)
                 Spacer(Modifier.height(4.dp))
                 Txt(stringResource(R.string.lyrics_none_hint), style = Hamstr.type.small, color = c.muted)
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HButton(stringResource(R.string.lyrics_retry), { attempt++ }, kind = ButtonKind.Neutral, icon = R.drawable.ic_refresh)
-                    HButton(stringResource(R.string.lyrics_add), onEdit, kind = ButtonKind.Primary, icon = R.drawable.ic_edit)
+                    HButton(stringResource(R.string.lyrics_retry), { attempt++ }, kind = ButtonKind.Neutral, icon = Res.drawable.ic_refresh)
+                    HButton(stringResource(R.string.lyrics_add), onEdit, kind = ButtonKind.Primary, icon = Res.drawable.ic_edit)
                 }
             }
             else -> Txt(
@@ -1099,7 +1113,7 @@ private fun LyricsPanel(t: DownloadTask, controller: Player, ui: PlayerUi, onEdi
             )
         }
         if (lines.isNotEmpty()) IconButton(
-            R.drawable.ic_edit, stringResource(R.string.lyrics_edit), onEdit,
+            Res.drawable.ic_edit, stringResource(R.string.lyrics_edit), onEdit,
             modifier = Modifier.align(Alignment.TopEnd).padding(4.dp), tint = c.muted, background = c.overlay,
         )
     }
@@ -1141,11 +1155,11 @@ private fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: PlayerU
 @Composable
 private fun rememberCoverColor(url: String?): Color {
     val c = Hamstr.colors
-    val bitmap = rememberBitmap(url, 96)
+    val bitmap = rememberImage(url, 96)
     val target = remember(bitmap) {
         bitmap?.let { b ->
             val hsv = FloatArray(3)
-            android.graphics.Color.colorToHSV(android.graphics.Bitmap.createScaledBitmap(b, 1, 1, true).getPixel(0, 0), hsv)
+            android.graphics.Color.colorToHSV(android.graphics.Bitmap.createScaledBitmap(b.asAndroidBitmap(), 1, 1, true).getPixel(0, 0), hsv)
             hsv[1] = (hsv[1] * 1.25f).coerceAtMost(0.7f)
             hsv[2] = hsv[2].coerceIn(0.3f, 0.55f)
             Color(android.graphics.Color.HSVToColor(hsv))
@@ -1167,15 +1181,15 @@ private fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onL
     Scrubber(controller, ui)
     Spacer(Modifier.height(10.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        ModeButton(R.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle, enabled = queue.size > 1) {
+        ModeButton(Res.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle, enabled = queue.size > 1) {
             haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             controller.shuffleModeEnabled = !ui.shuffle
         }
-        IconButton(R.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 52.dp, tint = c.ink, background = Color.Transparent)
+        IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 52.dp, tint = c.ink, background = Color.Transparent)
         PlayPause(ui.isPlaying, size = 72.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
-        IconButton(R.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 52.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
+        IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 52.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
         ModeButton(
-            if (ui.repeat == Player.REPEAT_MODE_ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat,
+            if (ui.repeat == Player.REPEAT_MODE_ONE) Res.drawable.ic_repeat_one else Res.drawable.ic_repeat,
             stringResource(
                 when (ui.repeat) {
                     Player.REPEAT_MODE_ONE -> R.string.player_repeat_one
@@ -1200,7 +1214,7 @@ private fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onL
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         ToggleChip(
-            R.drawable.ic_timer,
+            Res.drawable.ic_timer,
             when (val s = sleep) {
                 is Playback.Sleep.At -> fmt((s.endsAt - now).coerceAtLeast(0))
                 Playback.Sleep.EndOfTrack -> stringResource(R.string.sleep_end_short)
@@ -1223,17 +1237,17 @@ private fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onL
             contentAlignment = Alignment.Center,
         ) { Txt("${if (ui.speed % 1f == 0f) ui.speed.toInt() else ui.speed}×", style = Hamstr.type.mono, color = if (abs(ui.speed - 1f) > 0.01f) c.accent else c.muted) }
         Spacer(Modifier.weight(1f))
-        ModeButton(R.drawable.ic_lyrics, stringResource(R.string.lyrics), on = lyrics) {
+        ModeButton(Res.drawable.ic_lyrics, stringResource(R.string.lyrics), on = lyrics) {
             haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             onLyrics()
         }
-        ModeButton(R.drawable.ic_queue_music, stringResource(R.string.queue_title), on = false, onClick = onQueue)
+        ModeButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), on = false, onClick = onQueue)
     }
 }
 
 /** An icon that is accent with a dot under it while its mode is on. */
 @Composable
-private fun ModeButton(icon: Int, label: String, on: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+private fun ModeButton(icon: DrawableResource, label: String, on: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val c = Hamstr.colors
     val p = animateSelection(on)
     Box(contentAlignment = Alignment.Center) {

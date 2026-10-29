@@ -25,9 +25,8 @@ object DownloadFiles {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private const val TRASH = "trash"
 
-    private val _missing = MutableStateFlow<Set<String>>(emptySet())
     /** Finished downloads whose file was deleted outside Hamstr. */
-    val missing: StateFlow<Set<String>> = _missing.asStateFlow()
+    val missing: StateFlow<Set<String>> get() = FileChecks.missing
 
     suspend fun delete(context: Context, task: DownloadTask): Result<Unit> = withContext(Dispatchers.Main.immediate) {
         Playback.closeIfCurrent(task)
@@ -152,13 +151,7 @@ object DownloadFiles {
     }
 
     /** Looks for finished downloads whose file is gone; cheap enough to run on every return to the app. */
-    fun refreshMissing() {
-        scope.launch {
-            _missing.value = DownloadStore.tasks.value
-                .filter { it.status == Status.Done && it.filePath != null && !File(it.filePath).exists() }
-                .map { it.id }.toSet()
-        }
-    }
+    fun refreshMissing() = FileChecks.refresh()
 
     /** Swaps [old] for [new]: the player moves over to the new file first, then the old one goes. */
     suspend fun replace(context: Context, old: DownloadTask, new: DownloadTask): Result<Unit> {
@@ -168,17 +161,9 @@ object DownloadFiles {
         return delete(context, old)
     }
 
-    /** yt-dlp's "Title [id] 720p" becomes "Title 720p"; the ID only kept two downloads apart. */
-    fun cleanName(stem: String): String =
-        Regex("""^(.*\S) \[[^\[\]]+\]((?: [\w-]+)?)$""").find(stem)?.let { it.groupValues[1] + it.groupValues[2] } ?: stem
+    fun cleanName(stem: String) = FileNames.cleanName(stem)
 
-    /** Renames a finished file to its clean name, next to any file that already has it. */
-    fun tidy(file: File): File {
-        val clean = cleanName(file.nameWithoutExtension)
-        if (clean == file.nameWithoutExtension) return file
-        val target = Importer.freeName(file.parentFile ?: return file, if (file.extension.isEmpty()) clean else "$clean.${file.extension}")
-        return if (file.renameTo(target)) target else file
-    }
+    fun tidy(file: File) = FileNames.tidy(file)
 
     /**
      * Whether [file] has a picture track: false for audio in a video container (a song from

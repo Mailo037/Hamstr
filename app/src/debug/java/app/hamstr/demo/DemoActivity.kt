@@ -33,7 +33,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import app.hamstr.nearby.DeviceKind
+import app.hamstr.nearby.Nearby
+import app.hamstr.nearby.Via
 import java.io.File
+import java.security.KeyPairGenerator
+import java.security.spec.ECGenParameterSpec
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -44,6 +50,9 @@ import kotlin.random.Random
  *     adb shell am start -n app.hamstr/.demo.DemoActivity --es seed default
  *     adb shell am start -n app.hamstr/.demo.DemoActivity --es seed /sdcard/Download/demo.json
  *     adb shell am start -n app.hamstr/.demo.DemoActivity --es seed off
+ *     adb shell am start -n app.hamstr/.demo.DemoActivity --es nearby on
+ *
+ * "nearby on" makes up a few Hamstr devices around for a minute, for the send sheet's picture.
  *
  * A seed is a JSON array, see assets/demo/default.json. An entry with "status": "share"
  * stays off the list; sharing its link opens the share sheet with its details, offline. Thumbnails are drawn and media
@@ -55,6 +64,11 @@ class DemoActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.getStringExtra("nearby") == "on") {
+            nearby()
+            finish()
+            return
+        }
         val seed = intent.getStringExtra("seed") ?: "default"
         scope.launch {
             val message = runCatching { withContext(Dispatchers.IO) { if (seed == "off") stop() else start(seed) } }
@@ -102,6 +116,22 @@ class DemoActivity : Activity() {
         // tools/demo_screens.py waits for this before it starts taking pictures.
         File(media, ".ready").writeText(tasks.size.toString())
         return "Demo mode: ${tasks.size} entries"
+    }
+
+    /** Made-up devices, kept "around" for a minute; nothing is remembered, so they leave no trace. */
+    private fun nearby() {
+        fun key() = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair().public.encoded
+        val devices = listOf(
+            Triple("Studio PC", DeviceKind.Desktop, setOf(Via.Wifi)),
+            Triple("Pixel 9", DeviceKind.Phone, setOf(Via.Wifi, Via.Bluetooth)),
+            Triple("Old Galaxy", DeviceKind.Phone, setOf(Via.Bluetooth)),
+        ).map { (name, kind, via) -> key().let { k -> Triple(Nearby.idOf(k) to Base64.getEncoder().encodeToString(k), name to kind, via) } }
+        Thread {
+            repeat(20) {
+                devices.forEach { (who, what, via) -> via.forEach { v -> Nearby.seen(who.first, what.first, what.second, who.second, v) } }
+                Thread.sleep(3_000)
+            }
+        }.start()
     }
 
     private fun stop(): String {

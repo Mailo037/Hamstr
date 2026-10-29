@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -151,7 +152,7 @@ internal fun PlaylistPickSheet(
                     Prefs.edit { it.copy(mode = mode, height = height, audioFormat = audio) }
                     onStash(selected.sorted().map { entries[it] }, choice)
                 },
-                Modifier.weight(2f), kind = ButtonKind.Primary, icon = R.drawable.ic_download, enabled = selected.isNotEmpty(),
+                Modifier.weight(2f), kind = ButtonKind.Primary, icon = Res.drawable.ic_download, enabled = selected.isNotEmpty(),
             )
         }
     }
@@ -170,7 +171,7 @@ internal fun PickRow(
     badgeAccent: Boolean = false,
 ) {
     val c = Hamstr.colors
-    val bitmap = rememberBitmap(thumbnail, 200)
+    val bitmap = rememberImage(thumbnail, 200)
     Row(
         Modifier
             .fillMaxWidth()

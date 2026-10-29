@@ -1,5 +1,7 @@
 package app.hamstr.ui
 
+import org.jetbrains.compose.resources.stringResource as sharedString
+import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
@@ -146,7 +148,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                 )
                 if (on && playing != null) Txt(stringResource(R.string.q_playing), style = Hamstr.type.badge, color = c.accent, modifier = Modifier.padding(end = 10.dp))
                 if (versions.size > 1) {
-                    IconButton(R.drawable.ic_delete, stringResource(R.string.q_delete, formatBadge(v)), { onDelete(v) }, tint = c.red, background = c.overlay, size = 34.dp)
+                    IconButton(Res.drawable.ic_delete, stringResource(R.string.q_delete, formatBadge(v)), { onDelete(v) }, tint = c.red, background = c.overlay, size = 34.dp)
                 } else Spacer(Modifier.height(34.dp))
             }
         }
@@ -159,7 +161,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(R.drawable.ic_music_note, tint = c.accent, size = 18.dp)
+                Icon(Res.drawable.ic_music_note, tint = c.accent, size = 18.dp)
                 Spacer(Modifier.width(10.dp))
                 Txt(stringResource(R.string.q_save_audio), style = Hamstr.type.bodyMedium, modifier = Modifier.weight(1f))
                 Txt(stringResource(R.string.q_no_download), style = Hamstr.type.badge, color = c.ghost)
@@ -172,7 +174,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
                 Txt(
                     when {
                         p.status == Status.Paused -> stringResource(R.string.status_paused_short)
-                        p.replaces != null -> stringResource(R.string.q_coming_replaces, DownloadStore.get(p.replaces)?.let(::formatBadge) ?: stringResource(R.string.q_old_file))
+                        p.replaces != null -> stringResource(R.string.q_coming_replaces, p.replaces?.let(DownloadStore::get)?.let(::formatBadge) ?: stringResource(R.string.q_old_file))
                         else -> stringResource(R.string.q_coming)
                     },
                     style = Hamstr.type.small, color = c.ghost, maxLines = 1,
@@ -185,7 +187,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
         Spacer(Modifier.height(8.dp))
         when (val s = state) {
             InfoState.Loading -> Txt(stringResource(R.string.share_sniffing), color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
-            is InfoState.Failed -> Txt(stringResource(Failures.explain(s.message).title), style = Hamstr.type.small, color = c.red, maxLines = 3, modifier = Modifier.padding(horizontal = 4.dp))
+            is InfoState.Failed -> Txt(sharedString(Failures.explain(s.message).title), style = Hamstr.type.small, color = c.red, maxLines = 3, modifier = Modifier.padding(horizontal = 4.dp))
             is InfoState.Loaded -> if (offers.isEmpty()) {
                 Txt(stringResource(R.string.q_all_here), color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
             } else {
@@ -235,7 +237,7 @@ fun QualitySheet(task: DownloadTask, onSwitch: (DownloadTask) -> Unit, onSaveAud
             },
             modifier = Modifier.fillMaxWidth(),
             kind = ButtonKind.Primary,
-            icon = R.drawable.ic_download,
+            icon = Res.drawable.ic_download,
             enabled = picked.isNotEmpty(),
         )
     }

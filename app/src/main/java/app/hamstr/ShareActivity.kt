@@ -19,6 +19,7 @@ import app.hamstr.engine.DownloadService
 import app.hamstr.ui.NotifyAsk
 import app.hamstr.ui.NotifyPrompt
 import app.hamstr.ui.Overlay
+import app.hamstr.ui.SendSheet
 import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.theme.HamstrTheme
 import kotlinx.coroutines.delay
@@ -54,6 +55,7 @@ class ShareActivity : ComponentActivity() {
                 var visible by remember { mutableStateOf(false) }
                 var closing by remember { mutableStateOf(false) }
                 var asking by remember { mutableStateOf(false) }
+                var sendLink by remember { mutableStateOf<Pair<String, String?>?>(null) }
                 LaunchedEffect(Unit) { visible = true }
                 LaunchedEffect(closing) {
                     if (closing) { delay(200); finish(); overridePendingTransition(0, 0) }
@@ -61,7 +63,7 @@ class ShareActivity : ComponentActivity() {
                 close = { closing = true }
                 // After the stash, the sheet either closes or turns into the one-time question.
                 val stashed = { if (NotifyAsk.due(this)) asking = true else closing = true }
-                Overlay(visible = visible && !closing && !asking, onDismiss = { closing = true }) {
+                Overlay(visible = visible && !closing && !asking && sendLink == null, onDismiss = { closing = true }) {
                     ShareSheet(
                         url,
                         onStash = { link, info, choice ->
@@ -81,7 +83,11 @@ class ShareActivity : ComponentActivity() {
                             DownloadService.stashVersion(this, of, choice, replace = false)
                             stashed()
                         },
+                        onSend = { link, title -> sendLink = link to title },
                     )
+                }
+                Overlay(visible = sendLink != null && !closing, onDismiss = { closing = true }) {
+                    sendLink?.let { (link, title) -> SendSheet(link, title) }
                 }
                 Overlay(visible = asking && !closing, onDismiss = { NotifyAsk.asked(); closing = true }) {
                     NotifyPrompt(

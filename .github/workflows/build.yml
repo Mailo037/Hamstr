@@ -1,7 +1,7 @@
 name: Build
 
-# Every push and pull request: compile the app, run the unit tests and keep the APKs
-# for a week so a build can be tried without cutting a release.
+# Every push and pull request: compile the app and the desktop app, run the unit tests and
+# keep the APKs for a week so a build can be tried without cutting a release.
 on:
   push:
     branches: [main]
@@ -36,6 +36,9 @@ jobs:
 
       - name: Debug APKs
         run: ./gradlew --no-daemon assembleDebug
+
+      - name: Desktop app
+        run: ./gradlew --no-daemon :desktop:compileKotlin
 
       - uses: actions/upload-artifact@v7
         with:

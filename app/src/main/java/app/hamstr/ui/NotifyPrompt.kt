@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -47,7 +48,7 @@ fun NotifyPrompt(onAllow: () -> Unit, onLater: () -> Unit) {
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HButton(stringResource(R.string.notify_ask_later), onLater, Modifier.weight(1f))
-            HButton(stringResource(R.string.notify_ask_allow), onAllow, Modifier.weight(2f), kind = ButtonKind.Primary, icon = R.drawable.ic_check)
+            HButton(stringResource(R.string.notify_ask_allow), onAllow, Modifier.weight(2f), kind = ButtonKind.Primary, icon = Res.drawable.ic_check)
         }
     }
 }

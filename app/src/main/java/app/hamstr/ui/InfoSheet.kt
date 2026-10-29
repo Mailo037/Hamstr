@@ -1,8 +1,8 @@
 package app.hamstr.ui
 
+import org.jetbrains.compose.resources.DrawableResource
 import android.media.MediaMetadataRetriever
 import android.text.format.DateUtils
-import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -43,7 +43,7 @@ import app.hamstr.ui.components.Sheet
 import app.hamstr.ui.components.SheetHeader
 
 /** A button at the end of an info line that acts on it, such as renaming from the title. */
-class InfoAction(@DrawableRes val icon: Int, @StringRes val label: Int, val onClick: () -> Unit)
+class InfoAction(val icon: DrawableResource, @StringRes val label: Int, val onClick: () -> Unit)
 
 /**
  * Everything known about a stashed file: what Hamstr saved when it was downloaded, and

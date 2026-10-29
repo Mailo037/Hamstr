@@ -1,5 +1,8 @@
 package app.hamstr.engine
 
+import app.hamstr.ui.getString
+import app.hamstr.ui.stageString
+import app.hamstr.data.DownloadControl
 import java.util.UUID
 import android.Manifest
 import android.app.NotificationChannel
@@ -433,7 +436,7 @@ class DownloadService : Service() {
                         stage ?: listOf("$pct %", t.speed, eta(t.etaSec), if (queued.isNotEmpty()) getString(R.string.notif_queued, queued.size) else "")
                             .filter { it.isNotEmpty() }.joinToString(" · "),
                     )
-                    .setProgress(100, pct, t.progress <= 0f || (t.stage != null && !t.stage.waiting))
+                    .setProgress(100, pct, t.progress <= 0f || t.stage?.waiting == false)
                     .addAction(0, getString(R.string.notif_pause), action(ACTION_PAUSE, t.id))
                     .addAction(0, getString(R.string.notif_cancel), action(ACTION_CANCEL, t.id))
             }
@@ -636,20 +639,14 @@ class DownloadService : Service() {
         }
 
         /** What a download is doing right now, when it's more than fetching bytes. */
-        fun stageText(context: Context, t: DownloadTask): String? = when (t.stage) {
-            null -> null
-            Stage.Resolving -> context.getString(R.string.stage_resolving)
-            Stage.Merging -> context.getString(R.string.stage_merging)
-            Stage.ExtractingAudio -> context.getString(R.string.stage_extracting)
-            Stage.Remuxing -> context.getString(R.string.stage_remuxing)
-            Stage.Tagging -> context.getString(R.string.stage_tagging)
-            Stage.WaitingForNetwork -> context.getString(R.string.stage_waiting_network)
-            Stage.WaitingForWifi -> context.getString(R.string.stage_waiting_wifi)
-            Stage.PausedBySystem -> context.getString(R.string.stage_paused_by_system)
-            Stage.Retrying -> {
-                val left = (t.retryAt - System.currentTimeMillis()) / 1000
-                if (left > 0) context.getString(R.string.stage_retrying, "$left s") else context.getString(R.string.stage_retrying_now)
-            }
+        fun stageText(context: Context, t: DownloadTask): String? =
+            stageString(t)?.let { (res, arg) -> if (arg == null) context.getString(res) else context.getString(res, arg) }
+
+        /** The download queue as the shared screens see it. */
+        fun control(context: Context) = object : DownloadControl {
+            override fun pause(id: String) = send(context, ACTION_PAUSE, id)
+            override fun resume(id: String) = send(context, ACTION_RESUME, id)
+            override fun cancel(id: String) = send(context, ACTION_CANCEL, id)
         }
 
         fun mimeOf(file: File): String =
@@ -688,11 +685,7 @@ class DownloadService : Service() {
 
         private fun prettySpeed(s: String) = s.replace("MiB/s", " MB/s").replace("KiB/s", " KB/s").replace("GiB/s", " GB/s").replace("  ", " ")
 
-        fun eta(sec: Long) = when {
-            sec <= 0 -> ""
-            sec >= 3600 -> "%d:%02d:%02d".format(sec / 3600, sec / 60 % 60, sec % 60)
-            else -> "%d:%02d".format(sec / 60, sec % 60)
-        }
+        fun eta(sec: Long) = app.hamstr.ui.eta(sec)
 
         private fun cleanError(msg: String?): String {
             val line = msg?.lines()?.lastOrNull { it.contains("ERROR") } ?: msg?.lines()?.lastOrNull { it.isNotBlank() } ?: "Unknown error"

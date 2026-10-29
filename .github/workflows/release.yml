@@ -2,6 +2,7 @@ name: Release
 
 # Push a tag like v0.2.0 and this builds signed APKs (one per ABI plus a universal one)
 # and publishes them as a GitHub release. Hamstr's in-app updater installs from there.
+# The desktop installers (.msi, .dmg, .deb) are built on each system and added to it.
 on:
   push:
     tags: ["v*"]
@@ -67,3 +68,48 @@ jobs:
           NOTES=".github/release-notes/$GITHUB_REF_NAME.md"
           if [ -f "$NOTES" ]; then set -- --notes-file "$NOTES"; else set -- --generate-notes; fi
           gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --verify-tag "$@"
+
+  desktop:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64 }
+          - { os: macos-latest, name: macos-arm64 }
+          - { os: ubuntu-latest, name: linux-x64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Gradle configures the Android modules too, so the SDK has to be there.
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platforms;android-37.0"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Installer
+        shell: bash
+        run: ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${GITHUB_REF_NAME#v}"
+
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          for f in desktop/build/compose/binaries/main/*/*; do
+            case "$f" in *.msi|*.dmg|*.deb) cp "$f" "dist/Hamstr-$VERSION-${{ matrix.name }}.${f##*.}" ;; esac
+          done
+          cd dist
+          if command -v sha256sum >/dev/null; then sha256sum * > "SHA256SUMS-${{ matrix.name }}.txt"; else shasum -a 256 * > "SHA256SUMS-${{ matrix.name }}.txt"; fi
+          ls -la
+          gh release upload "$GITHUB_REF_NAME" *

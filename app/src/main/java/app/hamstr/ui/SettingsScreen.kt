@@ -1,5 +1,7 @@
 package app.hamstr.ui
 
+import org.jetbrains.compose.resources.DrawableResource
+import app.hamstr.res.*
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.IconStyle
 import app.hamstr.data.MiniStyle
@@ -23,6 +25,7 @@ import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
 import android.Manifest
 import android.content.Intent
+import androidx.compose.runtime.LaunchedEffect
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -127,15 +130,16 @@ import app.hamstr.ui.components.Chips
 import app.hamstr.ui.components.Specs
 
 /** Settings are split into categories, each on its own page (Glyph: never one long page). */
-private enum class Page(val title: Int, val icon: Int) {
-    Appearance(R.string.page_appearance, R.drawable.ic_palette),
-    Motion(R.string.page_motion, R.drawable.ic_auto_awesome),
-    Downloads(R.string.page_downloads, R.drawable.ic_download),
-    Playback(R.string.page_playback, R.drawable.ic_play_arrow),
-    Queue(R.string.page_queue, R.drawable.ic_folder_open),
-    Engine(R.string.page_engine, R.drawable.ic_code),
-    Hidden(R.string.page_hidden, R.drawable.ic_visibility_off),
-    About(R.string.page_about, R.drawable.ic_info),
+private enum class Page(val title: Int, val icon: DrawableResource) {
+    Appearance(R.string.page_appearance, Res.drawable.ic_palette),
+    Motion(R.string.page_motion, Res.drawable.ic_auto_awesome),
+    Downloads(R.string.page_downloads, Res.drawable.ic_download),
+    Playback(R.string.page_playback, Res.drawable.ic_play_arrow),
+    Queue(R.string.page_queue, Res.drawable.ic_folder_open),
+    Engine(R.string.page_engine, Res.drawable.ic_code),
+    Devices(R.string.page_devices, Res.drawable.ic_devices),
+    Hidden(R.string.page_hidden, Res.drawable.ic_visibility_off),
+    About(R.string.page_about, Res.drawable.ic_info),
 }
 
 @Composable
@@ -214,6 +218,8 @@ private fun summary(context: android.content.Context, p: Page, s: Settings, engi
         EngineState.Starting -> context.getString(R.string.set_starting)
         is EngineState.Broken -> context.getString(R.string.set_error)
     }
+    Page.Devices -> if (s.nearby) context.getString(R.string.set_devices_summary, s.deviceName.ifBlank { app.hamstr.nearby.Nearby.defaultName })
+        else context.getString(R.string.set_devices_summary_off)
     Page.About -> "Hamstr ${BuildConfig.VERSION_NAME}" + if (s.appUpdates) " · " + context.getString(R.string.set_checks_updates) else ""
 }
 
@@ -237,7 +243,7 @@ private fun CategoryRow(p: Page, summary: String, title: String = stringResource
             Spacer(Modifier.height(2.dp))
             Txt(summary, style = Hamstr.type.small, color = c.ghost, maxLines = 1)
         }
-        Icon(R.drawable.ic_chevron_right, tint = c.ghost, size = 20.dp)
+        Icon(Res.drawable.ic_chevron_right, tint = c.ghost, size = 20.dp)
     }
 }
 
@@ -295,7 +301,7 @@ private fun SubPage(
             .padding(horizontal = 12.dp),
     ) {
         Row(Modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(R.drawable.ic_arrow_back, stringResource(R.string.set_back), onBack, tint = Hamstr.colors.ink)
+            IconButton(Res.drawable.ic_arrow_back, stringResource(R.string.set_back), onBack, tint = Hamstr.colors.ink)
             Spacer(Modifier.width(12.dp))
             DecodeText(stringResource(p.title), style = Hamstr.type.title)
         }
@@ -307,6 +313,7 @@ private fun SubPage(
             Page.Queue -> QueuePage()
             Page.Playback -> PlaybackPage()
             Page.Engine -> EnginePage()
+            Page.Devices -> DevicesPage()
             Page.Hidden -> HiddenPage(onDelete, onHint)
             Page.About -> AboutPage(onUpdate)
         }
@@ -314,38 +321,63 @@ private fun SubPage(
     }
 }
 
+/** Nearby: the shared settings, plus Bluetooth, which needs Android's permission and the adapter on. */
 @Composable
-private fun Label(text: String, modifier: Modifier = Modifier) = Txt(text, style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = modifier)
-
-@Composable
-private fun Block(label: String, content: @Composable ColumnScope.() -> Unit) =
-    Column(Modifier.searchHighlight(label).padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Label(label)
-        content()
+private fun DevicesPage() {
+    val s by Prefs.settings.collectAsState()
+    val context = LocalContext.current
+    val ble = app.hamstr.nearby.BleTransport
+    var allowed by remember { mutableStateOf(ble.granted(context)) }
+    var on by remember { mutableStateOf(ble.adapterOn(context)) }
+    // Bluetooth can be switched in the quick settings while this page is open.
+    LaunchedEffect(Unit) {
+        while (true) {
+            allowed = ble.granted(context)
+            on = ble.adapterOn(context)
+            kotlinx.coroutines.delay(1500)
+        }
     }
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) {
+        allowed = ble.granted(context)
+        ble.instance?.refresh()
+    }
+    val turnOn = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        on = ble.adapterOn(context)
+    }
+    NearbySettings(bluetooth = {
+        val hint = when {
+            !s.nearbyBluetooth -> R.string.set_nearby_bluetooth_hint
+            !allowed -> R.string.set_nearby_bluetooth_off
+            !on -> R.string.set_nearby_bluetooth_disabled
+            else -> R.string.set_nearby_bluetooth_hint
+        }
+        FxRow(stringResource(R.string.set_nearby_bluetooth), stringResource(hint), s.nearbyBluetooth) { v ->
+            when {
+                // On but not ready: the tap fixes what's missing instead of switching it off.
+                s.nearbyBluetooth && !allowed -> ask.launch(ble.permissions)
+                s.nearbyBluetooth && !on -> turnOn.launch(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                else -> {
+                    Prefs.edit { it.copy(nearbyBluetooth = v) }
+                    if (v && !allowed) ask.launch(ble.permissions)
+                }
+            }
+        }
+    })
+}
 
 @Composable
 private fun AppearancePage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        Block(stringResource(R.string.set_accent)) {
-            AccentPicker(ACCENTS, s.accent) { a -> Prefs.edit { it.copy(accent = a) } }
-        }
-        Block(stringResource(R.string.set_background)) {
-            Chips(Base.entries.toList(), s.base, { it.label }) { b -> Prefs.edit { it.copy(base = b) } }
-        }
-        Block(stringResource(R.string.set_size)) {
-            val labels = mapOf(UiSize.Small to stringResource(R.string.size_small), UiSize.Normal to stringResource(R.string.size_normal), UiSize.Large to stringResource(R.string.size_large))
-            Segmented(UiSize.entries.toList(), s.size, { labels.getValue(it) }, { v -> Prefs.edit { it.copy(size = v) } })
-        }
-        Block(stringResource(R.string.set_mini)) {
+        LookBlocks()
+        SettingBlock(stringResource(R.string.set_mini)) {
             val labels = mapOf(MiniStyle.Floating to stringResource(R.string.mini_floating), MiniStyle.Docked to stringResource(R.string.mini_docked), MiniStyle.Compact to stringResource(R.string.mini_compact))
             Segmented(MiniStyle.entries.toList(), s.miniStyle, { labels.getValue(it) }, { v -> Prefs.edit { it.copy(miniStyle = v) } })
         }
     }
     Spacer(Modifier.height(12.dp))
     Group {
-        Block(stringResource(R.string.set_icon_style)) {
+        SettingBlock(stringResource(R.string.set_icon_style)) {
             IconStylePicker(s.iconStyle, s.accent, s.iconFollowsAccent) { v -> Prefs.edit { it.copy(iconStyle = v) } }
         }
         Divider()
@@ -421,7 +453,7 @@ private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) 
             if (i > 0) Divider()
             Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
-                    AsciiImage(rememberBitmap(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(52.dp))
+                    AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(52.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -432,11 +464,11 @@ private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) 
                         style = Hamstr.type.small, color = c.ghost, maxLines = 1,
                     )
                 }
-                IconButton(R.drawable.ic_restore, stringResource(R.string.hidden_restore), {
+                IconButton(Res.drawable.ic_restore, stringResource(R.string.hidden_restore), {
                     DownloadStore.setHidden(setOf(t.id), false)
                     onHint(restored)
                 }, tint = c.accent, background = Color.Transparent)
-                IconButton(R.drawable.ic_delete, stringResource(R.string.menu_delete), { onDelete(listOf(t)) }, tint = c.red, background = Color.Transparent)
+                IconButton(Res.drawable.ic_delete, stringResource(R.string.menu_delete), { onDelete(listOf(t)) }, tint = c.red, background = Color.Transparent)
             }
         }
     }
@@ -445,11 +477,11 @@ private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) 
         HButton(stringResource(R.string.hidden_restore_all), {
             DownloadStore.setHidden(hidden.map { it.id }.toSet(), false)
             onHint(restored)
-        }, Modifier.weight(1f), kind = ButtonKind.Neutral, icon = R.drawable.ic_restore)
+        }, Modifier.weight(1f), kind = ButtonKind.Neutral, icon = Res.drawable.ic_restore)
         HButton(
             stringResource(if (confirm) R.string.hidden_delete_confirm else R.string.hidden_delete_all),
             { if (!confirm) confirm = true else { confirm = false; onDelete(hidden) } },
-            Modifier.weight(1f), kind = ButtonKind.Ghost, icon = R.drawable.ic_delete,
+            Modifier.weight(1f), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete,
         )
     }
     Spacer(Modifier.height(12.dp))
@@ -469,43 +501,18 @@ private fun MotionPage() {
         FxRow(stringResource(R.string.set_haptics), stringResource(R.string.set_haptics_hint), s.haptics) { v -> Prefs.edit { it.copy(haptics = v) } }
     }
     Spacer(Modifier.height(16.dp))
-    Txt(stringResource(R.string.set_ascii), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
-    Spacer(Modifier.height(8.dp))
-    Group {
-        FxRow(stringResource(R.string.set_raster), stringResource(R.string.set_raster_hint), s.raster) { v -> Prefs.edit { it.copy(raster = v) } }
-        Divider()
-        FxRow(stringResource(R.string.set_ascii_thumbs), stringResource(R.string.set_ascii_thumbs_hint), s.asciiThumbs) { v -> Prefs.edit { it.copy(asciiThumbs = v) } }
-        Divider()
-        FxRow(stringResource(R.string.set_rain), stringResource(R.string.set_rain_hint), s.rain) { v -> Prefs.edit { it.copy(rain = v) } }
-        Divider()
-        FxRow(stringResource(R.string.set_decode), stringResource(R.string.set_decode_hint), s.decode) { v -> Prefs.edit { it.copy(decode = v) } }
-    }
+    AsciiEffects()
 }
 
 @Composable
 private fun DownloadsPage() {
     val s by Prefs.settings.collectAsState()
-    val videoLabel = stringResource(R.string.mode_video)
-    val audioLabel = stringResource(R.string.mode_audio)
-    Group {
-        Block(stringResource(R.string.set_default_mode)) {
-            Segmented(listOf(Mode.Video, Mode.Audio), s.mode, { if (it == Mode.Video) videoLabel else audioLabel }, { m -> Prefs.edit { it.copy(mode = m) } })
-        }
-        Block(stringResource(R.string.set_video_quality)) {
-            Chips(Prefs.heights, s.height, ::heightLabel) { h -> Prefs.edit { it.copy(height = h) } }
-        }
-        Block(stringResource(R.string.set_video_format)) {
-            Chips(Prefs.containers, s.container, { it }) { f -> Prefs.edit { it.copy(container = f) } }
-        }
-        Block(stringResource(R.string.share_audio_format)) {
-            Chips(Prefs.audioFormats, s.audioFormat, { it }) { f -> Prefs.edit { it.copy(audioFormat = f) } }
-        }
-    }
+    FormatDefaults()
     Spacer(Modifier.height(12.dp))
     Group {
         FxRow(stringResource(R.string.set_subtitles), stringResource(R.string.set_subtitles_hint, s.subtitleLanguages().joinToString(", ") { languageName(it) }), s.subtitles) { v -> Prefs.edit { it.copy(subtitles = v) } }
         AnimatedVisibility(s.subtitles, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-            Block(stringResource(R.string.set_sub_langs)) { SubtitleLanguages(s) }
+            SettingBlock(stringResource(R.string.set_sub_langs)) { SubtitleLanguages(s) }
         }
         Divider()
         FxRow(stringResource(R.string.set_clean_names), stringResource(R.string.set_clean_names_hint), s.cleanNames) { v -> Prefs.edit { it.copy(cleanNames = v) } }
@@ -558,7 +565,7 @@ private fun OpenWhenDoneRow() {
 private fun QueuePage() {
     val s by Prefs.settings.collectAsState()
     Group {
-        Block(stringResource(R.string.set_parallel)) {
+        SettingBlock(stringResource(R.string.set_parallel)) {
             Segmented(listOf(1, 2, 3), s.parallel, { it.toString() }, { n -> Prefs.edit { it.copy(parallel = n) } })
         }
         val context = LocalContext.current
@@ -566,7 +573,7 @@ private fun QueuePage() {
         SettingRow(
             stringResource(R.string.set_save_location), subtitle = where + "\n" + stringResource(R.string.set_open_folder),
             onClick = { openFolder(context) },
-        ) { Icon(R.drawable.ic_folder_open, tint = Hamstr.colors.muted, size = 20.dp) }
+        ) { Icon(Res.drawable.ic_folder_open, tint = Hamstr.colors.muted, size = 20.dp) }
         Divider()
         FxRow(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_hint), s.wifiOnly) { v -> Prefs.edit { it.copy(wifiOnly = v) } }
     }
@@ -670,21 +677,10 @@ private fun EnginePage() {
     val cheekCheck by CheekUpdates.check.collectAsState()
     val cheekUpdating by CheekUpdates.updating.collectAsState()
     var cheekMsg by remember { mutableStateOf<String?>(null) }
-    Group {
-        Block(stringResource(R.string.set_engine)) {
-            Segmented(DownloadEngine.entries.toList(), s.engine, { it.label }, { e -> Prefs.edit { it.copy(engine = e) } })
-            Txt(
-                when (s.engine) {
-                    DownloadEngine.YtDlp -> stringResource(R.string.set_engine_ytdlp)
-                    DownloadEngine.Cheek -> stringResource(R.string.set_engine_cheek)
-                },
-                style = Hamstr.type.small, color = c.ghost,
-            )
-        }
-    }
+    Group { EngineChoice() }
     if (s.engine == DownloadEngine.Cheek) {
         Spacer(Modifier.height(12.dp))
-        Label("Cheek", Modifier.padding(horizontal = 6.dp))
+        SettingLabel("Cheek", Modifier.padding(horizontal = 6.dp))
         Spacer(Modifier.height(8.dp))
         Group {
             SettingRow(stringResource(R.string.set_cheek_version), subtitle = cheekVersion + " · " + if (Cheek.updated) stringResource(R.string.set_cheek_updated) else stringResource(R.string.set_cheek_bundled, BuildConfig.VERSION_NAME))
@@ -723,7 +719,7 @@ private fun EnginePage() {
         }
     }
     Spacer(Modifier.height(12.dp))
-    Label(if (s.engine == DownloadEngine.Cheek) stringResource(R.string.set_ytdlp_resolver) else "yt-dlp", Modifier.padding(horizontal = 6.dp))
+    SettingLabel(if (s.engine == DownloadEngine.Cheek) stringResource(R.string.set_ytdlp_resolver) else "yt-dlp", Modifier.padding(horizontal = 6.dp))
     Spacer(Modifier.height(8.dp))
     Group {
         SettingRow(
@@ -779,10 +775,10 @@ private fun AboutPage(onUpdate: () -> Unit) {
         Divider()
         SettingRow(stringResource(R.string.set_source), subtitle = "github.com/${Updater.REPO}", onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/${Updater.REPO}")))
-        }) { Icon(R.drawable.ic_open_in_new, tint = c.ghost) }
+        }) { Icon(Res.drawable.ic_open_in_new, tint = c.ghost) }
     }
     Spacer(Modifier.height(16.dp))
-    Label(stringResource(R.string.set_updates), Modifier.padding(horizontal = 6.dp))
+    SettingLabel(stringResource(R.string.set_updates), Modifier.padding(horizontal = 6.dp))
     Spacer(Modifier.height(8.dp))
     Group {
         FxRow(stringResource(R.string.set_app_updates), stringResource(R.string.set_app_updates_hint), s.appUpdates) { v -> Prefs.edit { it.copy(appUpdates = v) } }
@@ -806,7 +802,7 @@ private fun AboutPage(onUpdate: () -> Unit) {
         Column(Modifier.padding(8.dp)) {
             val release = update.release
             if (release != null) {
-                HButton(stringResource(R.string.set_update_to, release.version), onUpdate, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download)
+                HButton(stringResource(R.string.set_update_to, release.version), onUpdate, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_download)
             } else {
                 HButton(
                     if (update == UpdateState.Checking) stringResource(R.string.set_checking) else stringResource(R.string.set_check_now),
@@ -823,17 +819,15 @@ private fun AboutPage(onUpdate: () -> Unit) {
     }
 }
 
-@Composable
-private fun FxRow(title: String, subtitle: String, on: Boolean, set: (Boolean) -> Unit) {
-    SettingRow(title, subtitle = subtitle, onClick = { set(!on) }) { HSwitch(on, set) }
-}
-
 private class SettingEntry(val title: Int, val page: Page, val words: String)
 
 /** A search hit: the setting's title as shown on its page, so it can be highlighted there. */
 private class Found(val title: String, val page: Page)
 
 private val SETTINGS_INDEX = listOf(
+    SettingEntry(R.string.set_nearby, Page.Devices, "nearby airdrop quick share send devices phone computer pc geräte senden teilen"),
+    SettingEntry(R.string.set_nearby_bluetooth, Page.Devices, "bluetooth ble nearby"),
+    SettingEntry(R.string.set_device_name, Page.Devices, "name device gerät"),
     SettingEntry(R.string.set_accent, Page.Appearance, "color colour farbe accent hue theme pink orange"),
     SettingEntry(R.string.set_background, Page.Appearance, "theme dark oled black cocoa graphite hintergrund"),
     SettingEntry(R.string.set_icon_accent, Page.Appearance, "icon launcher app icon cheeks backen symbol"),

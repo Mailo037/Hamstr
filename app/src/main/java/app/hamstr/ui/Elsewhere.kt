@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -72,7 +73,7 @@ fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (Engi
                     Txt(stringResource(R.string.drm_found), style = Hamstr.type.bodyMedium, color = c.accent)
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(R.drawable.ic_music_note, tint = c.accent, size = 18.dp)
+                        Icon(Res.drawable.ic_music_note, tint = c.accent, size = 18.dp)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Txt(s.hit.title, style = Hamstr.type.bodyMedium, maxLines = 2)
@@ -83,7 +84,7 @@ fun ElsewhereCard(title: String, artist: String?, durationSec: Int, onUse: (Engi
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    HButton(stringResource(R.string.drm_use), { onUse(s.hit) }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = R.drawable.ic_download)
+                    HButton(stringResource(R.string.drm_use), { onUse(s.hit) }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_download)
                 }
             }
         }

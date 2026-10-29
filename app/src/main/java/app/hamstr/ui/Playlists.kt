@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -100,7 +101,7 @@ fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier, square
                 Modifier.align(Alignment.Center).width(maxWidth * 0.53f).aspectRatio(ratio)
                     .clip(RoundedCornerShape(10.dp)).border(2.dp, c.line, RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(R.drawable.ic_playlist_add, tint = c.ghost, size = 22.dp) }
+            ) { Icon(Res.drawable.ic_playlist_add, tint = c.ghost, size = 22.dp) }
             1 -> {
                 val w = maxWidth * 0.78f
                 Box(
@@ -134,7 +135,7 @@ private fun FanThumb(t: DownloadTask, width: Dp, modifier: Modifier, ratio: Floa
             .clip(RoundedCornerShape(10.dp))
             .border(2.dp, c.canvas, RoundedCornerShape(10.dp)),
     ) {
-        AsciiImage(rememberBitmap(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxWidth().aspectRatio(ratio).background(c.black))
+        AsciiImage(rememberImage(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxWidth().aspectRatio(ratio).background(c.black))
         if (more > 0) {
             // The middle card covers this one's top left, so the count sits bottom right.
             Box(Modifier.fillMaxWidth().aspectRatio(ratio).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.BottomEnd) {

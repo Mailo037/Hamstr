@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
@@ -77,7 +78,7 @@ fun UpdateBanner(release: Release, onOpen: () -> Unit, onDismiss: () -> Unit, mo
             Txt(stringResource(R.string.upd_tap), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
         }
         Txt(stringResource(R.string.upd_update), style = Hamstr.type.button, color = c.accent, modifier = Modifier.padding(horizontal = 8.dp))
-        IconButton(R.drawable.ic_close, stringResource(R.string.notify_ask_later), onDismiss, background = Color.Transparent, size = 34.dp)
+        IconButton(Res.drawable.ic_close, stringResource(R.string.notify_ask_later), onDismiss, background = Color.Transparent, size = 34.dp)
     }
 }
 
@@ -144,7 +145,7 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
                     onClick = { Updater.install(context, release) },
                     modifier = Modifier.weight(1.6f),
                     kind = ButtonKind.Primary,
-                    icon = R.drawable.ic_download,
+                    icon = Res.drawable.ic_download,
                     enabled = !busy,
                 )
             }

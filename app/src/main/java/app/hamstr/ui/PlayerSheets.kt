@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -115,7 +116,7 @@ fun QueueSheet(onClose: () -> Unit) {
                 ) {
                     SwipeRow(
                         start = null,
-                        end = SwipeAction(R.drawable.ic_close, stringResource(R.string.queue_remove), c.red, removes = true) {
+                        end = SwipeAction(Res.drawable.ic_close, stringResource(R.string.queue_remove), c.red, removes = true) {
                             Playback.removeAt(queue.indexOfFirst { it.id == t.id })
                         },
                     ) {
@@ -161,9 +162,9 @@ fun QueueSheet(onClose: () -> Unit) {
                                         }
                                     },
                                 contentAlignment = Alignment.Center,
-                            ) { Icon(R.drawable.ic_drag_handle, tint = c.ghost, size = 20.dp) }
+                            ) { Icon(Res.drawable.ic_drag_handle, tint = c.ghost, size = 20.dp) }
                             Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
-                                AsciiImage(rememberBitmap(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(44.dp))
+                                AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(44.dp))
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
@@ -179,7 +180,7 @@ fun QueueSheet(onClose: () -> Unit) {
                                 )
                             }
                             IconButton(
-                                R.drawable.ic_close, stringResource(R.string.queue_remove),
+                                Res.drawable.ic_close, stringResource(R.string.queue_remove),
                                 { Playback.removeAt(queue.indexOfFirst { it.id == t.id }) },
                                 tint = c.ghost, background = Color.Transparent, size = 36.dp,
                             )
@@ -189,7 +190,7 @@ fun QueueSheet(onClose: () -> Unit) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        HButton(stringResource(R.string.player_close), { Playback.close(); onClose() }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = R.drawable.ic_close)
+        HButton(stringResource(R.string.player_close), { Playback.close(); onClose() }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_close)
     }
 }
 
@@ -214,7 +215,7 @@ fun SleepSheet(onDone: (String?) -> Unit) {
         }
         if (sleep != null) {
             Spacer(Modifier.height(10.dp))
-            HButton(stringResource(R.string.sleep_off), { Playback.cancelSleep(); onDone(null) }, Modifier.fillMaxWidth(), kind = ButtonKind.Neutral, icon = R.drawable.ic_close)
+            HButton(stringResource(R.string.sleep_off), { Playback.cancelSleep(); onDone(null) }, Modifier.fillMaxWidth(), kind = ButtonKind.Neutral, icon = Res.drawable.ic_close)
         }
     }
 }
@@ -227,9 +228,9 @@ private fun SleepRow(label: String, on: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(R.drawable.ic_timer, tint = if (on) c.accent else c.muted)
+        Icon(Res.drawable.ic_timer, tint = if (on) c.accent else c.muted)
         Txt(label, color = if (on) c.accent else c.ink, modifier = Modifier.weight(1f))
-        if (on) Icon(R.drawable.ic_check, tint = c.accent)
+        if (on) Icon(Res.drawable.ic_check, tint = c.accent)
     }
 }
 
@@ -289,12 +290,12 @@ fun LyricsSheet(t: DownloadTask, onDone: (String) -> Unit) {
                         searching = false
                     }
                 },
-                Modifier.weight(1f), kind = ButtonKind.Neutral, icon = R.drawable.ic_search, enabled = !searching,
+                Modifier.weight(1f), kind = ButtonKind.Neutral, icon = Res.drawable.ic_search, enabled = !searching,
             )
             HButton(
                 stringResource(R.string.pl_save),
                 { scope.launch { Lyrics.save(t.id, text); onDone(if (text.isBlank()) removedMsg else savedMsg) } },
-                Modifier.weight(2f), kind = ButtonKind.Primary, icon = R.drawable.ic_check,
+                Modifier.weight(2f), kind = ButtonKind.Primary, icon = Res.drawable.ic_check,
                 enabled = text.trim() != saved[t.id].orEmpty(),
             )
         }
