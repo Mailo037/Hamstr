@@ -721,7 +721,7 @@ fun DownloadPreview(t: DownloadTask, modifier: Modifier = Modifier) {
     val progress by animateFloatAsState(t.progress, Specs.glide(), label = "previewProgress")
     val moving = t.status == Status.Running || t.status == Status.Queued
     val stage = rememberStageText(t)
-    Box(modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp))) {
+    Box(modifier.fillMaxWidth().aspectRatio(if (t.choice.mode == Mode.Audio) 1f else 16f / 9f).clip(RoundedCornerShape(14.dp))) {
         AsciiImage(
             bitmap = bitmap,
             reveal = progress,

@@ -350,7 +350,7 @@ object Engine {
             val text = CineSrc.resolve(target)
             return Preview(mediaInfo(url, JSONObject(text)), text, reusable = true)
         }
-        if (readRuntime { WarmYtDlp.extractor(url) }?.equals("Generic", ignoreCase = true) != false) {
+        if (!YoutubeAccess.isYoutube(url) && readRuntime { WarmYtDlp.extractor(url) }?.equals("Generic", ignoreCase = true) != false) {
             filePreview(url)?.let { return it }
             if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.available) {
                 runInterruptible { Cheek.resolve(url) }?.let { nativePreview(url, it) }?.let { return it }
@@ -432,16 +432,16 @@ object Engine {
     suspend fun execute(task: DownloadTask, callback: ((Float, Long, String) -> Unit)? = null): YoutubeDLResponse = withContext(Dispatchers.IO) {
         awaitReady()
         val cineSrc = CineSrcTarget.parse(task.url) != null
-        // Instant downloads have no preview yet. Probe generic links before choosing media options.
-        if (!cineSrc && previews.get(task.url) == null && readRuntime { WarmYtDlp.extractor(task.url) }?.equals("Generic", ignoreCase = true) != false) {
-            filePreview(task.url)?.let { previews.put(task.url, it) }
-        }
         if (cineSrc) preview(task.url) // Instant stash also needs WebView resolution before either engine starts.
         if (Prefs.settings.value.engine == DownloadEngine.Cheek && Cheek.handles(task)) {
             val res = executeCheek(task, callback)
             // Formats cheek can't fetch (DASH fragments, DRM) go to yt-dlp after all.
             if (!Cheek.unsupported(res)) return@withContext res
             Log.i(TAG, "cheek handed ${task.id} back to yt-dlp: ${res.err.lines().firstOrNull()}")
+        }
+        // Cheek resolves/probes through preview() itself. Only yt-dlp needs this extra file check.
+        if (!cineSrc && !YoutubeAccess.isYoutube(task.url) && previews.get(task.url) == null && readRuntime { WarmYtDlp.extractor(task.url) }?.equals("Generic", ignoreCase = true) != false) {
+            filePreview(task.url)?.let { previews.put(task.url, it) }
         }
         val initialRequest = request(task)
         try {

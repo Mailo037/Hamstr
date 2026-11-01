@@ -118,14 +118,18 @@ def _run(request):
 
 
 def _preload():
-    # Otherwise the first link pays for these: most links are for these sites, and the
-    # first match compiles every extractor's URL pattern.
-    for name in ('youtube', 'instagram', 'tiktok', 'twitter', 'generic'):
+    # Warm only the common modules. Sweeping every site's URL regex on a background
+    # Python thread competes for the GIL with the first YouTube Music extraction.
+    for name in ('youtube', 'generic'):
         try:
             importlib.import_module(f'yt_dlp.extractor.{name}')
         except Exception:
             pass
-    _match('https://example.com/')
+    try:
+        from yt_dlp.extractor.youtube import YoutubeIE
+        YoutubeIE.suitable('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    except Exception:
+        pass
 
 
 def main():

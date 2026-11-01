@@ -22,7 +22,7 @@ internal object YoutubeAccess {
         RegexOption.IGNORE_CASE,
     )
 
-    private fun isYoutube(url: String): Boolean {
+    fun isYoutube(url: String): Boolean {
         val uri = runCatching { URI(url) }.getOrNull() ?: return false
         if (uri.scheme?.lowercase() !in listOf("http", "https")) return false
         val host = uri.host?.lowercase() ?: return false

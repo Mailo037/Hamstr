@@ -95,13 +95,13 @@ class PlaybackService : MediaSessionService() {
     // ---- giving way to other apps ------------------------------------------------------
     // ExoPlayer pauses when another app takes the sound. A music app keeps it; a video
     // (YouTube, TikTok, Reels) only borrows it: once nothing else has played for a moment,
-    // the song carries on, as long as that is within half an hour and nobody paused by hand.
+    // the song carries on only for positively identified video audio, within half an hour.
+    // Music, podcasts and unknown/redacted audio configurations require an explicit play.
     private var yieldedAt = 0L
-    private var toMusic = false
-    private var heardOther = false
+    private val interruption = PlaybackInterruption()
     private val resume = Runnable {
         val player = session?.player ?: return@Runnable
-        if (yieldedAt > 0 && !toMusic && heardOther && Prefs.settings.value.resumeAfterVideos &&
+        if (yieldedAt > 0 && interruption.mayResume && Prefs.settings.value.resumeAfterVideos &&
             System.currentTimeMillis() - yieldedAt < 30 * 60_000L && !player.playWhenReady && player.mediaItemCount > 0
         ) player.play()
         yieldedAt = 0
@@ -111,10 +111,13 @@ class PlaybackService : MediaSessionService() {
             if (yieldedAt == 0L) return
             handler.removeCallbacks(resume)
             if (configs.isNotEmpty()) {
-                heardOther = true
-                // Songs and podcasts are a choice to listen to something else.
-                if (configs.any { it.audioAttributes.contentType == SystemAudio.CONTENT_TYPE_MUSIC || it.audioAttributes.contentType == SystemAudio.CONTENT_TYPE_SPEECH }) toMusic = true
-            } else if (heardOther) handler.postDelayed(resume, 2_500)
+                interruption.observe(configs.map { config ->
+                    val attrs = config.audioAttributes
+                    if (attrs.usage == SystemAudio.USAGE_MEDIA && attrs.contentType == SystemAudio.CONTENT_TYPE_MOVIE)
+                        PlaybackInterruption.Source.Video
+                    else PlaybackInterruption.Source.MusicOrUnknown
+                })
+            } else if (interruption.mayResume) handler.postDelayed(resume, 2_500)
         }
     }
 
@@ -124,7 +127,7 @@ class PlaybackService : MediaSessionService() {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 handler.removeCallbacks(resume)
                 if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS) {
-                    yieldedAt = System.currentTimeMillis(); toMusic = false; heardOther = false
+                    yieldedAt = System.currentTimeMillis(); interruption.reset()
                 } else yieldedAt = 0
             }
         })

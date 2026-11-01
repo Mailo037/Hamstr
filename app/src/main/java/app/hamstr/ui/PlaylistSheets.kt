@@ -292,7 +292,7 @@ fun AddToPlaylistSheet(files: List<DownloadTask>, onNew: () -> Unit, onDone: (St
                     if (!inIt) Playlists.add(p.id, files)
                     onDone(if (files.size == 1) resources.getString(R.string.pl_added_one, name) else resources.getString(R.string.pl_added_many, files.size, name))
                 }) {
-                    Box(Modifier.width(64.dp), contentAlignment = Alignment.Center) { PlaylistFan(p.items, Modifier.width(if (p.songs) 40.dp else 64.dp), square = p.songs) }
+                    Box(Modifier.width(64.dp), contentAlignment = Alignment.Center) { PlaylistFan(p.items, Modifier.width(if (p.songs) 56.dp else 64.dp), square = p.songs) }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Txt(name, style = Hamstr.type.bodyMedium, maxLines = 1)

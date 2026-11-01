@@ -10,6 +10,13 @@ class YoutubeAccessTest {
     private val url = "https://www.youtube.com/watch?v=3uURd82kFd4"
     private val refusal = "Sign in to confirm you're not a bot. Use --cookies for authentication."
 
+    @Test fun musicLinksSkipGenericSiteDiscoveryWithoutAcceptingLookalikeHosts() {
+        assertTrue(YoutubeAccess.isYoutube("https://music.youtube.com/watch?v=dQw4w9WgXcQ"))
+        assertTrue(YoutubeAccess.isYoutube("https://youtu.be/dQw4w9WgXcQ"))
+        assertFalse(YoutubeAccess.isYoutube("https://youtube.com.evil.test/watch?v=dQw4w9WgXcQ"))
+        assertFalse(YoutubeAccess.isYoutube("https://example.com/?next=https://youtube.com"))
+    }
+
     @Test fun defaultSuccessDoesNotMakeExtraRequests() = runBlocking {
         var calls = 0
         assertEquals("formats", YoutubeAccess.run(url) { client ->

@@ -15,6 +15,8 @@ import app.hamstr.data.Status
 import app.hamstr.engine.EngineState
 import app.hamstr.engine.Failures
 import app.hamstr.engine.Formats
+import app.hamstr.engine.MediaLinks
+import app.hamstr.engine.GlyphLinks
 import app.hamstr.engine.MediaJson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -164,16 +166,28 @@ object Queue : DownloadControl {
         val paths = File(work, "paths.jsonl").apply { delete() }
         try {
             var native = false
-            val json = try { output(listOf(
+            val useCheek = Prefs.settings.value.engine == DownloadEngine.Cheek && Tools.hasCheek && cheekHandles(task)
+            var nativeAttempted = false
+            suspend fun resolveNative(): String {
+                nativeAttempted = true
+                val resolved = output(listOf(Tools.cheek.path, "-J", "--resolver", "native", "--", task.url))
+                native = true
+                return resolved
+            }
+            val early = if (useCheek && MediaLinks.prefersNativeResolution(task.url)) {
+                try { resolveNative() } catch (e: Exception) {
+                    if (e is CancellationException || GlyphLinks.matches(task.url)) throw e
+                    null // A misleading file extension can still need yt-dlp.
+                }
+            } else null
+            val json = early ?: try { output(listOf(
                 Tools.ytDlp.path, "--dump-single-json", "--flat-playlist", "--socket-timeout", "15",
                 "--cache-dir", Paths.cache.path, if (Prefs.settings.value.playlists) "--yes-playlist" else "--no-playlist", "--", task.url,
             )) } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                if (Prefs.settings.value.engine != DownloadEngine.Cheek || !Tools.hasCheek || !cheekHandles(task)) throw e
+                if (!useCheek || nativeAttempted) throw e
                 // Cheek resolves pages (including Glyph) that yt-dlp does not understand.
-                val resolved = output(listOf(Tools.cheek.path, "-J", "--resolver", "native", "--", task.url))
-                native = true
-                resolved
+                resolveNative()
             }
             val v = JSONObject(json)
             val info = MediaJson.info(task.url, v)

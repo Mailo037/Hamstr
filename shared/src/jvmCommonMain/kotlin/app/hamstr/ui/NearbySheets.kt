@@ -275,7 +275,9 @@ fun NearbySettings(bluetooth: (@Composable () -> Unit)? = null) {
                     end = SwipeAction(Res.drawable.ic_close, stringResource(Res.string.set_forget), c.red, removes = true) { Nearby.forget(k.id) },
                     background = c.overlay,
                 ) {
-                    SettingRow(k.name, subtitle = sub) {
+                    SettingRow(k.name, subtitle = sub, leading = {
+                        Icon(kindIcon(k.kind), tint = c.muted, size = 22.dp)
+                    }) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (live?.online == true) Icon(if (Via.Wifi in live.via) Res.drawable.ic_wifi else Res.drawable.ic_bluetooth, tint = c.accent, size = 16.dp)
                             if (!k.trusted) HButton(stringResource(Res.string.set_trust), { Nearby.trust(live ?: k, true) })

@@ -99,14 +99,14 @@ fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier, square
             // A new list: an empty card with the add mark, so it still reads as a playlist.
             0 -> Box(
                 Modifier.align(Alignment.Center).width(maxWidth * 0.53f).aspectRatio(ratio)
-                    .clip(RoundedCornerShape(10.dp)).border(2.dp, c.line, RoundedCornerShape(10.dp)),
+                    .clip(fanShape(maxWidth * 0.53f)).border(1.dp, c.line, fanShape(maxWidth * 0.53f)),
                 contentAlignment = Alignment.Center,
             ) { Icon(Res.drawable.ic_playlist_add, tint = c.ghost, size = 22.dp) }
             1 -> {
                 val w = maxWidth * 0.78f
                 Box(
                     at(0.54f, 0.55f).graphicsLayer { rotationZ = 5f }.width(w).aspectRatio(ratio)
-                        .clip(RoundedCornerShape(10.dp)).background(c.surface).border(2.dp, c.canvas, RoundedCornerShape(10.dp)),
+                        .clip(fanShape(w)).background(c.surface).border(fanBorder(w), c.canvas, fanShape(w)),
                 )
                 FanThumb(items.first(), w, at(0.48f, 0.46f), ratio)
             }
@@ -125,6 +125,10 @@ fun PlaylistFan(items: List<DownloadTask>, modifier: Modifier = Modifier, square
     }
 }
 
+// A fixed 10 dp radius makes the 20–30 dp covers in pickers nearly circular.
+private fun fanShape(width: Dp) = RoundedCornerShape((width * 0.12f).coerceAtMost(10.dp))
+private fun fanBorder(width: Dp) = (width * 0.035f).coerceIn(0.75.dp, 2.dp)
+
 @Composable
 private fun FanThumb(t: DownloadTask, width: Dp, modifier: Modifier, ratio: Float, more: Int = 0) {
     val c = Hamstr.colors
@@ -132,8 +136,8 @@ private fun FanThumb(t: DownloadTask, width: Dp, modifier: Modifier, ratio: Floa
         modifier
             .width(width)
             .aspectRatio(ratio)
-            .clip(RoundedCornerShape(10.dp))
-            .border(2.dp, c.canvas, RoundedCornerShape(10.dp)),
+            .clip(fanShape(width))
+            .border(fanBorder(width), c.canvas, fanShape(width)),
     ) {
         AsciiImage(rememberImage(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxWidth().aspectRatio(ratio).background(c.black))
         if (more > 0) {

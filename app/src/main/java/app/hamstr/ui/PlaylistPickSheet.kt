@@ -71,7 +71,7 @@ internal fun PlaylistPickSheet(
     val c = Hamstr.colors
     val entries = playlist.entries.orEmpty()
     val defaults = remember { Prefs.settings.value }
-    var mode by remember { mutableStateOf(if (defaults.mode == Mode.Audio) Mode.Audio else Mode.Video) }
+    var mode by remember { mutableStateOf(if (defaults.mode == Mode.Audio || looksLikeAudio(playlist.url, playlist)) Mode.Audio else Mode.Video) }
     var height by remember { mutableStateOf(defaults.height) }
     var audio by remember { mutableStateOf(defaults.audioFormat) }
 

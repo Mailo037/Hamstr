@@ -12,6 +12,13 @@ class GlyphLinksTest {
         }
     }
 
+    @Test fun nativeRoutingKeepsMediaFilesOutOfPythonButNotWatchPages() {
+        assertTrue(MediaLinks.prefersNativeResolution("https://cdn.example.com/song.mp3?token=abc"))
+        assertTrue(MediaLinks.prefersNativeResolution("https://glyph.my/p/UrPYWeQ4"))
+        assertFalse(MediaLinks.prefersNativeResolution("https://youtube.com/watch?v=example"))
+        assertFalse(MediaLinks.prefersNativeResolution("https://example.com/watch?file=song.mp3"))
+    }
+
     @Test fun rejectsOtherHostsAndPaths() {
         listOf("https://glyph.my.evil.test/p/UrPYWeQ4", "https://glyph.my/p/bad", "ftp://glyph.my/p/UrPYWeQ4",
             "https://glyph.my/p/UrPYWeQ4/cover", "https://glyph.my/p/UrPYWeQ4/listen/-1").forEach {

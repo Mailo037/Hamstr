@@ -3,7 +3,7 @@ package app.hamstr.engine
 import java.net.URI
 
 /** The public share and song links understood by Cheek's Glyph extractor. */
-internal object GlyphLinks {
+object GlyphLinks {
     private const val ID = "[A-Za-z0-9]{8}(?:[A-Za-z0-9]{4})?"
     private val path = Regex("""/(?:p/$ID(?:/listen/\d+)?|embed/p/$ID)/?""")
 

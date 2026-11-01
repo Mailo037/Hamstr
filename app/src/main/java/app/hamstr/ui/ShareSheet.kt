@@ -92,10 +92,10 @@ fun errorLine(e: Throwable) = e.message?.lines()?.lastOrNull { it.contains("ERRO
     ?: e.message?.lines()?.lastOrNull { it.isNotBlank() } ?: ""
 
 /** Sites that are about sound; their links start in Audio. */
-private val AUDIO_SITES = setOf("soundcloud", "bandcamp", "mixcloud", "audiomack", "youtubemusic", "applepodcasts", "podbean")
+private val AUDIO_SITES = setOf("soundcloud", "bandcamp", "mixcloud", "audiomack", "youtubemusic", "applepodcasts", "podbean", "spotify", "applemusic", "deezer", "glyph")
 
-private fun looksLikeAudio(url: String, info: MediaInfo): Boolean =
-    info.heights.isEmpty() || url.contains("music.youtube.com") || info.source?.lowercase()?.replace(Regex("[^a-z]"), "") in AUDIO_SITES
+internal fun looksLikeAudio(url: String, info: MediaInfo): Boolean =
+    (info.entries == null && info.heights.isEmpty()) || url.contains("music.youtube.com") || info.source?.lowercase()?.replace(Regex("[^a-z]"), "") in AUDIO_SITES
 
 /** Whether [t] already is the file this [choice] would bring. */
 private fun sameChoice(t: DownloadTask, choice: Choice) = when (choice.mode) {
@@ -264,7 +264,7 @@ private fun MediaSheet(
             reveal = reveal.value,
             rain = rain.value,
             animate = rain.value > 0f && (state is InfoState.Loading || bitmap != null),
-            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)),
+            modifier = Modifier.fillMaxWidth().aspectRatio(if (mode == Mode.Audio) 1f else 16f / 9f).clip(RoundedCornerShape(14.dp)),
         )
         Spacer(Modifier.height(10.dp))
         when (val s = state) {

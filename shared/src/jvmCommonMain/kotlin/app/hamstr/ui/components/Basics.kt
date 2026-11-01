@@ -372,6 +372,7 @@ fun SettingRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     onClick: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
     Row(
@@ -383,6 +384,10 @@ fun SettingRow(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(12.dp))
+        }
         Column(Modifier.weight(1f)) {
             Txt(title, style = Hamstr.type.body)
             if (subtitle != null) {

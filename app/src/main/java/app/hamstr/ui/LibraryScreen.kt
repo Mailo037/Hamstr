@@ -343,7 +343,7 @@ fun LibraryScreen(
                         onLongClick = { toggle(t.family) },
                     ),
             ) {
-                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).background(c.black)) {
+                Box(Modifier.fillMaxWidth().aspectRatio(if (kindOf(t) == Kind.Audio) 1f else 16f / 9f).clip(RoundedCornerShape(14.dp)).background(c.black)) {
                     AsciiImage(
                         bitmap = rememberImage(t.thumbnail, 360),
                         reveal = 1f,
@@ -386,7 +386,7 @@ fun LibraryScreen(
 private fun PlaylistTile(p: app.hamstr.data.Playlist, modifier: Modifier, onLongClick: () -> Unit, onClick: () -> Unit) {
     val c = Hamstr.colors
     Column(modifier.clip(RoundedCornerShape(14.dp)).pressable(onClick, onLongClick = onLongClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().aspectRatio(if (p.songs) 1f else 16f / 9f), contentAlignment = Alignment.Center) {
             PlaylistFan(p.items, if (p.songs) Modifier.fillMaxHeight() else Modifier.fillMaxWidth(), square = p.songs)
         }
         Spacer(Modifier.height(7.dp))
