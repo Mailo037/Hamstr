@@ -163,10 +163,18 @@ object Queue : DownloadControl {
         val work = File(Paths.parts, task.id).apply { mkdirs() }
         val paths = File(work, "paths.jsonl").apply { delete() }
         try {
-            val json = output(listOf(
+            var native = false
+            val json = try { output(listOf(
                 Tools.ytDlp.path, "--dump-single-json", "--flat-playlist", "--socket-timeout", "15",
                 "--cache-dir", Paths.cache.path, if (Prefs.settings.value.playlists) "--yes-playlist" else "--no-playlist", "--", task.url,
-            ))
+            )) } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (Prefs.settings.value.engine != DownloadEngine.Cheek || !Tools.hasCheek || !cheekHandles(task)) throw e
+                // Cheek resolves pages (including Glyph) that yt-dlp does not understand.
+                val resolved = output(listOf(Tools.cheek.path, "-J", "--resolver", "native", "--", task.url))
+                native = true
+                resolved
+            }
             val v = JSONObject(json)
             val info = MediaJson.info(task.url, v)
             DownloadStore.update(task.id) {
@@ -179,10 +187,10 @@ object Queue : DownloadControl {
             val infoFile = File(work, "info.json").apply { writeText(json) }
             Paths.downloads.mkdirs()
             var run: Run? = null
-            if (single && Prefs.settings.value.engine == DownloadEngine.Cheek && Tools.hasCheek && cheekHandles(task)) {
+            if ((single || native) && Prefs.settings.value.engine == DownloadEngine.Cheek && Tools.hasCheek && cheekHandles(task)) {
                 run = cheek(task, infoFile, work, paths)
                 // Formats Cheek can't fetch (DASH fragments, DRM) go to yt-dlp after all.
-                if (run.code != 0 && CHEEK_UNSUPPORTED.containsMatchIn(run.err)) run = null.also { paths.delete() }
+                if (!native && run.code != 0 && CHEEK_UNSUPPORTED.containsMatchIn(run.err)) run = null.also { paths.delete() }
             }
             if (run == null) run = ytDlp(task, if (single) infoFile else null, work, paths)
             if (DownloadStore.get(task.id)?.status != Status.Running) return
@@ -336,7 +344,7 @@ object Queue : DownloadControl {
 
     /** Runs [cmd] for download [id], handing every line of its output to [onLine]. */
     private suspend fun exec(id: String, cmd: List<String>, onLine: (String) -> Unit): Run = runInterruptible(Dispatchers.IO) {
-        val proc = ProcessBuilder(cmd).apply { environment()["PYTHONIOENCODING"] = "utf-8" }.start()
+        val proc = toolProcess(cmd).start()
         processes[id] = proc
         val err = StringBuffer()
         val errReader = thread(name = "hamstr-stderr") { runCatching { proc.errorStream.bufferedReader().forEachLine { err.appendLine(it) } } }
@@ -353,7 +361,7 @@ object Queue : DownloadControl {
 
     /** Runs a short command and returns what it printed; fails with its error output. Never on the window's thread. */
     private suspend fun output(cmd: List<String>): String = runInterruptible(Dispatchers.IO) {
-        val proc = ProcessBuilder(cmd).apply { environment()["PYTHONIOENCODING"] = "utf-8" }.start()
+        val proc = toolProcess(cmd).start()
         val err = StringBuffer()
         val errReader = thread(name = "hamstr-stderr") { runCatching { proc.errorStream.bufferedReader().forEachLine { err.appendLine(it) } } }
         try {
@@ -364,6 +372,18 @@ object Queue : DownloadControl {
             out
         } finally {
             if (proc.isAlive) kill(proc)
+        }
+    }
+
+    /** Python's executable search can abort on stale Windows junctions in inherited PATH. */
+    private fun toolProcess(cmd: List<String>) = ProcessBuilder(cmd).apply {
+        environment()["PYTHONIOENCODING"] = "utf-8"
+        val key = environment().keys.firstOrNull { it.equals("PATH", ignoreCase = true) }
+        if (Paths.windows && key != null) {
+            environment()[key] = environment()[key].orEmpty().split(File.pathSeparator)
+                .filter { entry -> entry.isNotBlank() && runCatching {
+                    java.nio.file.Files.newDirectoryStream(File(entry.trim('"')).toPath()).use { true }
+                }.getOrDefault(false) }.joinToString(File.pathSeparator)
         }
     }
 

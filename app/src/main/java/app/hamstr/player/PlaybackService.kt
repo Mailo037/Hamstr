@@ -53,6 +53,8 @@ class PlaybackService : MediaSessionService() {
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .build()
+        player.shuffleModeEnabled = Prefs.settings.value.playbackShuffle
+        player.repeatMode = Prefs.settings.value.playbackRepeat
         val open = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -64,6 +66,12 @@ class PlaybackService : MediaSessionService() {
         setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_stat_hamstr) })
         player.addListener(object : Player.Listener {
             private var last: String? = null
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                Prefs.edit { it.copy(playbackShuffle = shuffleModeEnabled) }
+            }
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                Prefs.edit { it.copy(playbackRepeat = repeatMode) }
+            }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 handler.removeCallbacks(keep)
                 if (isPlaying) handler.postDelayed(keep, 5_000) else remember(player)

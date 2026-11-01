@@ -591,6 +591,20 @@ class DownloadService : Service() {
             send(context, ACTION_START)
         }
 
+        /** Reuses the failed entry so its playlist membership and position remain intact. */
+        fun stashAlternative(context: Context, id: String, url: String, info: MediaInfo, choice: Choice) {
+            DownloadStore.update(id) { old ->
+                if (old.status != Status.Failed) old else DownloadTask(
+                    id = old.id, url = url, title = info.title, thumbnail = info.thumbnail,
+                    source = info.source, durationSec = info.durationSec, choice = choice,
+                    uploader = info.uploader, mediaKey = info.key, createdAt = old.createdAt,
+                    group = old.group, groupTitle = old.groupTitle, versionOf = old.versionOf,
+                    replaces = old.replaces, hidden = old.hidden,
+                )
+            }
+            send(context, ACTION_START)
+        }
+
         /** Queues the picked videos of a playlist, each its own download, together as one group. */
         fun stashEntries(context: Context, playlist: MediaInfo, entries: List<PlaylistEntry>, choice: Choice) {
             if (entries.isEmpty()) return

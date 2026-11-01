@@ -1,5 +1,8 @@
 package app.hamstr.nearby
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -34,11 +37,16 @@ object PhoneNearby {
         val lock = app.getSystemService(WifiManager::class.java)?.createMulticastLock("hamstr-nearby")?.apply { setReferenceCounted(false) }
         Nearby.init(
             keyValues(app, "nearby"), app.filesDir, DeviceKind.Phone, deviceName(app),
+            initiallyAvailable = false,
             transports = listOf(
                 LanTransport(onStart = { runCatching { lock?.acquire() } }, onStop = { runCatching { lock?.release() } }),
                 BleTransport(app),
             ),
         )
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) = Nearby.setAvailable(true)
+            override fun onStop(owner: LifecycleOwner) = Nearby.setAvailable(false)
+        })
         Nearby.onLink = { url, title, from ->
             if (MediaLinks.needsEpisodeSelection(url)) {
                 notify(app, url.hashCode(), app.getString(R.string.nearby_received, from.name), title ?: url, share(app, url))

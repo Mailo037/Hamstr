@@ -82,6 +82,7 @@ class LanTransport(private val onStart: () -> Unit = {}, private val onStop: () 
         runCatching { out?.close() }
         server = null; listen = null; out = null
         spots.clear()
+        eager = false
         onStop()
     }
 

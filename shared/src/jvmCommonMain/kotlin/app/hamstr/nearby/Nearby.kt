@@ -97,6 +97,7 @@ object Nearby {
     val name: String get() = Prefs.settings.value.deviceName.ifBlank { defaultName }
 
     private var transports: List<Transport> = emptyList()
+    private var available = true
     private var running = false
     private var sweeper: Job? = null
 
@@ -124,7 +125,8 @@ object Nearby {
 
     private val nonces = LinkedHashSet<String>()
 
-    fun init(store: KeyValues, dir: File, kind: DeviceKind, defaultName: String, transports: List<Transport>) {
+    fun init(store: KeyValues, dir: File, kind: DeviceKind, defaultName: String, transports: List<Transport>, initiallyAvailable: Boolean = true) {
+        available = initiallyAvailable
         this.store = store
         this.kind = kind
         this.defaultName = defaultName
@@ -134,8 +136,20 @@ object Nearby {
         id = idOf(keys.public.encoded)
         load()
         scope.launch {
-            Prefs.settings.map { it.nearby }.distinctUntilChanged().collect { if (it) start() else stop() }
+            Prefs.settings.map { it.nearby }.distinctUntilChanged().collect { updateAvailability() }
         }
+    }
+
+    /** Suspend radios when the host is in the background, without changing the user's setting. */
+    @Synchronized
+    fun setAvailable(value: Boolean) {
+        available = value
+        updateAvailability()
+    }
+
+    @Synchronized
+    private fun updateAvailability() {
+        if (available && Prefs.settings.value.nearby) start() else stop()
     }
 
     private fun start() {

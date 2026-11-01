@@ -28,6 +28,7 @@ import android.os.Build
 import android.os.ParcelUuid
 import app.hamstr.Log
 import app.hamstr.data.Prefs
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -61,6 +62,7 @@ class BleTransport(private val context: Context) : Transport {
     private val incoming = ConcurrentHashMap<String, ByteArrayOutputStream>()
     private val gattLock = Mutex()
     private var scope: CoroutineScope? = null
+    private var settingsJob: Job? = null
     private var server: BluetoothGattServer? = null
     private var advertising: AdvertiseCallback? = null
     private var scanning: ScanCallback? = null
@@ -78,12 +80,16 @@ class BleTransport(private val context: Context) : Transport {
         val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(adapterState, filter, Context.RECEIVER_NOT_EXPORTED)
         else context.registerReceiver(adapterState, filter)
-        scope.launch { Prefs.settings.map { it.nearbyBluetooth }.distinctUntilChanged().drop(1).collect { refresh() } }
+        settingsJob?.cancel()
+        settingsJob = scope.launch { Prefs.settings.map { it.nearbyBluetooth }.distinctUntilChanged().drop(1).collect { refresh() } }
         refresh()
     }
 
     override fun stop() {
         wanted = false
+        settingsJob?.cancel()
+        settingsJob = null
+        eager = false
         runCatching { context.unregisterReceiver(adapterState) }
         down()
     }

@@ -38,9 +38,6 @@ private fun playable(t: DownloadTask) = t.filePath?.let(::File)?.isFile == true 
 
 /** The in-app player's state: what is loaded and whether it is shown big or as the mini player. */
 object Playback {
-    // Clips this short loop on their own, like on the sites they come from.
-    private const val LOOP_UP_TO_SEC = 60
-
     private val connectionMutex = Mutex()
     private var openGeneration = 0L
     private val _current = MutableStateFlow<DownloadTask?>(null)
@@ -143,9 +140,6 @@ object Playback {
             if (sameQueue) c.seekTo(index, at)
             else c.setMediaItems(entries.map { t -> item(t, File(t.filePath!!)) }, index, at)
             c.prepare()
-            // A short clip on its own loops; a queue plays through.
-            c.repeatMode = if (entries.size == 1 && task.durationSec in 1..LOOP_UP_TO_SEC) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-            c.shuffleModeEnabled = false
         }
         if (play) c.play() else c.pause()
         true
@@ -170,8 +164,6 @@ object Playback {
         val file = task.filePath?.let(::File)?.takeIf { it.isFile && playable(task) } ?: return false
         val now = c.currentMediaItemIndex
         val at = _queue.value.indexOfFirst { it.id == task.id }
-        // A short clip loops on its own; with more to come, the queue plays on instead.
-        if (c.mediaItemCount == 1 && c.repeatMode == Player.REPEAT_MODE_ONE) c.repeatMode = Player.REPEAT_MODE_OFF
         if (at == now) return true
         if (at >= 0) {
             val to = if (next) (if (at < now) now else now + 1) else _queue.value.lastIndex

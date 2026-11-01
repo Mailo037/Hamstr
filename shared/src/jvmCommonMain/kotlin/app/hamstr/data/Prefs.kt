@@ -50,6 +50,8 @@ data class Settings(
     val stretch: Boolean = true,
     val haptics: Boolean = true,
     // Playback
+    val playbackShuffle: Boolean = false,
+    val playbackRepeat: Int = 0, // Media3: off (0), one (1), all (2).
     val resumeAfterVideos: Boolean = true,
     val iconFollowsAccent: Boolean = true,
     // Nearby: other Hamstr apps on the same Wi-Fi or in Bluetooth range. Empty name: the device's own.
@@ -122,6 +124,8 @@ object Prefs {
             moods = sp.getBoolean("fx.moods", true),
             stretch = sp.getBoolean("fx.stretch", true),
             haptics = sp.getBoolean("fx.haptics", true),
+            playbackShuffle = sp.getBoolean("playbackShuffle", false),
+            playbackRepeat = sp.getInt("playbackRepeat", 0).takeIf { it in 0..2 } ?: 0,
             resumeAfterVideos = sp.getBoolean("resumeAfterVideos", true),
             iconFollowsAccent = sp.getBoolean("iconFollowsAccent", true),
             nearby = sp.getBoolean("nearby", true),
@@ -173,6 +177,8 @@ object Prefs {
             .putBoolean("fx.moods", s.moods)
             .putBoolean("fx.stretch", s.stretch)
             .putBoolean("fx.haptics", s.haptics)
+            .putBoolean("playbackShuffle", s.playbackShuffle)
+            .putInt("playbackRepeat", s.playbackRepeat)
             .putBoolean("resumeAfterVideos", s.resumeAfterVideos)
             .putBoolean("iconFollowsAccent", s.iconFollowsAccent)
             .putBoolean("nearby", s.nearby)

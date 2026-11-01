@@ -189,7 +189,13 @@ class MainActivity : ComponentActivity() {
                 .collect { (task, player) -> pip.bind(task, player) }
         }
         if (savedInstanceState == null) take(intent)
-        setContent { HamstrTheme { App(inPip.value) } }
+        setContent {
+            val state by lifecycle.currentStateFlow.collectAsState()
+            androidx.compose.runtime.CompositionLocalProvider(
+                app.hamstr.ui.components.LocalAmbient provides
+                    state.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED),
+            ) { HamstrTheme { App(inPip.value) } }
+        }
     }
 
     override fun onStart() {
@@ -806,7 +812,7 @@ private fun TaskMenu(
             if (why.title == Res.string.err_drm) {
                 Spacer(Modifier.height(6.dp))
                 app.hamstr.ui.ElsewhereCard(t.url, t.title, t.uploader, t.durationSec) { hit ->
-                    DownloadService.stash(context, hit.url, hit.toInfo(), t.choice.copy(mode = Mode.Audio))
+                    DownloadService.stashAlternative(context, t.id, hit.url, hit.toInfo(), t.choice.copy(mode = Mode.Audio))
                     onCopied(resources.getString(R.string.drm_stashing))
                     onClose()
                 }
