@@ -208,7 +208,9 @@ android {
         applicationId = "app.hamstr"
         minSdk = 26
         targetSdk = 36
-        versionCode = major * 10_000 + minor * 100 + patch
+        // Keep Android upgrades monotonic after the withdrawn 0.8.0 (code 800).
+        // This internal offset does not change the public version (0.7.5 -> code 805).
+        versionCode = major * 10_000 + minor * 100 + patch + 100
         versionName = appVersion
         buildConfigField("String", "CHEEK_VERSION", "\"$cheekVersion\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
