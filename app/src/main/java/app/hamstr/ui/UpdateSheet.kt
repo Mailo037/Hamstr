@@ -2,6 +2,12 @@ package app.hamstr.ui
 
 import app.hamstr.res.*
 import androidx.compose.ui.res.stringResource
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
 import androidx.compose.animation.AnimatedContent
@@ -53,6 +59,7 @@ val UpdateState.release: Release?
     get() = when (this) {
         is UpdateState.Available -> release
         is UpdateState.Downloading -> release
+        is UpdateState.Ready -> release
         is UpdateState.Installing -> release
         is UpdateState.Failed -> release
         else -> null
@@ -60,7 +67,7 @@ val UpdateState.release: Release?
 
 /** Floating card at the top when a new release is out. Tap opens [UpdateSheet]. */
 @Composable
-fun UpdateBanner(release: Release, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun UpdateBanner(release: Release, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier, ready: Boolean = false) {
     val c = Hamstr.colors
     Row(
         modifier
@@ -74,8 +81,8 @@ fun UpdateBanner(release: Release, onOpen: () -> Unit, onDismiss: () -> Unit, mo
         HamstrMark(36.dp, interactive = false)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Txt(stringResource(R.string.set_update_out, release.version), style = Hamstr.type.bodyMedium, maxLines = 1)
-            Txt(stringResource(R.string.upd_tap), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
+            Txt(stringResource(if (ready) R.string.upd_ready else R.string.set_update_out, release.version), style = Hamstr.type.bodyMedium, maxLines = 1)
+            Txt(stringResource(if (ready) R.string.upd_ready_hint else R.string.upd_tap), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
         }
         Txt(stringResource(R.string.upd_update), style = Hamstr.type.button, color = c.accent, modifier = Modifier.padding(horizontal = 8.dp))
         IconButton(Res.drawable.ic_close, stringResource(R.string.notify_ask_later), onDismiss, background = Color.Transparent, size = 34.dp)
@@ -89,6 +96,8 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     val state by Updater.state.collectAsState()
     val release = state.release
+    val start = { release?.let { Updater.install(context, it); onClose() }; Unit }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { start() }
     val mark = rememberMarkState()
     LaunchedEffect(state is UpdateState.Installing) { if (state is UpdateState.Installing) mark.munch() }
 
@@ -116,13 +125,16 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
         AnimatedContent(state, contentKey = { it.javaClass }, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "updateStatus") { s ->
             when (s) {
                 is UpdateState.Downloading -> Column {
-                    ProgressLine(s.progress)
+                    if (s.progress >= 0) ProgressLine(s.progress)
                     Spacer(Modifier.height(8.dp))
                     Row {
                         Txt(stringResource(R.string.upd_downloading), style = Hamstr.type.small, color = c.muted, modifier = Modifier.weight(1f))
-                        Txt("${(s.progress * 100).toInt()} %", style = Hamstr.type.mono, color = c.ghost)
+                        if (s.progress >= 0) Txt("${(s.progress * 100).toInt()} %", style = Hamstr.type.mono, color = c.ghost)
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Txt(stringResource(R.string.upd_background), style = Hamstr.type.small, color = c.muted)
                 }
+                is UpdateState.Ready -> Txt(stringResource(R.string.upd_ready_hint), style = Hamstr.type.small, color = c.muted)
                 is UpdateState.Installing -> Txt(stringResource(R.string.upd_installing_hint), style = Hamstr.type.small, color = c.muted)
                 is UpdateState.Failed -> Txt(s.message, style = Hamstr.type.small, color = c.red)
                 else -> Spacer(Modifier.height(0.dp))
@@ -133,16 +145,23 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
             if (release == null) {
                 HButton(stringResource(R.string.upd_close), onClose, Modifier.weight(1f))
             } else {
-                HButton(stringResource(R.string.upd_later), onLater, Modifier.weight(1f), kind = ButtonKind.Ghost)
                 val busy = state is UpdateState.Downloading || state is UpdateState.Installing
+                HButton(stringResource(if (busy || state is UpdateState.Ready) R.string.upd_close else R.string.upd_later),
+                    if (busy || state is UpdateState.Ready) onClose else onLater, Modifier.weight(1f), kind = ButtonKind.Ghost)
                 HButton(
                     when (state) {
                         is UpdateState.Downloading -> stringResource(R.string.upd_downloading_dots)
                         is UpdateState.Installing -> stringResource(R.string.upd_installing)
                         is UpdateState.Failed -> stringResource(R.string.err_try_again)
-                        else -> stringResource(R.string.upd_install)
+                        is UpdateState.Ready -> stringResource(R.string.upd_install)
+                        else -> stringResource(R.string.upd_download)
                     },
-                    onClick = { Updater.install(context, release) },
+                    onClick = {
+                        if (state !is UpdateState.Ready && Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else start()
+                    },
                     modifier = Modifier.weight(1.6f),
                     kind = ButtonKind.Primary,
                     icon = Res.drawable.ic_download,

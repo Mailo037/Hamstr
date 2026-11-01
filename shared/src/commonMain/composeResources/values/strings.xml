@@ -472,6 +472,15 @@
     <string name="upd_downloading_dots">Downloading …</string>
     <string name="upd_installing">Installing …</string>
     <string name="upd_install">Install update</string>
+    <string name="upd_download">Download update</string>
+    <string name="upd_background">Keep using Hamstr. The download continues in the background.</string>
+    <string name="upd_ready">Hamstr %1$s is ready to install</string>
+    <string name="upd_ready_hint">Install when you’re ready. The download is already saved.</string>
+    <string name="upd_notification_downloading">Downloading Hamstr %1$s</string>
+    <string name="upd_confirm">Continue installing Hamstr</string>
+    <string name="upd_interrupted">The update download was interrupted. Tap Try again to restart it.</string>
+    <string name="upd_incomplete">The update download is incomplete. Please try again.</string>
+    <string name="channel_update_downloads">Update downloads</string>
     <string name="channel_updates">App updates</string>
     <string name="upd_no_github">Couldn’t reach GitHub: %1$s</string>
     <string name="upd_bad_apk">The download isn’t a valid APK</string>

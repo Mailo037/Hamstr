@@ -16,7 +16,7 @@ Hamstr is one app on two kinds of device: the phone app (`app/`) and the desktop
   - `engine/`: the Cheek bridge, yt-dlp and FFmpeg through [youtubedl-android](https://github.com/JunkFood02/youtubedl-android), the warm yt-dlp process, the download queue (`DownloadService`) and its notifications.
   - `player/`: a Media3 ExoPlayer behind a `MediaSession`, plus the mini player, picture-in-picture and fullscreen.
   - `nearby/`: Bluetooth LE for Nearby (`BleTransport`: advertise, scan, a GATT server to read who a phone is and write links into) and the phone's notifications for received links (`PhoneNearby`). The desktop has Wi-Fi only so far; the JVM has no Bluetooth API.
-  - `update/`: the self-updater, built on GitHub Releases and `PackageInstaller` sessions.
+  - `update/`: the self-updater, built on GitHub Releases and `PackageInstaller` sessions. `UpdateDownloadService` downloads with a foreground notification; the verified APK stays in private files until the user chooses to install it.
   - `ui/`: the screens that are still Android-only (library, player sheets, share sheet, most of settings).
 - `desktop/`: the desktop window (`DesktopApp`), its download queue (`Queue`, the desktop's `DownloadService`), and how it finds yt-dlp, Cheek and FFmpeg (`Tools`).
 - `tools/`: scripts that render the icon (also the desktop icons, `python tools/render_icon.py desktop`), product images and shortcuts.
@@ -69,6 +69,8 @@ adb shell am start -n app.hamstr/.demo.DemoActivity --es seed off
 ```
 
 `--es seed /sdcard/Download/my.json` loads your own seed in the format of `app/src/debug/assets/demo/default.json`; entries with the same `"playlist"` name become one of your playlists. `python tools/demo_screens.py` seeds the demo on a device, takes every screenshot and renders `docs/images` plus the release picture (`tools/render_release.py`).
+
+For updater screenshots, also build and install `:app:assembleDebugAndroidTest`, then run `python tools/demo_screens.py --updates`. It runs `BackgroundUpdateTest` against a throttled local HTTP fixture: continuing with the screen off, ready-notification handoff, cancellation and a truncated download. Use a separate emulator for this; it stages a test update but never installs it. For release pictures, build both debug APKs with `-Phamstr.version=<previous-version>`; the fixture offers the next bugfix version.
 
 ## Releasing
 

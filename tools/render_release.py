@@ -12,15 +12,15 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 FEATURES = [
-    ("ONE SHARE SHEET", "Files, links and nearby devices"),
-    ("LINK OR FILE", "Choose what you want to send"),
-    ("DESKTOP TOO", "Copy files to paste into other apps"),
+    ("KEEP USING HAMSTR", "Updates download in the background"),
+    ("STAY INFORMED", "Progress and a ready-to-install alert"),
+    ("INSTALL WHEN READY", "Downloaded once, saved for later"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
-SHOTS = [("share_link.png", "Links"), ("share_file.png", "Files"), ("menu.png", "One menu")]
+SHOTS = [("update_app.png", "Keep using"), ("update_progress.png", "Progress"), ("update_ready.png", "Install later")]
 
 
 

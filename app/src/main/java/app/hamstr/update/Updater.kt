@@ -12,10 +12,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.IntentCompat
+import androidx.core.content.ContextCompat
 import app.hamstr.BuildConfig
 import app.hamstr.MainActivity
 import app.hamstr.R
 import app.hamstr.data.Prefs
+import app.hamstr.engine.Seen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,6 +30,8 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /** A published Hamstr release and the APK in it that fits this phone. */
 data class Release(
@@ -37,7 +41,9 @@ data class Release(
     val apkName: String,
     val size: Long,
     val page: String,
-)
+) {
+    companion object
+}
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -45,19 +51,20 @@ sealed interface UpdateState {
     data object UpToDate : UpdateState
     data class Available(val release: Release) : UpdateState
     data class Downloading(val release: Release, val progress: Float) : UpdateState
+    data class Ready(val release: Release) : UpdateState
     data class Installing(val release: Release) : UpdateState
     data class Failed(val message: String, val release: Release?) : UpdateState
 }
 
 /**
  * Hamstr updates itself from its GitHub Releases: it looks at the latest release, downloads
- * the APK for this phone's ABI and hands it to the system installer, without a detour
- * through the browser. Once Hamstr installed itself, Android 12+ lets later updates go
- * through without asking again.
+ * the APK for this phone's ABI in a foreground service, then saves it until the user
+ * chooses to install. Once Hamstr installed itself, Android 12+ can skip the system's
+ * confirmation on later updates.
  */
 object Updater {
     const val REPO = "Mailo037/Hamstr"
-    private const val CH_UPDATES = "updates"
+    internal const val CH_UPDATES = "updates"
     private const val LAUNCH_CHECK_EVERY = 6 * 60 * 60 * 1000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -68,8 +75,19 @@ object Updater {
     fun init(context: Context) {
         context.getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel(CH_UPDATES, context.getString(R.string.channel_updates), NotificationManager.IMPORTANCE_DEFAULT))
-        // An APK left over from an update that already went through.
-        scope.launch { dir(context).listFiles()?.forEach { it.delete() } }
+        UpdateNotifications.createChannel(context)
+        val saved = pending(context).read()
+        _state.value = when {
+            saved == null -> UpdateState.Idle
+            !newer(saved.first.version, BuildConfig.VERSION_NAME) -> {
+                pending(context).clear()
+                UpdateState.Idle
+            }
+            saved.second -> UpdateState.Ready(saved.first)
+            else -> UpdateState.Failed(context.getString(R.string.upd_interrupted), saved.first)
+        }
+        // Before 0.8.1 updates were downloaded into the cache and installed immediately.
+        scope.launch { File(context.cacheDir, "updates").listFiles()?.forEach { it.delete() } }
     }
 
     /** Quietly looks for a new release when the app starts, at most every few hours. */
@@ -80,7 +98,7 @@ object Updater {
     }
 
     fun check(context: Context) {
-        if (job?.isActive == true) return
+        if (job?.isActive == true || state.value is UpdateState.Downloading || state.value is UpdateState.Installing || state.value is UpdateState.Ready) return
         job = scope.launch {
             _state.value = UpdateState.Checking
             _state.value = runCatching { latest() }.fold(
@@ -93,19 +111,58 @@ object Updater {
         }
     }
 
-    /** Downloads the release's APK and starts the system install. */
+    /** Starts a background download, or installs the already verified APK on an explicit tap. */
     fun install(context: Context, release: Release) {
-        if (job?.isActive == true) return
+        if (job?.isActive == true || state.value is UpdateState.Downloading || state.value is UpdateState.Installing) return
         val app = context.applicationContext
-        job = scope.launch {
-            try {
-                val apk = download(app, release)
-                verify(app, apk)
-                _state.value = UpdateState.Installing(release)
-                commit(app, apk)
-            } catch (e: Exception) {
-                _state.value = UpdateState.Failed(e.message ?: e.javaClass.simpleName, release)
+        val saved = pending(app).read()
+        if (saved?.first == release && saved.second) {
+            _state.value = UpdateState.Installing(release)
+            UpdateNotifications.cancelResult(app)
+            job = scope.launch {
+                try {
+                    verify(app, pending(app).apk)
+                    commit(app, pending(app).apk)
+                } catch (e: Exception) {
+                    failed(app, release, e.message ?: app.getString(R.string.upd_failed))
+                }
             }
+            return
+        }
+        try {
+            pending(app).save(release, ready = false)
+            downloading(release, 0f)
+            ContextCompat.startForegroundService(app, Intent(app, UpdateDownloadService::class.java)
+                .putExtra(UpdateDownloadService.EXTRA_RELEASE, release.toJson().toString()))
+        } catch (e: Exception) {
+            failed(app, release, e.message ?: app.getString(R.string.upd_failed))
+        }
+    }
+
+    internal fun pending(context: Context) = PendingUpdate(File(context.filesDir, "updates"))
+    internal fun downloading(release: Release, progress: Float) { _state.value = UpdateState.Downloading(release, progress) }
+    internal fun ready(context: Context, release: Release) {
+        pending(context).save(release, ready = true)
+        // Download completion is news even if the earlier release offer was dismissed.
+        Prefs.edit { if (it.seenRelease == release.version) it.copy(seenRelease = "") else it }
+        _state.value = UpdateState.Ready(release)
+    }
+    internal fun available(release: Release) { _state.value = UpdateState.Available(release) }
+    internal fun failed(context: Context, release: Release?, message: String) {
+        _state.value = UpdateState.Failed(message, release)
+        UpdateNotifications.failed(context, message)
+    }
+
+    /** A service calls this; completion never starts an installer or interrupts the current app. */
+    internal fun fetch(context: Context, release: Release, connection: (HttpURLConnection) -> Unit, progress: (Float) -> Unit) {
+        val store = pending(context)
+        val apk = download(context, release, connection, progress)
+        try {
+            verify(context, apk)
+            Files.move(apk.toPath(), store.apk.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (e: Exception) {
+            apk.delete()
+            throw e
         }
     }
 
@@ -148,33 +205,33 @@ object Updater {
 
     // ---- download and install --------------------------------------------------------
 
-    private fun dir(context: Context) = File(context.cacheDir, "updates").apply { mkdirs() }
-
-    private fun download(context: Context, release: Release): File {
-        val out = File(dir(context), release.apkName)
-        _state.value = UpdateState.Downloading(release, 0f)
+    private fun download(context: Context, release: Release, connection: (HttpURLConnection) -> Unit, progress: (Float) -> Unit): File {
+        val out = pending(context).partial
         val conn = open(release.apkUrl) // github.com redirects to its file host; same scheme, so it follows
+        connection(conn)
         try {
             if (conn.responseCode != 200) error("Download failed: HTTP ${conn.responseCode}")
-            val total = conn.contentLengthLong.takeIf { it > 0 } ?: release.size
+            val total = release.size.takeIf { it > 0 } ?: conn.contentLengthLong
+            var done = 0L
             conn.inputStream.use { input ->
                 out.outputStream().use { output ->
                     val buf = ByteArray(64 * 1024)
-                    var done = 0L
                     var shown = -1
                     while (true) {
+                        if (Thread.currentThread().isInterrupted) throw InterruptedException()
                         val n = input.read(buf)
                         if (n < 0) break
                         output.write(buf, 0, n)
                         done += n
-                        val pct = if (total > 0) (done * 100 / total).toInt() else 0
+                        val pct = if (total > 0) (done * 100 / total).toInt().coerceIn(0, 100) else -1
                         if (pct != shown) {
                             shown = pct
-                            _state.value = UpdateState.Downloading(release, pct / 100f)
+                            progress(if (pct < 0) -1f else pct / 100f)
                         }
                     }
                 }
             }
+            if (total > 0 && done != total) error(context.getString(R.string.upd_incomplete))
         } catch (e: Exception) {
             out.delete()
             throw e
@@ -213,7 +270,7 @@ object Updater {
             if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id = installer.createSession(params)
-        installer.openSession(id).use { session ->
+        try { installer.openSession(id).use { session ->
             session.openWrite("hamstr.apk", 0, apk.length()).use { out ->
                 apk.inputStream().use { it.copyTo(out) }
                 session.fsync(out)
@@ -224,17 +281,20 @@ object Updater {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE, // the installer fills in the status
             )
             session.commit(result.intentSender)
-        }
+        } } catch (e: Exception) { installer.abandonSession(id); throw e }
     }
 
     internal fun onResult(context: Context, intent: Intent) {
-        val release = (state.value as? UpdateState.Installing)?.release
+        val release = (state.value as? UpdateState.Installing)?.release ?: pending(context).read()?.first
         when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)
-                    ?.let { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    ?.let {
+                        if (Seen.foreground) context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        else UpdateNotifications.confirm(context, it)
+                    }
             }
-            PackageInstaller.STATUS_SUCCESS -> _state.value = UpdateState.Idle
+            PackageInstaller.STATUS_SUCCESS -> { pending(context).clear(); _state.value = UpdateState.Idle }
             else -> {
                 val why = when (status) {
                     PackageInstaller.STATUS_FAILURE_ABORTED -> context.getString(R.string.upd_cancelled)
@@ -242,7 +302,7 @@ object Updater {
                     PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> context.getString(R.string.upd_refused)
                     else -> intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: context.getString(R.string.upd_failed)
                 }
-                _state.value = UpdateState.Failed(why, release)
+                failed(context, release, why)
             }
         }
     }

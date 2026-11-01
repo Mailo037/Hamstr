@@ -233,7 +233,8 @@ class MainActivity : ComponentActivity() {
         const val ACTION_LIBRARY = "app.hamstr.action.LIBRARY"
         const val ACTION_OPEN = "app.hamstr.action.OPEN"
         const val ACTION_PLAYER = "app.hamstr.action.PLAYER"
-        private val ACTIONS = setOf(ACTION_PASTE, ACTION_ADD, ACTION_LIBRARY, ACTION_OPEN, ACTION_PLAYER)
+        const val ACTION_UPDATE = "app.hamstr.action.UPDATE"
+        private val ACTIONS = setOf(ACTION_PASTE, ACTION_ADD, ACTION_LIBRARY, ACTION_OPEN, ACTION_PLAYER, ACTION_UPDATE)
         internal val pendingAction = MutableStateFlow<String?>(null)
         private const val LINK = "link:"
 
@@ -419,7 +420,11 @@ private fun App(inPip: Boolean) {
     val update by Updater.state.collectAsState()
     var updateSheet by rememberSaveable { mutableStateOf(false) }
     // The banner shows once per release; closing it leaves the update in Settings > About.
-    val offered = (update as? UpdateState.Available)?.release?.takeIf { it.version != settings.seenRelease }
+    val offered = when (val u = update) {
+        is UpdateState.Ready -> u.release.takeIf { it.version != settings.seenRelease }
+        is UpdateState.Available -> u.release.takeIf { it.version != settings.seenRelease }
+        else -> null
+    }
 
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -452,6 +457,7 @@ private fun App(inPip: Boolean) {
         val a = action ?: return@LaunchedEffect
         when {
             a == MainActivity.ACTION_LIBRARY -> tab = Tab.Library
+            a == MainActivity.ACTION_UPDATE -> updateSheet = true
             a.startsWith("link:") -> { menuFor = null; tab = Tab.Stash; sheetUrl = a.removePrefix("link:") }
             a == MainActivity.ACTION_PLAYER -> if (Playback.current.value != null) Playback.expand() else tab = Tab.Library
             a == MainActivity.ACTION_ADD -> if (focused) { tab = Tab.Stash; clipLink = clipboardLink(); addSheet = true } else return@LaunchedEffect
@@ -564,7 +570,7 @@ private fun App(inPip: Boolean) {
             exit = slideOutVertically(Specs.leave()) { -it * 2 } + fadeOut(Specs.listOut()),
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            lastOffered?.let { r -> UpdateBanner(r, onOpen = { updateSheet = true }, onDismiss = { Updater.dismiss(r) }) }
+            lastOffered?.let { r -> UpdateBanner(r, onOpen = { updateSheet = true }, onDismiss = { Updater.dismiss(r) }, ready = update is UpdateState.Ready) }
         }
 
         Overlay(visible = queueSheet && playing != null, onDismiss = { queueSheet = false }) {

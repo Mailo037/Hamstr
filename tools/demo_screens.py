@@ -75,6 +75,7 @@ def main():
     ap.add_argument("--serial")
     ap.add_argument("--seed", default="default")
     ap.add_argument("--keep", action="store_true", help="reuse the demo that is already seeded")
+    ap.add_argument("--updates", action="store_true", help="capture the updater's local-fixture tests too; install the debug androidTest APK first")
     ap.add_argument("--out", default=str(ROOT / "build/screens"))
     ap.add_argument("--share", default="https://www.youtube.com/watch?v=hmstrDemo08", help="link the seed resolves for the share sheet")
     ap.add_argument("--play", default="Night Train Through the Alps", help="stashed title to open in the player and file menu")
@@ -167,6 +168,16 @@ def main():
         d.find("Pixel 9")
         d.shot(out / "send.png", settle=2.5)
         d.sh("input", "keyevent", "BACK")
+        if a.updates:
+            print("capturing background update regression tests")
+            result = subprocess.run(d.base + ["shell", "am", "instrument", "-w", "-e", "class",
+                "app.hamstr.update.BackgroundUpdateTest", "app.hamstr.test/androidx.test.runner.AndroidJUnitRunner"],
+                capture_output=True, text=True, encoding="utf8", errors="replace")
+            print(result.stdout)
+            if result.returncode != 0 or "OK (3 tests)" not in result.stdout:
+                raise RuntimeError("background update tests failed: " + result.stderr)
+            for name in ("update_app", "update_progress", "update_notification_ready", "update_ready"):
+                subprocess.run(d.base + ["pull", f"/sdcard/Android/data/{PKG}/files/update-shots/{name}.png", str(out / f"{name}.png")], check=True)
     finally:
         d.status_bar(False)
 
