@@ -13,6 +13,8 @@ import java.awt.Frame
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
+import java.awt.datatransfer.Transferable
+import java.awt.datatransfer.UnsupportedFlavorException
 import java.io.File
 
 /** The desktop's ways in and out: the clipboard, the file manager and the default apps. */
@@ -25,6 +27,20 @@ object Files {
 
     fun copy(text: String) {
         Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+    }
+
+    /** Native file clipboard data: paste into a chat, mail composer or file manager. */
+    fun copyFiles(files: List<File>) {
+        val present = files.filter { it.isFile }
+        if (present.isEmpty()) return
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(object : Transferable {
+            override fun getTransferDataFlavors() = arrayOf(DataFlavor.javaFileListFlavor)
+            override fun isDataFlavorSupported(flavor: DataFlavor) = flavor == DataFlavor.javaFileListFlavor
+            override fun getTransferData(flavor: DataFlavor): Any {
+                if (!isDataFlavorSupported(flavor)) throw UnsupportedFlavorException(flavor)
+                return present
+            }
+        }, null)
     }
 
     /** Opens a file with the app the system picks for it. */

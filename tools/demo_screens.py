@@ -124,6 +124,15 @@ def main():
         d.tap(a.play, long=True)
         d.find("File info")
         d.shot(out / "menu.png")
+        d.tap("Share")
+        d.find("File")
+        d.shot(out / "share_file.png", settle=4)
+        d.sh("am", "start", "-f", "0x18000000", "-n", f"{PKG}/.demo.DemoActivity", "--es", "nearby", "on")
+        d.tap("Link")
+        d.find("Pixel 9")
+        d.shot(out / "share_link.png", settle=2.5)
+        d.sh("input", "keyevent", "BACK")
+        d.tap(a.play, long=True)
         d.tap("File info")
         d.shot(out / "info.png")
         d.sh("input", "keyevent", "BACK")
@@ -147,14 +156,14 @@ def main():
         d.sh("input", "keyevent", "BACK")
         d.tap("Stash")
 
-        # The send sheet with a few made-up devices around (DemoActivity --es nearby on).
-        d.sh("am", "start", "-f", "0x10008000", "-n", f"{PKG}/.demo.DemoActivity", "--es", "nearby", "on")  # a new task, or Android only brings the old one up
+        # MULTIPLE_TASK starts the demo hook without clearing the app's open sheet.
+        d.sh("am", "start", "-f", "0x18000000", "-n", f"{PKG}/.demo.DemoActivity", "--es", "nearby", "on")
         time.sleep(2)
         d.sh("am", "start", "-a", "android.intent.action.SEND", "-t", "text/plain",
              "--es", "android.intent.extra.TEXT", a.share, "-n", f"{PKG}/.ShareActivity")
-        d.find("Send to a device")
+        d.find("Share")
         d.shot(out / "share_send.png", settle=3)
-        d.tap("Send to a device")
+        d.tap("Share")
         d.find("Pixel 9")
         d.shot(out / "send.png", settle=2.5)
         d.sh("input", "keyevent", "BACK")

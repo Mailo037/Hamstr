@@ -117,7 +117,8 @@ import kotlinx.coroutines.launch
 import app.hamstr.ui.LibraryScreen
 import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
-import app.hamstr.ui.SendSheet
+import app.hamstr.ui.ShareContent
+import app.hamstr.ui.AndroidSharingSheet
 import app.hamstr.ui.RequestSheet
 import app.hamstr.ui.QualitySheet
 import app.hamstr.ui.RenameSheet
@@ -286,7 +287,7 @@ private fun App(inPip: Boolean) {
     var sheetUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     // A link on its way to another Hamstr nearby, and the question from one that wants to send.
-    var sendLink by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var sharing by remember { mutableStateOf<ShareContent?>(null) }
     val requests by app.hamstr.nearby.Nearby.requests.collectAsState()
     var qualityFor by remember { mutableStateOf<DownloadTask?>(null) }
     var renameFor by remember { mutableStateOf<DownloadTask?>(null) }
@@ -404,7 +405,7 @@ private fun App(inPip: Boolean) {
             resources.getString(R.string.undo),
         ) { DownloadFiles.undo(context, pending) }
     }
-    val share: (List<DownloadTask>) -> Unit = { list -> Playback.shareFiles(context, list) }
+    val share: (List<DownloadTask>) -> Unit = { list -> sharing = ShareContent.from(list) }
     val retryEngine: () -> Unit = {
         scope.launch {
             hint(resources.getString(R.string.engine_restarting))
@@ -514,6 +515,7 @@ private fun App(inPip: Boolean) {
             )
             if (!inPip) PlayerHost(
                 miniBottom = bottom + 9.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
+                onShare = { share(listOf(it)) },
                 onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
                 miniStart = sideStart + 5.dp, miniWidth = SIDEBAR - 10.dp,
             )
@@ -521,6 +523,7 @@ private fun App(inPip: Boolean) {
             TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
             if (!inPip) PlayerHost(
                 miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
+                onShare = { share(listOf(it)) },
                 onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
             )
         }
@@ -595,6 +598,7 @@ private fun App(inPip: Boolean) {
                     id,
                     onPlay = playList,
                     onQueue = enqueueAll,
+                    onShare = { playlistMenu = null; share(it) },
                     onRename = { playlistMenu = null; renameList = id },
                     onDeleteFiles = delete,
                     onClose = { playlistMenu = null },
@@ -632,7 +636,7 @@ private fun App(inPip: Boolean) {
                 clipboardLink = clipLink,
                 onLink = { url -> addSheet = false; sheetUrl = url },
                 onFiles = { addSheet = false; pickFiles.launch(arrayOf("*/*")) },
-                onSend = { url -> addSheet = false; sendLink = url to null },
+                onSend = { url -> addSheet = false; sharing = ShareContent(url) },
             )
         }
         val stashed = {
@@ -649,7 +653,7 @@ private fun App(inPip: Boolean) {
                     onDismiss = { sheetUrl = null },
                     onOpen = { t -> sheetUrl = null; play(t, library()) },
                     onStashVersion = { of, choice -> DownloadService.stashVersion(context, of, choice, replace = false); stashed() },
-                    onSend = { link, title -> sheetUrl = null; sendLink = link to title },
+                    onSend = { link, title -> sheetUrl = null; sharing = ShareContent(link, title) },
                 )
             }
         }
@@ -677,7 +681,7 @@ private fun App(inPip: Boolean) {
                     onDelete = { menuFor = null; delete(listOf(it)) },
                     onAgain = { menuFor = null; again(it) },
                     onCopied = { hint(it) },
-                    onSend = { menuFor = null; sendLink = it.url to it.title },
+                    onShare = { menuFor = null; share(listOf(it)) },
                 )
             }
         }
@@ -720,8 +724,8 @@ private fun App(inPip: Boolean) {
                 )
             }
         }
-        Overlay(visible = sendLink != null, onDismiss = { sendLink = null }) {
-            sendLink?.let { (url, title) -> SendSheet(url, title) }
+        Overlay(visible = sharing != null, onDismiss = { sharing = null }) {
+            sharing?.let { content -> AndroidSharingSheet(content, onCopied = { hint(it) }, onDismiss = { sharing = null }) }
         }
         val request = requests.firstOrNull()
         Overlay(visible = request != null, onDismiss = { request?.let { app.hamstr.nearby.Nearby.answer(it, accept = false) } }) {
@@ -762,7 +766,7 @@ private fun TaskMenu(
     onDelete: (DownloadTask) -> Unit,
     onAgain: (DownloadTask) -> Unit,
     onCopied: (String) -> Unit,
-    onSend: (DownloadTask) -> Unit,
+    onShare: (DownloadTask) -> Unit,
 ) {
     val c = Hamstr.colors
     val context = LocalContext.current
@@ -826,7 +830,6 @@ private fun TaskMenu(
             Txt(stringResource(R.string.file_gone_long), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
             MenuRow(Res.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) }
         }
-        val copyLink = { copy(context, t.url); onCopied(resources.getString(R.string.info_copied)); onClose() }
         if (file != null) {
             val kind = kindOf(t)
             val playable = kind == Kind.Video || kind == Kind.Audio
@@ -837,9 +840,8 @@ private fun TaskMenu(
                     stringResource(if (playable) R.string.menu_tile_play else R.string.menu_tile_view),
                     accent = true,
                 ) { onPlay(t); onClose() }
-                ActionTile(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { Playback.shareFile(context, t); onClose() }
+                ActionTile(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { onShare(t) }
                 ActionTile(Res.drawable.ic_open_in_new, stringResource(R.string.menu_tile_open)) { Playback.openWith(context, t); onClose() }
-                ActionTile(Res.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
             }
             Spacer(Modifier.height(10.dp))
             if (playable) {
@@ -858,12 +860,10 @@ private fun TaskMenu(
                 if (playable) MenuRow(Res.drawable.ic_playlist_add, stringResource(R.string.pl_add)) { onAddToPlaylist(t) }
                 MenuRow(Res.drawable.ic_edit, stringResource(R.string.menu_rename)) { onRename(t) }
                 MenuRow(Res.drawable.ic_info, stringResource(R.string.menu_info)) { onInfo(t) }
-                if (t.url.startsWith("http")) MenuRow(Res.drawable.ic_send, stringResource(R.string.nearby_send)) { onSend(t) }
             }
             Spacer(Modifier.height(10.dp))
         } else {
-            MenuRow(Res.drawable.ic_link, stringResource(R.string.menu_copy_link)) { copyLink() }
-            if (t.url.startsWith("http")) MenuRow(Res.drawable.ic_send, stringResource(R.string.nearby_send)) { onSend(t) }
+            if (t.url.startsWith("http")) MenuRow(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { onShare(t) }
         }
         if (t.status == Status.Failed || t.status == Status.Paused) {
             MenuRow(Res.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
@@ -937,6 +937,7 @@ private fun PlaylistMenu(
     onQueue: (List<DownloadTask>, Boolean, String) -> Unit,
     onRename: () -> Unit,
     onDeleteFiles: (List<DownloadTask>) -> Unit,
+    onShare: (List<DownloadTask>) -> Unit,
     onClose: () -> Unit,
     onHint: (String) -> Unit,
 ) {
@@ -966,7 +967,7 @@ private fun PlaylistMenu(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionTile(Res.drawable.ic_play_arrow, stringResource(R.string.pl_play), accent = true) { onPlay(items.first(), items); onClose() }
                 ActionTile(Res.drawable.ic_shuffle, stringResource(R.string.pl_shuffle)) { val s = items.shuffled(); onPlay(s.first(), s); onClose() }
-                ActionTile(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { Playback.shareFiles(context, items); onClose() }
+                ActionTile(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { onShare(items) }
             }
             Spacer(Modifier.height(10.dp))
             MenuGroup {

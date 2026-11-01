@@ -449,7 +449,7 @@ private fun MediaSheet(
         // Or hand the link to another Hamstr nearby, like AirDrop.
         if (onSend != null) {
             Spacer(Modifier.height(8.dp))
-            HButton(stringResource(R.string.nearby_send), { onSend(url, stashInfo?.title) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_send)
+            HButton(stringResource(R.string.menu_tile_share), { onSend(url, stashInfo?.title) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_share)
         }
     }
 }

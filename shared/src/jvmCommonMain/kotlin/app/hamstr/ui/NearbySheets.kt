@@ -30,7 +30,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,23 +65,30 @@ import app.hamstr.ui.components.pressable
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.stringResource
 
-private enum class Sending { Busy, Sent, Queued, Failed }
+internal enum class Sending { Busy, Sent, Queued, Failed }
+
+/** Kept by the share sheet so switching Link / File preserves device order and send status. */
+internal class NearbyTargetsState {
+    val sending = mutableStateMapOf<String, Sending>()
+    val order = LinkedHashMap<String, Peer>()
+    val here = HashSet<String>()
+}
 
 /**
- * "Send to a device": the Hamstr apps around now, then remembered ones that are away. A tap
+ * Inline targets in the share sheet: nearby Hamstr apps, then remembered ones that are away. A tap
  * sends the link; one for a device that is away waits in the outbox until it shows up.
  */
 @Composable
-fun SendSheet(url: String, title: String?) {
+internal fun NearbyTargets(url: String, title: String?, targets: NearbyTargetsState, scope: CoroutineScope) {
     val c = Hamstr.colors
     val s by Prefs.settings.collectAsState()
     val peers by Nearby.peers.collectAsState()
     val known by Nearby.known.collectAsState()
-    val state = remember { mutableStateMapOf<String, Sending>() }
-    val scope = rememberCoroutineScope()
+    val state = targets.sending
     DisposableEffect(Unit) {
         Nearby.discover(true)
         onDispose { Nearby.discover(false) }
@@ -91,9 +97,9 @@ fun SendSheet(url: String, title: String?) {
     // Every row keeps the place it first showed up in, so nothing moves under the pointer; a
     // device that leaves (switched off, out of range, Hamstr closed) stays, marked as no longer
     // available. The first batch goes devices around first, then by name.
-    val order = remember { LinkedHashMap<String, Peer>() }
-    val here = remember { HashSet<String>() }
-    val list = remember(peers, knownIds) {
+    val order = targets.order
+    val here = targets.here
+    val list = remember(targets, peers, knownIds) {
         peers.values.forEach { p -> if (p.online) here += p.id }
         peers.values.filter { (it.online || it.id in knownIds) && it.id !in order }
             .sortedWith(compareByDescending<Peer> { it.online }.thenBy { it.name.lowercase() }.thenBy { it.id })
@@ -101,9 +107,7 @@ fun SendSheet(url: String, title: String?) {
         order.keys.map { id -> peers[id] ?: order.getValue(id).copy(via = emptySet()) }
     }
 
-    Sheet {
-        SheetHeader(stringResource(Res.string.nearby_send_title), subtitle = title ?: url, subtitleLines = 1, leading = { HamstrMark(36.dp) })
-        Spacer(Modifier.height(16.dp))
+    Column {
         if (!s.nearby) {
             Txt(stringResource(Res.string.nearby_off), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp))
             Spacer(Modifier.height(12.dp))

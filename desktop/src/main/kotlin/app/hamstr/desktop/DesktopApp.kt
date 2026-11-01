@@ -56,7 +56,8 @@ import app.hamstr.res.*
 import app.hamstr.nearby.Nearby
 import app.hamstr.ui.AddSheet
 import app.hamstr.ui.RequestSheet
-import app.hamstr.ui.SendSheet
+import app.hamstr.ui.ShareContent
+import app.hamstr.ui.SharingSheet
 import app.hamstr.ui.Overlay
 import app.hamstr.ui.StashScreen
 import app.hamstr.ui.components.Group
@@ -97,9 +98,9 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     var adding by remember { mutableStateOf(false) }
     var clipLink by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
-    var sending by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    var sharing by remember { mutableStateOf<ShareContent?>(null) }
     val requests by Nearby.requests.collectAsState()
-    val sheetOpen = adding || menuFor != null || sending != null || requests.isNotEmpty()
+    val sheetOpen = adding || menuFor != null || sharing != null || requests.isNotEmpty()
 
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
 
@@ -150,15 +151,25 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                             clipLink,
                             onLink = { Queue.stash(it); adding = false; tab = Tab.Stash },
                             onFiles = { adding = false; Files.pickAndImport() },
-                            onSend = { adding = false; sending = it to null },
+                            onSend = { adding = false; sharing = ShareContent(it) },
                         )
                     }
                 }
                 Overlay(menuFor != null, onDismiss = { menuFor = null }) {
-                    menuFor?.let { t -> DesktopSheet { FileMenu(t, onSend = { menuFor = null; sending = t.url to t.title }) { menuFor = null } } }
+                    menuFor?.let { t -> DesktopSheet { FileMenu(t, onShare = { menuFor = null; sharing = ShareContent.from(listOf(t)) }) { menuFor = null } } }
                 }
-                Overlay(sending != null, onDismiss = { sending = null }) {
-                    sending?.let { (url, title) -> DesktopSheet { SendSheet(url, title) } }
+                Overlay(sharing != null, onDismiss = { sharing = null }) {
+                    sharing?.let { content ->
+                        DesktopSheet {
+                            SharingSheet(
+                                content,
+                                onCopyLink = { Files.copy(it); sharing = null },
+                                onCopyFiles = { Files.copyFiles(content.files.mapNotNull { it.filePath?.let(::File) }); sharing = null },
+                                onShareFiles = { content.files.firstOrNull()?.filePath?.let { Files.reveal(File(it)) }; sharing = null },
+                                fileActionLabel = Res.string.desktop_show_in_folder,
+                            )
+                        }
+                    }
                 }
                 val request = requests.firstOrNull()
                 Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {
@@ -256,7 +267,7 @@ private val ITEM = 40.dp
 
 /** A download's menu: open it, find it, copy its link or take it off the list. */
 @Composable
-private fun FileMenu(t: DownloadTask, onSend: () -> Unit, onClose: () -> Unit) {
+private fun FileMenu(t: DownloadTask, onShare: () -> Unit, onClose: () -> Unit) {
     val file = t.filePath?.let(::File)?.takeIf { it.exists() }
     Sheet {
         SheetHeader(t.title, subtitle = statusLine(t))
@@ -266,10 +277,8 @@ private fun FileMenu(t: DownloadTask, onSend: () -> Unit, onClose: () -> Unit) {
                 MenuRow(Res.drawable.ic_open_in_new, stringResource(Res.string.desktop_open)) { Files.open(file); onClose() }
                 MenuRow(Res.drawable.ic_folder_open, stringResource(Res.string.desktop_show_in_folder)) { Files.reveal(file); onClose() }
             }
-            if (t.url.startsWith("http")) {
-                MenuRow(Res.drawable.ic_link, stringResource(Res.string.menu_copy_link)) { Files.copy(t.url); onClose() }
-                MenuRow(Res.drawable.ic_send, stringResource(Res.string.nearby_send)) { onSend() }
-            }
+            if (t.url.startsWith("http") || (file != null && t.status == Status.Done))
+                MenuRow(Res.drawable.ic_share, stringResource(Res.string.menu_tile_share), onShare)
             MenuRow(Res.drawable.ic_visibility_off, stringResource(Res.string.menu_hide)) {
                 DownloadStore.setHidden(setOf(t.id), true)
                 onClose()

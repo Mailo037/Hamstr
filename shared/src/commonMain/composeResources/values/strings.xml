@@ -166,7 +166,15 @@
     <string name="menu_quality">Quality</string>
     <string name="menu_save_audio">Save audio</string>
     <string name="menu_open_with">Open with…</string>
-    <string name="menu_share_file">Share file</string>
+    <string name="menu_share_file">Share</string>
+    <string name="share_link">Link</string>
+    <string name="share_file">File</string>
+    <string name="share_files">Files</string>
+    <string name="share_other_apps">Share through other apps</string>
+    <string name="share_copy_file">Copy file</string>
+    <string name="share_copy_files">Copy files</string>
+    <string name="share_file_nearby_hint">To send to a Hamstr device, choose Link.</string>
+    <string name="share_unavailable">This file is no longer available to share.</string>
     <string name="menu_rename">Rename</string>
     <string name="menu_info">File info</string>
     <string name="menu_tile_play">Play</string>

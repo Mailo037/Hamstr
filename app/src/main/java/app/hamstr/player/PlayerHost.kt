@@ -229,6 +229,7 @@ fun PlayerHost(
     inPip: Boolean,
     onMenu: (DownloadTask) -> Unit,
     onQuality: (DownloadTask) -> Unit,
+    onShare: (DownloadTask) -> Unit = onMenu,
     onQueue: () -> Unit = {},
     onSleep: () -> Unit = {},
     onEditLyrics: (DownloadTask) -> Unit = {},
@@ -416,7 +417,7 @@ fun PlayerHost(
                     )
                     if (kind == Kind.Video || kind == Kind.Audio) IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue)
                     else IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
-                    IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(activity ?: return@IconButton, t) })
+                    IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(t) })
                     IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
                 }
                 // Info + controls under the media (beside it in landscape). They scroll only when
@@ -477,7 +478,7 @@ fun PlayerHost(
                             Spacer(Modifier.height(14.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 HButton(stringResource(R.string.menu_open_with), { activity?.let { Playback.openWith(it, t) } }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = Res.drawable.ic_open_in_new)
-                                HButton(stringResource(R.string.menu_share_file), { activity?.let { Playback.shareFile(it, t) } }, Modifier.weight(1f), icon = Res.drawable.ic_share)
+                                HButton(stringResource(R.string.menu_share_file), { onShare(t) }, Modifier.weight(1f), icon = Res.drawable.ic_share)
                             }
                         }
                     }
@@ -641,6 +642,7 @@ fun PlayerHost(
                     onTapMini = { Playback.expand() },
                     onMinimize = { fullscreen = false; Playback.minimize() },
                     onMenu = { fullscreen = false; onMenu(t) },
+                    onShare = { fullscreen = false; onShare(t) },
                     onQuality = if (canHaveVersions(t)) ({ fullscreen = false; onQuality(t) }) else null,
                 )
                 Kind.Audio -> AnimatedContent(lyricsOn && ev > 0.98f, transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "lyrics") { on ->
@@ -672,6 +674,7 @@ private fun VideoSurface(
     onTapMini: () -> Unit,
     onMinimize: () -> Unit,
     onMenu: () -> Unit,
+    onShare: () -> Unit,
     onQuality: (() -> Unit)?,
 ) {
     val context = LocalContext.current
@@ -744,7 +747,7 @@ private fun VideoSurface(
                     Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.35f))) {
                         val none = Color.Transparent
                         IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(context, t) }, tint = Color.White, background = none)
-                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { Playback.shareFile(context, t) }, tint = Color.White, background = none)
+                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), onShare, tint = Color.White, background = none)
                         IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = none)
                         if (forced) IconButton(Res.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = none)
                     }

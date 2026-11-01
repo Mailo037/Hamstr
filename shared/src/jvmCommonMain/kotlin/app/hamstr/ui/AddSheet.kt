@@ -50,7 +50,7 @@ import app.hamstr.ui.theme.Radii
 
 /**
  * The "+" sheet: type or paste a link, take the one on the clipboard, or bring in files
- * that are already on the phone or the computer. [onSend] sends the link to another device instead.
+ * that are already on the phone or the computer. [onSend] opens the outgoing share sheet.
  */
 @Composable
 fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Unit, onSend: ((String) -> Unit)? = null) {
@@ -90,8 +90,7 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HButton(stringResource(Res.string.add_stash), { submit() }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = Res.drawable.ic_download, enabled = link != null)
-            // Or hand it to another Hamstr nearby, like AirDrop.
-            if (onSend != null) HButton(stringResource(Res.string.nearby_send_short), { link?.let(onSend) }, icon = Res.drawable.ic_send, enabled = link != null)
+            if (onSend != null) HButton(stringResource(Res.string.menu_tile_share), { link?.let(onSend) }, icon = Res.drawable.ic_share, enabled = link != null)
         }
 
         Row(Modifier.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {

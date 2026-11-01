@@ -19,7 +19,8 @@ import app.hamstr.engine.DownloadService
 import app.hamstr.ui.NotifyAsk
 import app.hamstr.ui.NotifyPrompt
 import app.hamstr.ui.Overlay
-import app.hamstr.ui.SendSheet
+import app.hamstr.ui.AndroidSharingSheet
+import app.hamstr.ui.ShareContent
 import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.theme.HamstrTheme
 import kotlinx.coroutines.delay
@@ -87,7 +88,7 @@ class ShareActivity : ComponentActivity() {
                     )
                 }
                 Overlay(visible = sendLink != null && !closing, onDismiss = { closing = true }) {
-                    sendLink?.let { (link, title) -> SendSheet(link, title) }
+                    sendLink?.let { (link, title) -> AndroidSharingSheet(ShareContent(link, title), onDismiss = { closing = true }) }
                 }
                 Overlay(visible = asking && !closing, onDismiss = { NotifyAsk.asked(); closing = true }) {
                     NotifyPrompt(
