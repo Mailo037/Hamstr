@@ -23,6 +23,7 @@ import app.hamstr.data.Prefs
 import app.hamstr.data.PropertiesFile
 import app.hamstr.ui.theme.HamstrTheme
 import java.io.File
+import java.util.Locale
 import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -110,6 +111,25 @@ class TourTest {
         shot(File(out, "sideways_7_look.png"), false, 6, 1_500L, 892, 412, 2.625f)
         shot(File(out, "small_7_look.png"), false, 6, 1_500L, 360, 640, 2f)
         shot(File(out, "small_3_choose.png"), false, 2, 5_330L, 360, 640, 2f)
+    }
+
+    /**
+     * A few pages in other languages: longer words (German, Russian) and other scripts (Chinese,
+     * Japanese) must fit the same layout. Written next to the English pictures.
+     */
+    @Test fun rendersOtherLanguages() {
+        val out = File(System.getProperty("hamstr.tour") ?: "build/tour").apply { mkdirs() }
+        val before = Locale.getDefault()
+        try {
+            for (tag in listOf("de", "es", "fr", "ru", "ja", "zh")) {
+                Locale.setDefault(Locale.forLanguageTag(tag))
+                for ((page, at) in listOf(1 to 2_720L, 3 to 2_300L, 6 to 1_500L)) {
+                    shot(File(out, "lang_${tag}_${page + 1}.png"), false, page, at, 412, 892, 2.625f)
+                }
+            }
+        } finally {
+            Locale.setDefault(before)
+        }
     }
 
     // A window as big as the picture, so nothing is cut off at the default 1024 × 768.

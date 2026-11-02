@@ -208,7 +208,7 @@ private fun summary(context: android.content.Context, p: Page, s: Settings, engi
     Page.Playback -> context.getString(if (s.resumeAfterVideos) R.string.set_playback_resumes else R.string.set_playback_pauses)
     Page.Hidden -> if (hidden.isEmpty()) context.getString(R.string.hidden_summary_none)
         else context.resources.getQuantityString(R.plurals.hidden_summary, hidden.size, hidden.size, formatBytes(hidden.sumOf { it.sizeBytes }))
-    Page.Appearance -> "${ACCENTS.firstOrNull { it.argb == s.accent }?.name ?: context.getString(R.string.set_custom)} · ${s.base.label}"
+    Page.Appearance -> "${ACCENTS.firstOrNull { it.argb == s.accent }?.name ?: context.getString(R.string.set_custom)} · ${context.getString(baseName(s.base))}"
     Page.Motion -> {
         val on = listOf(s.intro, s.raster, s.asciiThumbs, s.rain, s.decode, s.moods, s.stretch, s.haptics).count { it }
         context.getString(R.string.set_effects_on, on, 8)
@@ -918,4 +918,14 @@ private fun openFolder(context: android.content.Context) {
         }
     }
     android.widget.Toast.makeText(context, R.string.set_open_folder_failed, android.widget.Toast.LENGTH_SHORT).show()
+}
+
+/** A background's name as an Android string, for the summaries built outside composition. */
+private fun baseName(base: app.hamstr.data.Base) = when (base) {
+    app.hamstr.data.Base.Graphite -> R.string.base_graphite
+    app.hamstr.data.Base.Oled -> R.string.base_oled
+    app.hamstr.data.Base.Cocoa -> R.string.base_cocoa
+    app.hamstr.data.Base.Midnight -> R.string.base_midnight
+    app.hamstr.data.Base.Moss -> R.string.base_moss
+    app.hamstr.data.Base.Plum -> R.string.base_plum
 }

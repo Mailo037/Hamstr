@@ -59,6 +59,7 @@
 - Drags have weight: the tab pill, switches, sheets and swipe rows stretch with their speed.
 - Seven accents plus a custom hue, six backgrounds, three sizes and three mini player styles. The launcher icon (dark, light or accent), its shortcuts, the widgets and the notifications take the accent too. Every effect can be switched off on its own.
 - Three widgets: downloads at a glance, what plays with its controls, and the hamster alone to stash a copied link.
+- Speaks English, German, Spanish, French, Italian, Portuguese, Dutch, Polish, Turkish, Russian, Japanese, Korean and Chinese, following the system language (on Android 13 and later also per app).
 - Files you hide from the library wait in Settings › Hidden, to show again or delete for good.
 
 **Updates**

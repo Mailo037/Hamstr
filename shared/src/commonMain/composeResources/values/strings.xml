@@ -379,6 +379,13 @@
     <string name="set_back">Back</string>
     <string name="set_accent">Accent colour</string>
     <string name="set_background">Background</string>
+    <!-- Appearance › Background -->
+    <string name="base_graphite">Graphite</string>
+    <string name="base_oled">OLED black</string>
+    <string name="base_cocoa">Cocoa</string>
+    <string name="base_midnight">Midnight</string>
+    <string name="base_moss">Moss</string>
+    <string name="base_plum">Plum</string>
     <string name="set_default_mode">Default when sharing</string>
     <string name="set_video_quality">Video quality</string>
     <string name="set_video_format">Video format</string>

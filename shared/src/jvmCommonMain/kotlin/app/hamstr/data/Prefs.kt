@@ -3,6 +3,14 @@ package app.hamstr.data
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import app.hamstr.res.Res
+import app.hamstr.res.base_cocoa
+import app.hamstr.res.base_graphite
+import app.hamstr.res.base_midnight
+import app.hamstr.res.base_moss
+import app.hamstr.res.base_oled
+import app.hamstr.res.base_plum
+import org.jetbrains.compose.resources.StringResource
 
 data class Settings(
     val mode: Mode = Mode.Video,
@@ -203,9 +211,10 @@ fun heightLabel(h: Int?) = when (h) {
 /** Who fetches the bytes. yt-dlp always works out the streams. */
 enum class DownloadEngine(val label: String) { YtDlp("yt-dlp"), Cheek("Cheek") }
 
-/** Dark bases; all keep Slate's neutral steps, just shifted. */
-enum class Base(val label: String) {
-    Graphite("Graphite"), Oled("OLED black"), Cocoa("Cocoa"), Midnight("Midnight"), Moss("Moss"), Plum("Plum"),
+/** Dark bases; all keep Slate's neutral steps, just shifted. Their names are in each language's strings. */
+enum class Base(val title: StringResource) {
+    Graphite(Res.string.base_graphite), Oled(Res.string.base_oled), Cocoa(Res.string.base_cocoa),
+    Midnight(Res.string.base_midnight), Moss(Res.string.base_moss), Plum(Res.string.base_plum),
 }
 
 /** How big everything is drawn: text, controls and spacing scale together. */

@@ -12,15 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.8.1"
+VERSION = "0.9.0"
 FEATURES = [
-    ("KEEP USING HAMSTR", "Updates download in the background"),
-    ("STAY INFORMED", "Progress and a ready-to-install alert"),
-    ("INSTALL WHEN READY", "Downloaded once, saved for later"),
+    ("A TOUR ON FIRST START", "Seven steps show what Hamstr does"),
+    ("12 NEW LANGUAGES", "Deutsch, Español, Français and nine more"),
+    ("SHOW IT AGAIN", "Settings › About › Show the tour again"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
-SHOTS = [("update_app.png", "Keep using"), ("update_progress.png", "Progress"), ("update_ready.png", "Install later")]
+# 0.9.0: the tour has no emulator shots; TourTest renders its pages into shared/build/tour.
+SHOTS = [("phone_2_share.png", "Tour"), ("phone_4_arrive.png", "Step by step"), ("lang_de_7.png", "Deutsch")]
 
 
 
