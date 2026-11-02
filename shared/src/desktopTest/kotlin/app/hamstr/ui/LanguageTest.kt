@@ -15,6 +15,21 @@ import androidx.compose.ui.platform.testTag
 import javax.imageio.ImageIO
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.runDesktopComposeUiTest
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import app.hamstr.res.*
+import app.hamstr.ui.components.Group
+import app.hamstr.ui.components.Txt
+import app.hamstr.ui.theme.Hamstr
+import org.jetbrains.compose.resources.stringResource
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.AppLanguages
 import app.hamstr.data.Prefs
@@ -70,6 +85,40 @@ class LanguageTest {
                 onNodeWithText("Language").assertExists()
             }
             assertEquals("", Prefs.settings.value.language)
+        } finally {
+            Locale.setDefault(before)
+            file.delete()
+        }
+    }
+
+    /** The picker as a phone shows it in Settings › Appearance, in German, for the release picture. */
+    @Test fun rendersThePickerOnAPhone() {
+        val file = File.createTempFile("hamstr-lang-", ".properties")
+        val before = Locale.getDefault()
+        val (w, h, scale) = Triple(412, 892, 2.625f)
+        try {
+            Locale.setDefault(Locale.GERMAN)
+            Prefs.init(PropertiesFile(file))
+            Prefs.edit { it.copy(language = "de") }
+            runDesktopComposeUiTest((w * scale).roundToInt(), (h * scale).roundToInt()) {
+                setContent {
+                    CompositionLocalProvider(LocalDensity provides Density(scale)) {
+                        HamstrTheme {
+                            Column(Modifier.size(w.dp, h.dp).testTag("phone").background(Hamstr.colors.canvas).padding(16.dp)) {
+                                Spacer(Modifier.height(36.dp))
+                                Txt(stringResource(Res.string.page_appearance), style = Hamstr.type.title, modifier = Modifier.padding(start = 6.dp, bottom = 14.dp))
+                                Group {
+                                    LookBlocks()
+                                    LanguageBlock("de") {}
+                                }
+                            }
+                        }
+                    }
+                }
+                waitForIdle()
+                val out = File(System.getProperty("hamstr.tour") ?: "build/tour").apply { mkdirs() }
+                ImageIO.write(onNodeWithTag("phone").captureToImage().toAwtImage(), "png", File(out, "language_phone_de.png"))
+            }
         } finally {
             Locale.setDefault(before)
             file.delete()
