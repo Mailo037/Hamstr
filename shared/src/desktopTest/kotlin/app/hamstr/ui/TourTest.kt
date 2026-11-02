@@ -139,7 +139,7 @@ class TourTest {
             Prefs.init(PropertiesFile(file))
             for (size in UiSize.entries) {
                 Prefs.edit { it.copy(size = size) }
-                shot(File(out, "size_${size.name.lowercase()}_7_look.png"), false, 6, 1_500L, 412, 892, 2.625f)
+                shot(File(out, "size_${size.name.lowercase()}_7_look.png"), false, 6, 1_500L, 412, 892, 2.625f, size.scale)
             }
         } finally {
             Prefs.init(PropertiesFile(file.apply { delete() }))
@@ -166,13 +166,14 @@ class TourTest {
     }
 
     // A window as big as the picture, so nothing is cut off at the default 1024 × 768.
-    private fun shot(file: File, desktop: Boolean, page: Int, at: Long, width: Int, height: Int, scale: Float) =
+    // [ui]: the UI size the theme scales by, so the page still fills the picture.
+    private fun shot(file: File, desktop: Boolean, page: Int, at: Long, width: Int, height: Int, scale: Float, ui: Float = 1f) =
         runDesktopComposeUiTest((width * scale).roundToInt(), (height * scale).roundToInt()) {
             mainClock.autoAdvance = false
             setContent {
                 CompositionLocalProvider(LocalDensity provides Density(scale)) {
                     HamstrTheme {
-                        Box(Modifier.size(width.dp, height.dp).testTag("tour")) { Tour(onDone = {}, desktop = desktop, startAt = page) }
+                        Box(Modifier.size((width / ui).dp, (height / ui).dp).testTag("tour")) { Tour(onDone = {}, desktop = desktop, startAt = page) }
                     }
                 }
             }

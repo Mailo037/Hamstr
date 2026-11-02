@@ -12,16 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 FEATURES = [
-    ("PICK YOUR LANGUAGE", "Settings › Appearance › Language"),
-    ("A LIVELIER TOUR", "Sending to your phone, step by step"),
-    ("A CLEANER TOUR PHONE", "No flicker behind its status bar"),
+    ("SWIPES STAY PUT", "Scrolling the colours no longer turns the page"),
+    ("SIZE, FOLLOWED", "Small makes the tour's pictures smaller too"),
+    ("BUGFIX", "The last tour page, fixed on real phones"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
-# 0.9.0 and 0.9.1: no emulator shots; TourTest and LanguageTest render into shared/build/tour.
-SHOTS = [("language_phone_de.png", "Language"), ("phone_6_send.png", "Nearby"), ("phone_6_send_fetch.png", "Arrives")]
+# 0.9.0 to 0.9.2: no emulator shots; TourTest and LanguageTest render into shared/build/tour.
+SHOTS = [("size_small_7_look.png", "Small"), ("size_normal_7_look.png", "Normal"), ("size_large_7_look.png", "Large")]
 
 
 
