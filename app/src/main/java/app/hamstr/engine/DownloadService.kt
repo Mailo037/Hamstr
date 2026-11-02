@@ -72,6 +72,8 @@ import kotlin.coroutines.resume
  * a connection that breaks mid-download is retried a few times with growing pauses.
  */
 class DownloadService : Service() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = mutableMapOf<String, Job>()
     private val stopping = mutableSetOf<String>()

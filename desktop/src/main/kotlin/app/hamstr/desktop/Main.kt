@@ -38,6 +38,8 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.runtime.key
+import androidx.compose.runtime.collectAsState
 import app.hamstr.ui.components.LocalAmbient
 import java.awt.Dimension
 import java.awt.SystemTray
@@ -49,6 +51,7 @@ fun main(args: Array<String>) {
     // Already running: that one comes to the front (a start at sign-in leaves it be).
     if (!Instance.claim(quiet = Autostart.TRAY_FLAG in args)) return
     Prefs.init(PropertiesFile(File(Paths.data, "settings.properties")))
+    Language.start()
     Positions.init(PropertiesFile(File(Paths.data, "positions.properties")))
     DownloadStore.init(Paths.data)
     Downloads.control = Queue
@@ -75,14 +78,16 @@ fun main(args: Array<String>) {
         val trayState = rememberTrayState()
         val show = { visible = true }
         val close = { if (tray && Prefs.settings.value.trayOnClose) visible = false else exitApplication() }
-        val received = stringResource(Res.string.nearby_received, "%s")
-        LaunchedEffect(Unit) {
+        // A new language draws the tray menu and the window again, in it.
+        val language by Prefs.settings.map { it.language }.distinctUntilChanged().collectAsState(Prefs.settings.value.language)
+        val received = key(language) { stringResource(Res.string.nearby_received, "%s") }
+        LaunchedEffect(received) {
             Nearby.onLink = { url, title, from ->
                 Queue.stash(url)
                 if (tray) trayState.sendNotification(Notification(received.replace("%s", from.name), title ?: url))
             }
         }
-        if (tray) {
+        if (tray) key(language) {
             Tray(
                 icon = icon ?: painterResource(Res.drawable.ic_download),
                 state = trayState,
@@ -125,7 +130,7 @@ fun main(args: Array<String>) {
             }
             // Ambient motion only while the window is in front: in the background Hamstr draws nothing.
             CompositionLocalProvider(LocalAmbient provides (visible && LocalWindowInfo.current.isWindowFocused)) {
-                HamstrTheme { DesktopApp(frame, onClose = close, onQuit = ::exitApplication) }
+                key(language) { HamstrTheme { DesktopApp(frame, onClose = close, onQuit = ::exitApplication) } }
             }
         }
     }

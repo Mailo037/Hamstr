@@ -23,6 +23,8 @@ import java.net.HttpURLConnection
 
 /** A user-started update download keeps running when the sheet or the app goes away. */
 class UpdateDownloadService : Service() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var work: Job? = null
     @Volatile private var connection: HttpURLConnection? = null

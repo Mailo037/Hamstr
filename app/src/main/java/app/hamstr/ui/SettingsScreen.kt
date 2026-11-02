@@ -372,8 +372,10 @@ private fun DevicesPage() {
 @Composable
 private fun AppearancePage() {
     val s by Prefs.settings.collectAsState()
+    val activity = LocalContext.current as android.app.Activity
     Group {
         LookBlocks()
+        LanguageBlock(remember { app.hamstr.AppLanguage.current(activity) }) { app.hamstr.AppLanguage.set(activity, it) }
         SettingBlock(stringResource(R.string.set_mini)) {
             val labels = mapOf(MiniStyle.Floating to stringResource(R.string.mini_floating), MiniStyle.Docked to stringResource(R.string.mini_docked), MiniStyle.Compact to stringResource(R.string.mini_compact))
             Segmented(MiniStyle.entries.toList(), s.miniStyle, { labels.getValue(it) }, { v -> Prefs.edit { it.copy(miniStyle = v) } })
@@ -850,6 +852,7 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry(R.string.set_icon_accent, Page.Appearance, "icon launcher app icon cheeks backen symbol"),
     SettingEntry(R.string.set_icon_style, Page.Appearance, "icon style light dark accent launcher symbol"),
     SettingEntry(R.string.set_size, Page.Appearance, "size scale big small large text größe groß klein schrift"),
+    SettingEntry(R.string.set_language, Page.Appearance, "language sprache idioma langue lingua taal język dil язык 言語 언어 语言 english deutsch translate übersetzen"),
     SettingEntry(R.string.set_mini, Page.Appearance, "mini player docked floating slim compact miniplayer"),
     SettingEntry(R.string.set_resume_videos, Page.Playback, "youtube tiktok pause resume audio focus music fortsetzen wiedergabe"),
     SettingEntry(R.string.page_hidden, Page.Hidden, "hidden unlisted restore delete versteckt wiederherstellen löschen"),

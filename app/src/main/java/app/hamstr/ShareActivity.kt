@@ -31,6 +31,8 @@ import kotlinx.coroutines.delay
  * very first stash it asks, once, whether Hamstr may send notifications.
  */
 class ShareActivity : ComponentActivity() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
+
     private var close: () -> Unit = { finish() }
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { close() }
     private val storagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}

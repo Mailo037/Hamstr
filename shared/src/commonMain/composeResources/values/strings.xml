@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">The launcher icon’s cheeks take the accent when you leave the app. Some launchers need a moment, or the icon placed on the home screen again.</string>
 
     <string name="set_size">Size</string>
+    <string name="set_language">Language</string>
+    <string name="set_language_system">System default</string>
     <string name="size_small">Small</string>
     <string name="size_normal">Normal</string>
     <string name="size_large">Large</string>

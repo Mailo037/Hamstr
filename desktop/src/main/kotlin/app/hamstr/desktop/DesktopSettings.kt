@@ -38,6 +38,7 @@ import app.hamstr.ui.EngineChoice
 import app.hamstr.ui.FormatDefaults
 import app.hamstr.ui.FxRow
 import app.hamstr.ui.LookBlocks
+import app.hamstr.ui.LanguageBlock
 import app.hamstr.ui.SettingBlock
 import app.hamstr.ui.SettingLabel
 import app.hamstr.ui.components.ButtonKind
@@ -79,7 +80,11 @@ internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit
             Column(Modifier.widthIn(max = 640.dp).fillMaxWidth()) {
                 Txt(stringResource(p.title), style = Hamstr.type.title, modifier = Modifier.padding(start = 6.dp, top = 8.dp, bottom = 14.dp))
                 when (p) {
-                    Page.Appearance -> Group { LookBlocks() }
+                    Page.Appearance -> Group {
+                        LookBlocks()
+                        val s by Prefs.settings.collectAsState()
+                        LanguageBlock(s.language, Language::pick)
+                    }
                     Page.Motion -> MotionPage()
                     Page.Downloads -> DownloadsPage()
                     Page.Engine -> EnginePage(engine)

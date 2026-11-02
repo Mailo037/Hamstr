@@ -2,6 +2,8 @@ package app.hamstr.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -12,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.ACCENTS
+import app.hamstr.data.AppLanguages
 import app.hamstr.data.Base
 import app.hamstr.data.DownloadEngine
 import app.hamstr.data.Mode
@@ -20,6 +23,7 @@ import app.hamstr.data.UiSize
 import app.hamstr.data.heightLabel
 import app.hamstr.res.*
 import app.hamstr.ui.components.AccentPicker
+import app.hamstr.ui.components.Chip
 import app.hamstr.ui.components.Chips
 import app.hamstr.ui.components.Divider
 import app.hamstr.ui.components.Group
@@ -65,6 +69,24 @@ fun LookBlocks() {
     SettingBlock(stringResource(Res.string.set_size)) {
         val labels = mapOf(UiSize.Small to stringResource(Res.string.size_small), UiSize.Normal to stringResource(Res.string.size_normal), UiSize.Large to stringResource(Res.string.size_large))
         Segmented(UiSize.entries.toList(), s.size, { labels.getValue(it) }, { v -> Prefs.edit { it.copy(size = v) } })
+    }
+}
+
+/**
+ * The app's language: the device's, or one of ours, each named in itself. [current] is a tag of
+ * [AppLanguages] or "" for the device's; each platform applies the pick its own way.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun LanguageBlock(current: String, onPick: (String) -> Unit) {
+    val system = stringResource(Res.string.set_language_system)
+    SettingBlock(stringResource(Res.string.set_language)) {
+        // All at once, wrapped: a sideways row would hide most of them.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            (listOf("") + AppLanguages.names.keys).forEach { tag ->
+                Chip(if (tag.isEmpty()) system else AppLanguages.names.getValue(tag), tag == current, { if (tag != current) onPick(tag) })
+            }
+        }
     }
 }
 

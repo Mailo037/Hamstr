@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">De wangen van het launcher-icoon nemen de accentkleur aan als je de app verlaat. Sommige launchers hebben even nodig, of het icoon moet opnieuw op het startscherm worden geplaatst.</string>
 
     <string name="set_size">Grootte</string>
+    <string name="set_language">Taal</string>
+    <string name="set_language_system">Systeemstandaard</string>
     <string name="size_small">Klein</string>
     <string name="size_normal">Normaal</string>
     <string name="size_large">Groot</string>

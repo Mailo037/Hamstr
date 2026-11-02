@@ -596,6 +596,8 @@
     <string name="set_icon_accent_hint">앱을 나가면 런처 아이콘의 볼이 포인트 색으로 바뀌어요. 일부 런처는 잠시 기다리거나 아이콘을 홈 화면에 다시 놓아야 해요.</string>
 
     <string name="set_size">크기</string>
+    <string name="set_language">언어</string>
+    <string name="set_language_system">시스템 기본값</string>
     <string name="size_small">작게</string>
     <string name="size_normal">보통</string>
     <string name="size_large">크게</string>

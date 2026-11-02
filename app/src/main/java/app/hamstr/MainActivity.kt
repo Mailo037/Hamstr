@@ -176,6 +176,13 @@ import app.hamstr.ui.components.pressable
 import app.hamstr.ui.components.Specs
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        AppLanguage.keep()
+    }
+
     private val pip = PipController { params -> runCatching { setPictureInPictureParams(params) } }
     private val storagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 

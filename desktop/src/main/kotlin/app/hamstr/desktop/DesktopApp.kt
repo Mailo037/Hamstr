@@ -94,7 +94,8 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     val engine by Queue.engine.collectAsState()
     val visible = remember(tasks) { tasks.filterNot { it.hidden } }
     // HAMSTR_OPEN=Engine (or any settings page) starts on that page, for screenshots.
-    val open = remember { Page.entries.firstOrNull { it.name.equals(System.getenv("HAMSTR_OPEN"), ignoreCase = true) } }
+    // After a new language, the window comes back where it was picked.
+    val open = remember { Language.reopen.also { Language.reopen = null } ?: Page.entries.firstOrNull { it.name.equals(System.getenv("HAMSTR_OPEN"), ignoreCase = true) } }
     var tab by remember { mutableStateOf(if (open != null) Tab.Settings else Tab.Stash) }
     var page by remember { mutableStateOf(open ?: Page.Appearance) }
     var adding by remember { mutableStateOf(false) }

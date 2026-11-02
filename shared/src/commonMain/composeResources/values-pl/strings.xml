@@ -626,6 +626,8 @@
     <string name="set_icon_accent_hint">Policzki ikony w launcherze przyjmują kolor akcentu, gdy wyjdziesz z aplikacji. Niektóre launchery potrzebują chwili albo ponownego umieszczenia ikony na ekranie głównym.</string>
 
     <string name="set_size">Rozmiar</string>
+    <string name="set_language">Język</string>
+    <string name="set_language_system">Systemowy</string>
     <string name="size_small">Mały</string>
     <string name="size_normal">Normalny</string>
     <string name="size_large">Duży</string>

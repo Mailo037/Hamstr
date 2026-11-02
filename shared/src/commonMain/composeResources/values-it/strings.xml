@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">Le guance dell’icona prendono il colore di accento quando esci dall’app. Alcuni launcher hanno bisogno di un momento, oppure di rimettere l’icona nella schermata Home.</string>
 
     <string name="set_size">Dimensione</string>
+    <string name="set_language">Lingua</string>
+    <string name="set_language_system">Predefinito di sistema</string>
     <string name="size_small">Piccola</string>
     <string name="size_normal">Normale</string>
     <string name="size_large">Grande</string>

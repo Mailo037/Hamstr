@@ -626,6 +626,8 @@
     <string name="set_icon_accent_hint">Щёчки на иконке берут акцентный цвет, когда ты выходишь из приложения. Некоторым лаунчерам нужен момент или повторное добавление иконки на главный экран.</string>
 
     <string name="set_size">Размер</string>
+    <string name="set_language">Язык</string>
+    <string name="set_language_system">Системный</string>
     <string name="size_small">Маленький</string>
     <string name="size_normal">Обычный</string>
     <string name="size_large">Большой</string>

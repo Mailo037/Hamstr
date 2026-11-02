@@ -103,10 +103,14 @@ class TourTest {
     @Test fun rendersEveryPage() {
         val out = File(System.getProperty("hamstr.tour") ?: "build/tour").apply { mkdirs() }
         // The moment (ms after the page settles) each picture is caught at.
-        val phone = listOf(3_000L, 2_720L, 5_330L, 2_300L, 2_500L, 3_800L, 1_500L)
+        val phone = listOf(3_000L, 2_720L, 5_330L, 2_300L, 2_500L, 2_650L, 1_500L)
         phone.forEachIndexed { i, at -> shot(File(out, "phone_${i + 1}_${TourStep.on(false)[i].name.lowercase()}.png"), false, i, at, 412, 892, 2.625f) }
-        val desktop = listOf(3_000L, 4_200L, 1_200L, 2_300L, 3_800L, 1_500L)
+        val desktop = listOf(3_000L, 4_200L, 1_200L, 2_300L, 2_650L, 1_500L)
         desktop.forEachIndexed { i, at -> shot(File(out, "desktop_${i + 1}_${TourStep.on(true)[i].name.lowercase()}.png"), true, i, at, 1100, 690, 1.5f) }
+        // Sending, after the link flew: the phone asks, then fetches it.
+        shot(File(out, "phone_6_send_ask.png"), false, 5, 4_600L, 412, 892, 2.625f)
+        shot(File(out, "phone_6_send_fetch.png"), false, 5, 7_400L, 412, 892, 2.625f)
+        shot(File(out, "phone_6_send_seek.png"), false, 5, 1_000L, 412, 892, 2.625f)
         // The tightest places: a phone held sideways and a small phone, on the tallest page.
         shot(File(out, "sideways_7_look.png"), false, 6, 1_500L, 892, 412, 2.625f)
         shot(File(out, "small_7_look.png"), false, 6, 1_500L, 360, 640, 2f)

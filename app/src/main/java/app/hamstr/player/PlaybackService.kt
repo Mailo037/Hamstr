@@ -27,6 +27,8 @@ import app.hamstr.widget.PlayerWidgets
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackService : MediaSessionService() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
+
     private var session: MediaSession? = null
     private val handler = Handler(Looper.getMainLooper())
     // Where each file was left, written every few seconds while it plays and whenever it stops.
