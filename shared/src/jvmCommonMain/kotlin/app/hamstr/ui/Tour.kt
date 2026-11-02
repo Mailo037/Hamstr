@@ -31,6 +31,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import app.hamstr.ui.components.edgeFade
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -290,6 +295,12 @@ private fun TourPage(step: TourStep, wide: Boolean, active: Boolean, desktop: Bo
     }
 }
 
+/** Takes what a sideways scroll inside leaves over, so the pager around never sees it. */
+private val KeepSideways = object : NestedScrollConnection {
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(available.x, 0f)
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(available.x, 0f)
+}
+
 @Composable
 private fun Words(step: TourStep, desktop: Boolean) {
     val c = Hamstr.colors
@@ -305,8 +316,9 @@ private fun Words(step: TourStep, desktop: Boolean) {
         Txt(text, style = Hamstr.type.body.copy(lineHeight = Hamstr.type.body.lineHeight * 1.08f), color = c.muted)
         if (step == TourStep.Look) {
             Spacer(Modifier.height(16.dp))
-            // The real settings: the tour recolours as you pick.
-            Group { LookBlocks() }
+            // The real settings: the tour recolours as you pick. A row of chips scrolled to its end
+            // keeps the rest of the swipe, so it doesn't turn the page as well.
+            Box(Modifier.nestedScroll(KeepSideways)) { Group { LookBlocks() } }
         }
     }
 }
