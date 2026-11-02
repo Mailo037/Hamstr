@@ -173,7 +173,7 @@
     <string name="share_other_apps">Über andere Apps teilen</string>
     <string name="share_copy_file">Datei kopieren</string>
     <string name="share_copy_files">Dateien kopieren</string>
-    <string name="share_file_nearby_hint">Zum Senden an ein Hamstr-Gerät wähl Link.</string>
+    <string name="share_file_nearby_hint">Die Datei selbst geht an ein Hamstr-Gerät in der Nähe, über dasselbe WLAN oder, langsamer, über Bluetooth – so versiegelt, dass nur dieses Gerät sie öffnen kann.</string>
     <string name="share_unavailable">Diese Datei kann nicht mehr geteilt werden.</string>
     <string name="menu_rename">Umbenennen</string>
     <string name="menu_info">Dateiinfo</string>
@@ -466,7 +466,7 @@
     <string name="add_files">Dateien von deinem Handy hinzufügen</string>
     <string name="add_files_hint">Videos, Musik, Dokumente. Sie werden nach Download/Hamstr kopiert.</string>
     <string name="add_files_desktop">Dateien von diesem Computer hinzufügen</string>
-    <string name="add_files_hint_desktop">Videos, Musik, Dokumente. Sie werden nach Downloads/Hamstr kopiert.</string>
+    <string name="add_files_hint_desktop">Videos, Musik, Dokumente. Sie werden in deinen Hamstr-Ordner kopiert.</string>
     <string name="upd_tap">Tippen zum Aktualisieren, kein Browser nötig</string>
     <string name="upd_update">Aktualisieren</string>
     <string name="upd_new">neu</string>
@@ -656,14 +656,14 @@
     <string name="nearby_always">Immer erlauben</string>
     <string name="nearby_once">Nur dieses Mal</string>
     <string name="nearby_decline">Ablehnen</string>
-    <string name="nearby_ask_hint">„Immer erlauben“ lässt Links von diesem Gerät direkt in deinen Vorrat.</string>
+    <string name="nearby_ask_hint">„Immer erlauben“ lässt Links und Dateien von diesem Gerät ohne Nachfrage herein.</string>
     <string name="nearby_received">Von %1$s</string>
     <string name="nearby_waiting">%1$d wartet darauf, gesendet zu werden</string>
     <string name="page_devices">Geräte</string>
     <string name="set_nearby">Für Geräte in der Nähe sichtbar</string>
-    <string name="set_nearby_hint">Andere Hamstr-Apps können dieses Gerät finden und ihm Links schicken</string>
+    <string name="set_nearby_hint">Andere Hamstr-Apps können dieses Gerät finden und ihm Links und Dateien schicken</string>
     <string name="set_nearby_bluetooth">Bluetooth</string>
-    <string name="set_nearby_bluetooth_hint">Findet auch Handys ohne gemeinsames WLAN</string>
+    <string name="set_nearby_bluetooth_hint">Findet auch Geräte ohne gemeinsames WLAN</string>
     <string name="set_nearby_bluetooth_off">Noch nicht erlaubt. Tippen, um es zu erlauben.</string>
     <string name="set_nearby_bluetooth_disabled">Bluetooth ist aus. Tippen, um es einzuschalten.</string>
     <string name="set_device_name">Name dieses Geräts</string>
@@ -739,4 +739,26 @@
     <string name="desktop_update_opened">Der Installer ist offen; installier ihn wie beim ersten Mal.</string>
     <string name="desktop_update_coming">Hamstr %1$s ist unterwegs</string>
     <string name="desktop_update_coming_hint">Der Installer für diesen Computer wird noch gebaut; Hamstr schaut in ein paar Minuten wieder nach.</string>
+    <string name="set_nearby_bluetooth_none">Dieser Computer hat kein Bluetooth, das Hamstr nutzen kann</string>
+    <string name="set_nearby_bluetooth_missing">Dieser Hamstr-Build kam ohne seinen Bluetooth-Helfer</string>
+    <string name="nearby_files_here">Dateien gehen nur an ein Gerät, das gerade hier ist</string>
+    <string name="nearby_files_bluetooth">Über Bluetooth, langsamer</string>
+    <string name="nearby_sending_percent" formatted="false">Sende · %1$d %</string>
+    <string name="nearby_declined">Abgelehnt</string>
+    <plurals name="nearby_files_offer">
+        <item quantity="one">%1$d Datei · %2$s</item>
+        <item quantity="other">%1$d Dateien · %2$s</item>
+    </plurals>
+    <string name="set_folder_phone">Ordner in Download</string>
+    <string name="set_folder_phone_hint">Neue Downloads landen in diesem Ordner in Download; leer heißt Download/Hamstr. Was schon im Vorrat ist, bleibt, wo es ist.</string>
+    <string name="add_options">Optionen</string>
+    <string name="add_kind">Video oder Audio</string>
+    <string name="add_subtitles_hint">In deinen Sprachen, wo die Seite sie hat</string>
+    <string name="add_subs_short">Untertitel</string>
+    <string name="desktop_folder_change">Ordner wählen</string>
+    <string name="desktop_folder_reset">Zurück zu Hamstrs Ordner</string>
+    <string name="desktop_folder_hint">Neue Downloads landen hier; was schon im Vorrat ist, bleibt, wo es ist.</string>
+    <string name="desktop_cheek_update">Cheek aktualisieren</string>
+    <string name="set_transfer_jobs">Lange Downloads ohne Tageslimit</string>
+    <string name="set_transfer_jobs_hint">Was du in Hamstr startest, läuft als einer von Androids Download-Jobs, die Android nicht nach sechs Stunden am Tag stoppt.</string>
 </resources>

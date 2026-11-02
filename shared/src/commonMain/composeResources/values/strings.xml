@@ -173,7 +173,7 @@
     <string name="share_other_apps">Share through other apps</string>
     <string name="share_copy_file">Copy file</string>
     <string name="share_copy_files">Copy files</string>
-    <string name="share_file_nearby_hint">To send to a Hamstr device, choose Link.</string>
+    <string name="share_file_nearby_hint">The file itself goes to a Hamstr device nearby, over the same Wi-Fi or, slower, over Bluetooth, sealed so only that device can open it.</string>
     <string name="share_unavailable">This file is no longer available to share.</string>
     <string name="menu_rename">Rename</string>
     <string name="menu_info">File info</string>
@@ -466,7 +466,7 @@
     <string name="add_files">Add files from your phone</string>
     <string name="add_files_hint">Videos, music, documents. They’re copied into Download/Hamstr.</string>
     <string name="add_files_desktop">Add files from this computer</string>
-    <string name="add_files_hint_desktop">Videos, music, documents. They’re copied into Downloads/Hamstr.</string>
+    <string name="add_files_hint_desktop">Videos, music, documents. They’re copied into your Hamstr folder.</string>
     <string name="upd_tap">Tap to update, no browser needed</string>
     <string name="upd_update">Update</string>
     <string name="upd_new">new</string>
@@ -656,16 +656,18 @@
     <string name="nearby_always">Always allow</string>
     <string name="nearby_once">Just this once</string>
     <string name="nearby_decline">Decline</string>
-    <string name="nearby_ask_hint">“Always allow” lets links from this device go straight into your stash.</string>
+    <string name="nearby_ask_hint">“Always allow” lets links and files from this device come in without asking.</string>
     <string name="nearby_received">From %1$s</string>
     <string name="nearby_waiting">%1$d waiting to be sent</string>
     <string name="page_devices">Devices</string>
     <string name="set_nearby">Visible to nearby devices</string>
-    <string name="set_nearby_hint">Other Hamstr apps can find this one and send it links</string>
+    <string name="set_nearby_hint">Other Hamstr apps can find this one and send it links and files</string>
     <string name="set_nearby_bluetooth">Bluetooth</string>
-    <string name="set_nearby_bluetooth_hint">Also finds phones without a shared Wi-Fi</string>
+    <string name="set_nearby_bluetooth_hint">Also finds devices without a shared Wi-Fi</string>
     <string name="set_nearby_bluetooth_off">Not allowed yet. Tap to allow it.</string>
     <string name="set_nearby_bluetooth_disabled">Bluetooth is off. Tap to turn it on.</string>
+    <string name="set_nearby_bluetooth_none">This computer has no Bluetooth Hamstr can use</string>
+    <string name="set_nearby_bluetooth_missing">This build of Hamstr came without its Bluetooth helper</string>
     <string name="set_device_name">This device’s name</string>
     <string name="set_known_devices">Your devices</string>
     <string name="set_known_none">No devices yet. Send something to one, or accept a link from one, and it shows up here.</string>
@@ -739,4 +741,24 @@
     <string name="desktop_update_opened">The installer is open; install it like the first time.</string>
     <string name="desktop_update_coming">Hamstr %1$s is on its way</string>
     <string name="desktop_update_coming_hint">Its installer for this computer is still being built; Hamstr looks again in a few minutes.</string>
+    <string name="nearby_files_here">Files go only to a device that’s here</string>
+    <string name="nearby_files_bluetooth">Over Bluetooth, slower</string>
+    <string name="nearby_sending_percent" formatted="false">Sending · %1$d %</string>
+    <string name="nearby_declined">Declined</string>
+    <plurals name="nearby_files_offer">
+        <item quantity="one">%1$d file · %2$s</item>
+        <item quantity="other">%1$d files · %2$s</item>
+    </plurals>
+    <string name="set_folder_phone">Folder in Download</string>
+    <string name="set_folder_phone_hint">New downloads go into this folder inside Download; empty means Download/Hamstr. What’s already stashed stays where it is.</string>
+    <string name="add_options">Options</string>
+    <string name="add_kind">Video or audio</string>
+    <string name="add_subtitles_hint">In your languages, where the site has them</string>
+    <string name="add_subs_short">Subtitles</string>
+    <string name="desktop_folder_change">Choose folder</string>
+    <string name="desktop_folder_reset">Back to Hamstr’s</string>
+    <string name="desktop_folder_hint">New downloads go here; what’s already stashed stays where it is.</string>
+    <string name="desktop_cheek_update">Update Cheek</string>
+    <string name="set_transfer_jobs">Long downloads without the daily limit</string>
+    <string name="set_transfer_jobs_hint">What you start in Hamstr runs as one of Android’s download jobs, which Android doesn’t stop after six hours a day.</string>
 </resources>

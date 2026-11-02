@@ -16,8 +16,14 @@ import androidx.core.app.NotificationCompat
 import app.hamstr.MainActivity
 import app.hamstr.R
 import app.hamstr.ShareActivity
+import app.hamstr.data.Importer
 import app.hamstr.data.Prefs
 import app.hamstr.data.keyValues
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.io.File
 import app.hamstr.engine.DownloadService
 import app.hamstr.engine.MediaLinks
 
@@ -29,12 +35,15 @@ import app.hamstr.engine.MediaLinks
  */
 object PhoneNearby {
     private const val CHANNEL = "nearby"
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun start(context: Context) {
         val app = context.applicationContext
         app.getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel(CHANNEL, app.getString(R.string.nearby_channel), NotificationManager.IMPORTANCE_HIGH))
         val lock = app.getSystemService(WifiManager::class.java)?.createMulticastLock("hamstr-nearby")?.apply { setReferenceCounted(false) }
+        // On the same storage as Download, so a finished file only moves.
+        Nearby.inbox = File(app.getExternalFilesDir(null) ?: app.filesDir, "nearby-inbox")
         Nearby.init(
             keyValues(app, "nearby"), app.filesDir, DeviceKind.Phone, deviceName(app),
             initiallyAvailable = false,
@@ -53,6 +62,12 @@ object PhoneNearby {
             } else {
                 DownloadService.stash(app, url, null, Prefs.settings.value.defaultChoice())
                 notify(app, url.hashCode(), app.getString(R.string.nearby_received, from.name), title ?: url, open(app))
+            }
+        }
+        Nearby.onFiles = { files, from ->
+            scope.launch {
+                val kept = Importer.adopt(app, files, from.name)
+                if (kept.isNotEmpty()) notify(app, from.id.hashCode(), app.getString(R.string.nearby_received, from.name), kept.joinToString(", ") { it.name }, open(app))
             }
         }
         Nearby.onRequest = { r ->

@@ -169,7 +169,7 @@
     <string name="share_other_apps">通过其他应用分享</string>
     <string name="share_copy_file">复制文件</string>
     <string name="share_copy_files">复制文件</string>
-    <string name="share_file_nearby_hint">要发送到另一台 Hamstr 设备，请选择“链接”。</string>
+    <string name="share_file_nearby_hint">文件本身会发送到附近的 Hamstr 设备，通过同一 Wi-Fi，或较慢地通过蓝牙，并加密封装，只有那台设备能打开。</string>
     <string name="share_unavailable">该文件已无法分享。</string>
     <string name="menu_rename">重命名</string>
     <string name="menu_info">文件信息</string>
@@ -459,7 +459,7 @@
     <string name="add_files">从手机添加文件</string>
     <string name="add_files_hint">视频、音乐、文档。它们会被复制到 Download/Hamstr 中。</string>
     <string name="add_files_desktop">从这台电脑添加文件</string>
-    <string name="add_files_hint_desktop">视频、音乐、文档。它们会被复制到 Downloads/Hamstr 中。</string>
+    <string name="add_files_hint_desktop">视频、音乐、文档。它们会被复制到你的 Hamstr 文件夹中。</string>
     <string name="upd_tap">点按即可更新，无需浏览器</string>
     <string name="upd_update">更新</string>
     <string name="upd_new">新</string>
@@ -646,14 +646,14 @@
     <string name="nearby_always">始终允许</string>
     <string name="nearby_once">仅此一次</string>
     <string name="nearby_decline">拒绝</string>
-    <string name="nearby_ask_hint">“始终允许”会让来自此设备的链接直接进入你的囤货。</string>
+    <string name="nearby_ask_hint">“始终允许”会让来自此设备的链接和文件无需询问直接进来。</string>
     <string name="nearby_received">来自 %1$s</string>
     <string name="nearby_waiting">%1$d 个等待发送</string>
     <string name="page_devices">设备</string>
     <string name="set_nearby">对附近设备可见</string>
-    <string name="set_nearby_hint">其他 Hamstr 应用可以找到此设备并向它发送链接</string>
+    <string name="set_nearby_hint">其他 Hamstr 应用可以找到此设备并向它发送链接和文件</string>
     <string name="set_nearby_bluetooth">蓝牙</string>
-    <string name="set_nearby_bluetooth_hint">也能找到没有共享 Wi-Fi 的手机</string>
+    <string name="set_nearby_bluetooth_hint">也能找到没有共享 Wi-Fi 的设备</string>
     <string name="set_nearby_bluetooth_off">尚未允许。点按以允许。</string>
     <string name="set_nearby_bluetooth_disabled">蓝牙已关闭。点按即可开启。</string>
     <string name="set_device_name">此设备的名称</string>
@@ -729,4 +729,25 @@
     <string name="desktop_update_opened">安装程序已打开；请像第一次那样安装。</string>
     <string name="desktop_update_coming">Hamstr %1$s 即将推出</string>
     <string name="desktop_update_coming_hint">适用于这台电脑的安装程序仍在构建中；Hamstr 会在几分钟后再次检查。</string>
+    <string name="set_nearby_bluetooth_none">这台电脑没有 Hamstr 能用的蓝牙</string>
+    <string name="set_nearby_bluetooth_missing">此 Hamstr 版本缺少蓝牙助手</string>
+    <string name="nearby_files_here">文件只能发送到在附近的设备</string>
+    <string name="nearby_files_bluetooth">通过蓝牙，较慢</string>
+    <string name="nearby_sending_percent" formatted="false">正在发送 · %1$d %</string>
+    <string name="nearby_declined">已拒绝</string>
+    <plurals name="nearby_files_offer">
+        <item quantity="other">%1$d 个文件 · %2$s</item>
+    </plurals>
+    <string name="set_folder_phone">Download 中的文件夹</string>
+    <string name="set_folder_phone_hint">新下载会放进 Download 中的这个文件夹；留空则为 Download/Hamstr。已囤的内容保持原位。</string>
+    <string name="add_options">选项</string>
+    <string name="add_kind">视频或音频</string>
+    <string name="add_subtitles_hint">使用你的语言（如果网站提供）</string>
+    <string name="add_subs_short">字幕</string>
+    <string name="desktop_folder_change">选择文件夹</string>
+    <string name="desktop_folder_reset">恢复为 Hamstr 的文件夹</string>
+    <string name="desktop_folder_hint">新下载会放到这里；已囤的内容保持原位。</string>
+    <string name="desktop_cheek_update">更新 Cheek</string>
+    <string name="set_transfer_jobs">长时间下载，不受每日限制</string>
+    <string name="set_transfer_jobs_hint">你在 Hamstr 中开始的下载会作为 Android 的下载任务运行，Android 不会在每天六小时后停止它们。</string>
 </resources>

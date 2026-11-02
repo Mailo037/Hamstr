@@ -33,6 +33,16 @@ dependencies {
     implementation(compose.desktop.currentOs)
     // Windows 11's rounded corners for the frameless window (WindowFrame).
     implementation("net.java.dev.jna:jna:5.19.1")
+    testImplementation(kotlin("test"))
+}
+
+// The player test plays a clip with the FFmpeg fetchTools put into build/tools, when it is there;
+// HAMSTR_DATA keeps the test away from a real Hamstr's settings and downloads.
+tasks.test {
+    environment("HAMSTR_DATA", layout.buildDirectory.dir("test-data").get().asFile.path)
+    systemProperty("hamstr.testTools", layout.buildDirectory.dir("tools").get().asFile.path)
+    // The Bluetooth test starts the helper buildBle left there, when it did, on this computer's adapter.
+    systemProperty("hamstr.testBle", layout.buildDirectory.dir("ble").get().asFile.path)
 }
 
 // The window's own icon (title bar, taskbar), from tools/render_icon.py like the installers' icons.
@@ -147,6 +157,38 @@ val fetchTools by tasks.registering(FetchTools::class) {
     outputDir = layout.buildDirectory.dir("tools")
 }
 
+/**
+ * Hamstr's Bluetooth helper (ble/, Rust) for this host, built with cargo. `-Phamstr.cargo` names
+ * another cargo command, e.g. "cargo +stable-x86_64-pc-windows-gnu" where no MSVC is installed.
+ * Without cargo the app is built without it and has no Bluetooth; release builds need it
+ * (`-Phamstr.requireBle=true`).
+ */
+val exe = if (hostOs == "windows") ".exe" else ""
+val cargo = providers.gradleProperty("hamstr.cargo").getOrElse("cargo").split(' ').filter { it.isNotBlank() }
+val requireBle = providers.gradleProperty("hamstr.requireBle").map { it.toBoolean() }.getOrElse(false)
+val hasCargo = runCatching { ProcessBuilder(cargo + "--version").redirectErrorStream(true).start().waitFor() == 0 }.getOrDefault(false)
+val buildBle by tasks.registering(Exec::class) {
+    description = "Builds Hamstr's Bluetooth helper for this host"
+    val out = layout.buildDirectory.dir("ble")
+    workingDir = file("ble")
+    commandLine(cargo + listOf("build", "--release", "--locked", "--target-dir", out.get().asFile.path))
+    inputs.dir("ble/src")
+    inputs.files("ble/Cargo.toml", "ble/Cargo.lock")
+    outputs.file(out.map { it.file("release/hamstr-ble$exe") })
+    onlyIf {
+        check(hasCargo || !requireBle) { "cargo isn't available, but this build needs the Bluetooth helper" }
+        if (!hasCargo) logger.warn("No cargo: Hamstr is built without its Bluetooth helper")
+        hasCargo
+    }
+}
+
+/** What ships next to the app: the fetched tools and the Bluetooth helper, in Compose's per-OS folder. */
+val bundleTools by tasks.registering(Sync::class) {
+    from(fetchTools.flatMap { it.outputDir })
+    from(buildBle.map { it.outputs.files }) { into("$hostOs-$hostArch") }
+    into(layout.buildDirectory.dir("bundle"))
+}
+
 compose.desktop {
     application {
         mainClass = "app.hamstr.desktop.MainKt"
@@ -162,7 +204,7 @@ compose.desktop {
             description = "Hamstr"
             vendor = "Hamstr"
             licenseFile = rootProject.file("LICENSE")
-            appResourcesRootDir = fetchTools.flatMap { it.outputDir }
+            appResourcesRootDir = layout.dir(bundleTools.map { it.destinationDir })
             modules("java.net.http", "java.prefs", "jdk.crypto.ec", "jdk.unsupported")
 
             windows {
@@ -175,6 +217,13 @@ compose.desktop {
                 // DMGs want a major version above 0; 0.6.1 ships as 1.6.1 there.
                 packageVersion = appVersion.split('.').let { (major, minor, patch) -> "${major.toInt().coerceAtLeast(1)}.$minor.${patch.substringBefore('-')}" }
                 iconFile = project.file("icons/hamstr.icns")
+                // macOS asks before the Bluetooth helper may look for other devices, with these words.
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>NSBluetoothAlwaysUsageDescription</key>
+                        <string>Hamstr finds your other devices nearby and sends them links and files.</string>
+                    """.trimIndent()
+                }
             }
             linux {
                 packageName = "hamstr"

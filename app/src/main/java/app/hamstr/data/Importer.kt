@@ -48,7 +48,32 @@ object Importer {
         val target = existing ?: freeName(Engine.outputDir, clean).also { out ->
             resolver.openInputStream(uri)!!.use { input -> out.outputStream().use { input.copyTo(it, 256 * 1024) } }
         }
+        register(context, target, uri.toString(), "Imported", group, createdAt)
+    }
 
+    /**
+     * Files another device sent, each with the name it gave: they move into the Hamstr folder
+     * and onto the list, together when there are several. Returns the ones that made it.
+     */
+    suspend fun adopt(context: Context, files: List<Pair<File, String>>, from: String): List<File> = withContext(Dispatchers.IO) {
+        val group = if (files.size > 1) UUID.randomUUID().toString() to from else null
+        val start = System.currentTimeMillis()
+        files.withIndex().mapNotNull { (i, f) ->
+            val (part, name) = f
+            runCatching {
+                Engine.outputDir.mkdirs()
+                val target = freeName(Engine.outputDir, name.replace(Regex("""[\\/:*?"<>|]"""), "_"))
+                if (!part.renameTo(target)) {
+                    part.copyTo(target)
+                    part.delete()
+                }
+                register(context, target, Uri.fromFile(target).toString(), from, group, start + i)
+                target
+            }.onFailure { part.delete() }.getOrNull()
+        }
+    }
+
+    private suspend fun register(context: Context, target: File, url: String, source: String, group: Pair<String, String>?, createdAt: Long) {
         val kind = kindOf(target)
         var duration = 0
         var thumbnail: String? = if (kind == Kind.Image) Uri.fromFile(target).toString() else null
@@ -68,10 +93,10 @@ object Importer {
         val contentUri = scan(context, target)
         DownloadStore.add(
             DownloadTask(
-                url = uri.toString(),
+                url = url,
                 title = target.nameWithoutExtension,
                 thumbnail = thumbnail,
-                source = "Imported",
+                source = source,
                 durationSec = duration,
                 choice = Prefs.settings.value.defaultChoice().copy(mode = if (kind == Kind.Audio) Mode.Audio else Mode.Video, container = target.extension),
                 status = Status.Done,

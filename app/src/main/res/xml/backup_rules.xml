@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and older. Everything is backed up except this phone's Nearby identity: its key,
+  the devices that trust that key, and files still on their way. A restored copy on another
+  phone would pass for this one, so it starts with a key of its own instead.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="nearby.xml" />
+    <exclude domain="file" path="nearby.json" />
+    <exclude domain="file" path="nearby.json.bak" />
+    <exclude domain="file" path="nearby-inbox" />
+    <exclude domain="external" path="nearby-inbox" />
+</full-backup-content>

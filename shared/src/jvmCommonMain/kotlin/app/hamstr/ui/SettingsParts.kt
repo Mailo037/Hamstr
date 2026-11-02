@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.ACCENTS
 import app.hamstr.data.AppLanguages
+import app.hamstr.data.Choice
 import app.hamstr.data.Base
 import app.hamstr.data.DownloadEngine
 import app.hamstr.data.Mode
@@ -144,3 +145,32 @@ fun FormatDefaults() {
         }
     }
 }
+
+/** One download's choice, starting from the defaults: video or audio, quality, format, subtitles. */
+@Composable
+fun ChoicePicker(choice: Choice, onChange: (Choice) -> Unit) {
+    val videoLabel = stringResource(Res.string.mode_video)
+    val audioLabel = stringResource(Res.string.mode_audio)
+    SettingBlock(stringResource(Res.string.add_kind)) {
+        Segmented(listOf(Mode.Video, Mode.Audio), if (choice.mode == Mode.Audio) Mode.Audio else Mode.Video,
+            { if (it == Mode.Video) videoLabel else audioLabel }, { m -> onChange(choice.copy(mode = m)) })
+    }
+    if (choice.mode == Mode.Audio) {
+        SettingBlock(stringResource(Res.string.share_audio_format)) {
+            Chips(Prefs.audioFormats, choice.audioFormat, { it }) { f -> onChange(choice.copy(audioFormat = f)) }
+        }
+    } else {
+        SettingBlock(stringResource(Res.string.set_video_quality)) {
+            Chips(Prefs.heights, choice.height, ::heightLabel) { h -> onChange(choice.copy(height = h)) }
+        }
+        SettingBlock(stringResource(Res.string.set_video_format)) {
+            Chips(Prefs.containers, choice.container, { it }) { f -> onChange(choice.copy(container = f)) }
+        }
+        FxRow(stringResource(Res.string.set_subtitles), stringResource(Res.string.add_subtitles_hint), choice.subtitles) { v -> onChange(choice.copy(subtitles = v)) }
+    }
+}
+
+/** "Video · 1080p · mp4" or "Audio · opus", for a folded [ChoicePicker]. */
+@Composable
+fun choiceSummary(c: Choice): String = if (c.mode == Mode.Audio) "${stringResource(Res.string.mode_audio)} · ${c.audioFormat}"
+    else listOfNotNull(stringResource(Res.string.mode_video), heightLabel(c.height), c.container, if (c.subtitles) stringResource(Res.string.add_subs_short) else null).joinToString(" · ")

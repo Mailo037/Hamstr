@@ -125,10 +125,12 @@ fun SharingSheet(
                         HButton(stringResource(Res.string.share_other_apps), { onShareLink(content.url) }, Modifier.fillMaxWidth(), icon = Res.drawable.ic_share)
                     }
                 } else if (kind == ShareKind.File && content.files.isNotEmpty()) {
-                    if (content.url != null) {
-                        Txt(stringResource(Res.string.share_file_nearby_hint), style = Hamstr.type.small, color = c.muted)
-                        Spacer(Modifier.height(12.dp))
-                    }
+                    Txt(stringResource(Res.string.nearby_send_title), style = Hamstr.type.bodyMedium)
+                    Spacer(Modifier.height(4.dp))
+                    Txt(stringResource(Res.string.share_file_nearby_hint), style = Hamstr.type.small, color = c.muted)
+                    Spacer(Modifier.height(10.dp))
+                    NearbyFileTargets(content.files.mapNotNull { it.filePath?.let(::File) }, targets, scope)
+                    Spacer(Modifier.height(16.dp))
                     if (onCopyFiles != null) {
                         HButton(stringResource(if (content.files.size > 1) Res.string.share_copy_files else Res.string.share_copy_file), onCopyFiles, Modifier.fillMaxWidth(), icon = Res.drawable.ic_content_paste)
                         Spacer(Modifier.height(8.dp))

@@ -12,16 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.9.2"
+VERSION = "0.9.3"
 FEATURES = [
-    ("SWIPES STAY PUT", "Scrolling the colours no longer turns the page"),
-    ("SIZE, FOLLOWED", "Small makes the tour's pictures smaller too"),
-    ("BUGFIX", "The last tour page, fixed on real phones"),
+    ("PRIVATE NEARBY", "Sealed links and files, signed receipts"),
+    ("BLUETOOTH EVERYWHERE", "Phones and computers, files too"),
+    ("LIBRARY AND PLAYER", "On the computer, with drag and drop"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
-# 0.9.0 to 0.9.2: no emulator shots; TourTest and LanguageTest render into shared/build/tour.
-SHOTS = [("size_small_7_look.png", "Small"), ("size_normal_7_look.png", "Normal"), ("size_large_7_look.png", "Large")]
+# 0.9.3: no emulator; the desktop shots come from tools/desktop_screens.py --seed.
+SHOTS = [("desktop_library.png", "Library"), ("desktop_devices.png", "Devices")]
 
 
 

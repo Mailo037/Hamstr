@@ -62,3 +62,10 @@ compose.resources {
     publicResClass = true
     packageOfResClass = "app.hamstr.res"
 }
+
+// The UI tests look for English words; Hamstr speaks the system's language since 0.9.0, so the
+// tests run in English whatever this computer speaks (LanguageTest switches languages itself).
+tasks.matching { it.name == "desktopTest" }.withType<Test>().configureEach {
+    systemProperty("user.language", "en")
+    systemProperty("user.country", "US")
+}

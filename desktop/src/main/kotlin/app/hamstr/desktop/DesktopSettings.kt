@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -88,7 +89,7 @@ internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit
                     Page.Motion -> MotionPage()
                     Page.Downloads -> DownloadsPage()
                     Page.Engine -> EnginePage(engine)
-                    Page.Devices -> NearbySettings()
+                    Page.Devices -> NearbySettings(bluetooth = { BluetoothRow() })
                     Page.About -> AboutPage(onQuit, onTour)
                 }
                 Spacer(Modifier.height(24.dp))
@@ -133,13 +134,28 @@ private fun DownloadsPage() {
         SettingRow(stringResource(Res.string.set_save_location), subtitle = Paths.downloads.path, onClick = { Paths.downloads.mkdirs(); Files.open(Paths.downloads) }) {
             Txt(stringResource(Res.string.desktop_open_folder), style = Hamstr.type.small, color = Hamstr.colors.ghost)
         }
+        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HButton(stringResource(Res.string.desktop_folder_change), {
+                // The system's picker blocks; it gets its own thread, the window stays responsive.
+                Thread { Files.pickFolder(Paths.downloads)?.let { f -> Prefs.edit { it.copy(downloadFolder = f.absolutePath) } } }.start()
+            }, Modifier.weight(1f), icon = Res.drawable.ic_folder_open)
+            if (s.downloadFolder.isNotBlank()) {
+                HButton(stringResource(Res.string.desktop_folder_reset), { Prefs.edit { it.copy(downloadFolder = "") } }, Modifier.weight(1f), kind = ButtonKind.Ghost, icon = Res.drawable.ic_restore)
+            }
+        }
     }
+    Spacer(Modifier.height(8.dp))
+    Txt(stringResource(Res.string.desktop_folder_hint), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
 }
 
 @Composable
 private fun EnginePage(engine: EngineState) {
+    val s by Prefs.settings.collectAsState()
     val updating by Queue.updatingYtDlp.collectAsState()
     val failed by Queue.ytDlpUpdateError.collectAsState()
+    val cheekUpdating by ToolUpdates.cheekUpdating.collectAsState()
+    val cheekFailed by ToolUpdates.cheekError.collectAsState()
+    val cheekVersion by ToolUpdates.cheekVersion.collectAsState()
     Group { EngineChoice() }
     Spacer(Modifier.height(12.dp))
     Group {
@@ -149,15 +165,35 @@ private fun EnginePage(engine: EngineState) {
             is EngineState.Broken -> engine.message
         })
         Divider()
-        SettingRow("Cheek", subtitle = if (Tools.hasCheek) System.getProperty("hamstr.cheekVersion", "") else stringResource(Res.string.desktop_cheek_missing))
+        FxRow(stringResource(Res.string.set_ytdlp_auto), stringResource(Res.string.set_ytdlp_auto_hint), s.autoUpdate) { v -> Prefs.edit { it.copy(autoUpdate = v) } }
+        Column(Modifier.padding(8.dp)) {
+            HButton(
+                stringResource(if (updating) Res.string.set_updating else Res.string.desktop_ytdlp_update),
+                Queue::updateYtDlp,
+                Modifier.fillMaxWidth(), kind = ButtonKind.Neutral, icon = Res.drawable.ic_refresh, enabled = !updating && engine is EngineState.Ready,
+            )
+        }
     }
-    Spacer(Modifier.height(16.dp))
-    HButton(
-        stringResource(if (updating) Res.string.set_updating else Res.string.desktop_ytdlp_update),
-        Queue::updateYtDlp,
-        Modifier.fillMaxWidth(), kind = ButtonKind.Neutral, icon = Res.drawable.ic_refresh, enabled = !updating && engine is EngineState.Ready,
-    )
     failed?.let {
+        Spacer(Modifier.height(8.dp))
+        Txt(stringResource(Res.string.set_update_failed_why, it), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
+    }
+    Spacer(Modifier.height(12.dp))
+    Group {
+        SettingRow("Cheek", subtitle = if (!Tools.hasCheek) stringResource(Res.string.desktop_cheek_missing)
+            else if (cheekVersion == Tools.bundledCheekVersion) stringResource(Res.string.set_cheek_bundled, Updater.version).let { "$cheekVersion · $it" }
+            else "$cheekVersion · " + stringResource(Res.string.set_cheek_updated))
+        Divider()
+        FxRow(stringResource(Res.string.set_cheek_auto), stringResource(Res.string.set_cheek_auto_hint), s.cheekAutoUpdate) { v -> Prefs.edit { it.copy(cheekAutoUpdate = v) } }
+        Column(Modifier.padding(8.dp)) {
+            HButton(
+                stringResource(if (cheekUpdating) Res.string.set_updating else Res.string.desktop_cheek_update),
+                ToolUpdates::updateCheekSoon,
+                Modifier.fillMaxWidth(), kind = ButtonKind.Neutral, icon = Res.drawable.ic_refresh, enabled = !cheekUpdating && Tools.hasCheek,
+            )
+        }
+    }
+    cheekFailed?.let {
         Spacer(Modifier.height(8.dp))
         Txt(stringResource(Res.string.set_update_failed_why, it), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
     }
@@ -249,4 +285,18 @@ private fun AboutPage(onQuit: () -> Unit, onTour: () -> Unit) {
     }
     Spacer(Modifier.height(12.dp))
     Txt(stringResource(Res.string.desktop_about_local), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 6.dp))
+}
+
+/** Nearby over Bluetooth: on or off, and why it doesn't run when it doesn't. */
+@Composable
+private fun BluetoothRow() {
+    val s by Prefs.settings.collectAsState()
+    val state by DesktopBluetooth.state.collectAsState()
+    val hint = when {
+        !s.nearbyBluetooth -> Res.string.set_nearby_bluetooth_hint
+        state == DesktopBluetooth.State.NoAdapter -> Res.string.set_nearby_bluetooth_none
+        state == DesktopBluetooth.State.Missing -> Res.string.set_nearby_bluetooth_missing
+        else -> Res.string.set_nearby_bluetooth_hint
+    }
+    FxRow(stringResource(Res.string.set_nearby_bluetooth), stringResource(hint), s.nearbyBluetooth) { v -> Prefs.edit { it.copy(nearbyBluetooth = v) } }
 }

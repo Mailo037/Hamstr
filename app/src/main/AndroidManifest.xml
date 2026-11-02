@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Android 14+: downloads the user started run as a transfer job, without the daily limit. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <!-- Self-updates from GitHub Releases; the second skips the prompt once Hamstr installed itself. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
@@ -33,6 +35,8 @@
     <application
         android:name=".HamstrApp"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Hamstr"
@@ -303,6 +307,11 @@
             android:name=".engine.DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".engine.DownloadJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <service
             android:name=".update.UpdateDownloadService"

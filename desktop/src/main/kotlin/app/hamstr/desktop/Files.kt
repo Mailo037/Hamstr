@@ -4,9 +4,13 @@ import app.hamstr.Log
 import app.hamstr.data.Choice
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.FileChecks
 import app.hamstr.data.FileNames
 import app.hamstr.data.Mode
 import app.hamstr.data.Status
+import app.hamstr.player.Kind
+import app.hamstr.player.kindOf
+import java.util.UUID
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -66,22 +70,74 @@ object Files {
     /** Copies picked files into the downloads folder and puts them on the list, like the phone's import. */
     fun pickAndImport() {
         val dialog = FileDialog(null as Frame?, "Hamstr", FileDialog.LOAD).apply { isMultipleMode = true; isVisible = true }
-        val picked = dialog.files.orEmpty()
+        import(dialog.files.orEmpty().toList())
+    }
+
+    /** Copies [files] (picked or dropped on the window) into the downloads folder and onto the list. */
+    fun import(files: List<File>) {
+        val picked = files.filter { it.isFile }
         if (picked.isEmpty()) return
         Thread {
-            Paths.downloads.mkdirs()
-            picked.forEach { src ->
+            val group = groupFor(picked.size)
+            picked.forEachIndexed { i, src ->
                 runCatching {
-                    val target = FileNames.freeName(Paths.downloads, src.name)
-                    src.copyTo(target)
-                    val now = System.currentTimeMillis()
-                    DownloadStore.add(DownloadTask(
-                        url = target.toURI().toString(), title = target.nameWithoutExtension, thumbnail = null, source = null, durationSec = 0,
-                        choice = Choice(Mode.Video, null, target.extension, "", false), status = Status.Done, progress = 1f,
-                        filePath = target.path, sizeBytes = target.length(), finishedAt = now,
-                    ))
+                    // A file that already is in the downloads folder is listed, not copied.
+                    val target = if (src.parentFile?.canonicalFile == Paths.downloads.canonicalFile) src
+                        else FileNames.freeName(Paths.downloads.apply { mkdirs() }, src.name).also { src.copyTo(it) }
+                    if (DownloadStore.tasks.value.none { it.filePath == target.path }) register(target, target.toURI().toString(), group, i)
                 }.onFailure { Log.w(TAG, "Couldn't import $src", it) }
             }
+            FileChecks.refresh()
         }.start()
+    }
+
+    /** Files another device sent, each with the name it gave: they move into the downloads folder. */
+    fun adopt(files: List<Pair<File, String>>, from: String): List<File> {
+        val group = groupFor(files.size, from)
+        return files.mapIndexedNotNull { i, (part, name) ->
+            runCatching {
+                val target = FileNames.freeName(Paths.downloads.apply { mkdirs() }, name)
+                runCatching { java.nio.file.Files.move(part.toPath(), target.toPath()) }.getOrElse {
+                    part.copyTo(target)
+                    part.delete()
+                }
+                register(target, target.toURI().toString(), group, i, source = from)
+                target
+            }.onFailure { Log.w(TAG, "Couldn't keep $name", it); part.delete() }.getOrNull()
+        }.also { FileChecks.refresh() }
+    }
+
+    private fun groupFor(count: Int, title: String? = null) =
+        if (count > 1) UUID.randomUUID().toString() to (title ?: java.text.SimpleDateFormat("d MMM, HH:mm").format(java.util.Date())) else null
+
+    private fun register(file: File, url: String, group: Pair<String, String>?, index: Int, source: String? = null) {
+        val now = System.currentTimeMillis()
+        val audio = kindOf(file) == Kind.Audio
+        DownloadStore.add(DownloadTask(
+            url = url, title = file.nameWithoutExtension, thumbnail = null, source = source, durationSec = 0,
+            choice = Choice(if (audio) Mode.Audio else Mode.Video, null, file.extension, if (audio) file.extension else "", false),
+            status = Status.Done, progress = 1f, filePath = file.path, sizeBytes = file.length(),
+            createdAt = now + index, finishedAt = now, group = group?.first, groupTitle = group?.second,
+        ))
+    }
+
+    /** The system's folder picker; null when it was closed without a choice. */
+    fun pickFolder(start: File): File? {
+        if (Paths.mac) {
+            // AWT's dialog picks folders on macOS when asked to; Swing's would look foreign there.
+            System.setProperty("apple.awt.fileDialogForDirectories", "true")
+            try {
+                val d = FileDialog(null as Frame?, "Hamstr", FileDialog.LOAD).apply { directory = start.path; isVisible = true }
+                return d.file?.let { File(d.directory, it) }
+            } finally {
+                System.setProperty("apple.awt.fileDialogForDirectories", "false")
+            }
+        }
+        runCatching { javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName()) }
+        val chooser = javax.swing.JFileChooser(start.takeIf { it.isDirectory } ?: start.parentFile).apply {
+            fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+            dialogTitle = "Hamstr"
+        }
+        return if (chooser.showDialog(null, null) == javax.swing.JFileChooser.APPROVE_OPTION) chooser.selectedFile else null
     }
 }

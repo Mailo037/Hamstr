@@ -173,7 +173,7 @@
     <string name="share_other_apps">Diğer uygulamalar üzerinden paylaş</string>
     <string name="share_copy_file">Dosyayı kopyala</string>
     <string name="share_copy_files">Dosyaları kopyala</string>
-    <string name="share_file_nearby_hint">Bir Hamstr cihazına göndermek için Bağlantı’yı seç.</string>
+    <string name="share_file_nearby_hint">Dosyanın kendisi yakındaki bir Hamstr cihazına, aynı Wi-Fi üzerinden ya da daha yavaş olarak Bluetooth ile gider; yalnızca o cihazın açabileceği şekilde mühürlenir.</string>
     <string name="share_unavailable">Bu dosya artık paylaşılamıyor.</string>
     <string name="menu_rename">Yeniden adlandır</string>
     <string name="menu_info">Dosya bilgisi</string>
@@ -466,7 +466,7 @@
     <string name="add_files">Telefonundan dosya ekle</string>
     <string name="add_files_hint">Videolar, müzik, belgeler. Download/Hamstr klasörüne kopyalanır.</string>
     <string name="add_files_desktop">Bu bilgisayardan dosya ekle</string>
-    <string name="add_files_hint_desktop">Videolar, müzik, belgeler. Downloads/Hamstr klasörüne kopyalanır.</string>
+    <string name="add_files_hint_desktop">Videolar, müzik, belgeler. Hamstr klasörüne kopyalanır.</string>
     <string name="upd_tap">Güncellemek için dokun, tarayıcı gerekmez</string>
     <string name="upd_update">Güncelle</string>
     <string name="upd_new">yeni</string>
@@ -656,14 +656,14 @@
     <string name="nearby_always">Her zaman izin ver</string>
     <string name="nearby_once">Sadece bu sefer</string>
     <string name="nearby_decline">Reddet</string>
-    <string name="nearby_ask_hint">“Her zaman izin ver” bu cihazdan gelen bağlantıları doğrudan Zula’na alır.</string>
+    <string name="nearby_ask_hint">“Her zaman izin ver” bu cihazdan gelen bağlantıları ve dosyaları sormadan içeri alır.</string>
     <string name="nearby_received">%1$s’den</string>
     <string name="nearby_waiting">%1$d gönderilmeyi bekliyor</string>
     <string name="page_devices">Cihazlar</string>
     <string name="set_nearby">Yakındaki cihazlara görünür</string>
-    <string name="set_nearby_hint">Diğer Hamstr uygulamaları bu cihazı bulup bağlantı gönderebilir</string>
+    <string name="set_nearby_hint">Diğer Hamstr uygulamaları bu cihazı bulup bağlantı ve dosya gönderebilir</string>
     <string name="set_nearby_bluetooth">Bluetooth</string>
-    <string name="set_nearby_bluetooth_hint">Ortak Wi-Fi’si olmayan telefonları da bulur</string>
+    <string name="set_nearby_bluetooth_hint">Ortak Wi-Fi’si olmayan cihazları da bulur</string>
     <string name="set_nearby_bluetooth_off">Henüz izin verilmedi. İzin vermek için dokun.</string>
     <string name="set_nearby_bluetooth_disabled">Bluetooth kapalı. Açmak için dokun.</string>
     <string name="set_device_name">Bu cihazın adı</string>
@@ -739,4 +739,26 @@
     <string name="desktop_update_opened">Kurulum programı açık; ilk seferdeki gibi kur.</string>
     <string name="desktop_update_coming">Hamstr %1$s yolda</string>
     <string name="desktop_update_coming_hint">Bu bilgisayar için kurulum programı hâlâ hazırlanıyor; Hamstr birkaç dakika içinde tekrar bakar.</string>
+    <string name="set_nearby_bluetooth_none">Bu bilgisayarda Hamstr’ın kullanabileceği bir Bluetooth yok</string>
+    <string name="set_nearby_bluetooth_missing">Hamstr’ın bu sürümü Bluetooth yardımcısı olmadan geldi</string>
+    <string name="nearby_files_here">Dosyalar yalnızca burada olan bir cihaza gider</string>
+    <string name="nearby_files_bluetooth">Bluetooth ile, daha yavaş</string>
+    <string name="nearby_sending_percent" formatted="false">Gönderiliyor · %1$d %</string>
+    <string name="nearby_declined">Reddedildi</string>
+    <plurals name="nearby_files_offer">
+        <item quantity="one">%1$d dosya · %2$s</item>
+        <item quantity="other">%1$d dosya · %2$s</item>
+    </plurals>
+    <string name="set_folder_phone">Download içindeki klasör</string>
+    <string name="set_folder_phone_hint">Yeni indirmeler Download içindeki bu klasöre gider; boşsa Download/Hamstr. Zula’ndakiler olduğu yerde kalır.</string>
+    <string name="add_options">Seçenekler</string>
+    <string name="add_kind">Video mu ses mi</string>
+    <string name="add_subtitles_hint">Sitede varsa, senin dillerinde</string>
+    <string name="add_subs_short">Altyazılar</string>
+    <string name="desktop_folder_change">Klasör seç</string>
+    <string name="desktop_folder_reset">Hamstr’ınkine dön</string>
+    <string name="desktop_folder_hint">Yeni indirmeler buraya gider; Zula’ndakiler olduğu yerde kalır.</string>
+    <string name="desktop_cheek_update">Cheek’i güncelle</string>
+    <string name="set_transfer_jobs">Günlük sınır olmadan uzun indirmeler</string>
+    <string name="set_transfer_jobs_hint">Hamstr’da başlattıkların Android’in indirme işlerinden biri olarak çalışır; Android bunları günde altı saatten sonra durdurmaz.</string>
 </resources>

@@ -9,6 +9,7 @@ import android.os.Environment
 import android.util.Log
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.FileNames
 import app.hamstr.data.Mode
 import app.hamstr.data.Prefs
 import com.yausername.ffmpeg.FFmpeg
@@ -21,7 +22,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,8 +59,8 @@ object Engine {
     private val _versionCheck = MutableStateFlow<EngineVersionCheck>(EngineVersionCheck.Idle)
     val versionCheck: StateFlow<EngineVersionCheck> = _versionCheck.asStateFlow()
 
-    lateinit var outputDir: File
-        private set
+    /** Download/Hamstr, or the folder inside Download picked in Settings › Queue. */
+    val outputDir: File get() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FileNames.subfolder(Prefs.settings.value.downloadFolder))
     private lateinit var tempDir: File
     private lateinit var extractorCacheDir: File
     /** [native]: cheek's own JSON from [Cheek.resolve], not yt-dlp's. */
@@ -86,11 +89,12 @@ object Engine {
     internal const val METADATA_PREFIX = "HAMSTR_METADATA:"
     /** Callback lines that carry a [app.hamstr.data.Stage] name instead of yt-dlp output. */
     internal const val STAGE_PREFIX = "HAMSTR_STAGE:"
+    /** How far ffmpeg is with the current stage, 0 to 100, as Cheek reports it. */
+    internal const val STAGE_PROGRESS_PREFIX = "HAMSTR_STAGE_PROGRESS:"
     private val expiredMedia = Regex("""HTTP (?:Error |status client error \()(401|403|404|410)|(?:URL|signature).*expired|Requested format is not available""", RegexOption.IGNORE_CASE)
 
     fun start(context: Context) {
         app = context.applicationContext
-        outputDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Hamstr")
         tempDir = File(app.cacheDir, "parts").apply { mkdirs() }
         extractorCacheDir = File(app.cacheDir, "yt-dlp").apply { mkdirs() }
         Cheek.init(app)
@@ -480,22 +484,88 @@ object Engine {
      * downloads them, so yt-dlp runs once per link, not once for the sheet and again here.
      */
     private suspend fun executeCheek(task: DownloadTask, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
-        suspend fun download(): YoutubeDLResponse {
+        outputDir.mkdirs()
+        if (playlists(task)) {
             val preview = preview(task.url)
+            val list = if (preview.native || preview.file) null else runCatching { JSONObject(preview.json) }.getOrNull()
+            if (list?.optString("_type") == "playlist") return executeCheekPlaylist(task, list, callback)
+        }
+        return cheekOnce(task, task.url, pathFile(task), null, callback)
+    }
+
+    /** One video through cheek, from its preview; a preview whose stream URLs expired is resolved once more. */
+    private suspend fun cheekOnce(task: DownloadTask, url: String, pathFile: File, playlistTitle: String?, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
+        suspend fun download(): YoutubeDLResponse {
+            val preview = preview(url)
             val format = if (preview.native || preview.file) null else formatSelector(task.choice)
             return runInterruptible {
-                Cheek.execute(task, preview.json, format, tempDir, outputDir, pathFile(task), callback, mediaFile = !preview.file)
+                Cheek.execute(task, preview.json, format, tempDir, outputDir, pathFile, callback, mediaFile = !preview.file, playlistTitle = playlistTitle)
             }
         }
-        outputDir.mkdirs()
+        val lines = pathFile.lineCount()
         val first = download()
-        // A preview's stream URLs can expire; resolve once more from the page.
-        if (first.exitCode != 0 && expiredMedia.containsMatchIn(first.err) && !pathFile(task).exists()) {
-            previews.invalidate(task.url)
+        if (first.exitCode != 0 && expiredMedia.containsMatchIn(first.err) && pathFile.lineCount() == lines) {
+            previews.invalidate(url)
             return download()
         }
         return first
     }
+
+    /**
+     * A playlist through cheek: yt-dlp listed it, and resolves one video at a time just before
+     * cheek downloads it, so no stream URL waits long enough to expire. Videos finished before
+     * a pause aren't fetched again, one cheek can't fetch goes to yt-dlp, and one that fails
+     * doesn't stop the rest; the download fails only when none arrived.
+     */
+    private suspend fun executeCheekPlaylist(task: DownloadTask, playlist: JSONObject, callback: ((Float, Long, String) -> Unit)?): YoutubeDLResponse {
+        val started = System.currentTimeMillis()
+        val entries = playlistEntries(playlist).filter { it.available }
+        val title = playlist.optString("title").ifBlank { null }
+        val pathFile = pathFile(task)
+        // What each finished video added to the path file, kept with the temporary files until the playlist is done.
+        val doneFile = File(File(tempDir, task.id).apply { mkdirs() }, "playlist-done.jsonl")
+        val done = doneFile.takeIf { it.exists() }?.readLines().orEmpty().mapNotNull { runCatching { JSONObject(it) }.getOrNull() }
+            .associate { it.optString("url") to it.optJSONArray("lines") }
+        var failed = 0
+        var lastError = ""
+        for ((i, e) in entries.withIndex()) {
+            currentCoroutineContext().ensureActive()
+            done[e.url]?.let { lines -> (0 until lines.length()).forEach { pathFile.appendText(lines.getString(it) + "\n") }; continue }
+            val before = pathFile.lineCount()
+            // One bar for the whole playlist: each video moves it by its share.
+            val scaled: ((Float, Long, String) -> Unit)? = callback?.let { cb -> { pct, eta, line -> cb((i * 100f + pct.coerceIn(0f, 100f)) / entries.size, eta, line) } }
+            val entryTask = task.copy(url = e.url)
+            val res = try {
+                // A channel lists its tabs, each a playlist of its own: those stay with yt-dlp.
+                val nested = preview(e.url).let { !it.native && runCatching { JSONObject(it.json).optString("_type") == "playlist" }.getOrDefault(false) }
+                val one = if (nested) null else cheekOnce(task, e.url, pathFile, title, scaled)
+                if (one == null || Cheek.unsupported(one)) {
+                    one?.let { Log.i(TAG, "cheek handed ${e.url} back to yt-dlp: ${it.err.lines().firstOrNull()}") }
+                    executeYtDlp(entryTask, request(entryTask), scaled)
+                } else one
+            } catch (c: CancellationException) {
+                throw c
+            } catch (c: InterruptedException) {
+                throw c
+            } catch (x: Exception) {
+                YoutubeDLResponse(emptyList(), 1, 0, "", x.message ?: x.toString())
+            }
+            val added = pathFile.readLinesOrEmpty().drop(before).filter { it.isNotBlank() }
+            if (res.exitCode == 0 && added.isNotEmpty()) {
+                doneFile.appendText(JSONObject().put("url", e.url).put("lines", org.json.JSONArray(added)).toString() + "\n")
+            } else {
+                failed++
+                lastError = res.err.lines().lastOrNull { it.isNotBlank() } ?: "cheek exit ${res.exitCode}"
+                Log.w(TAG, "Playlist video ${e.url} failed: $lastError")
+            }
+        }
+        val got = entries.size - failed
+        return if (got > 0) YoutubeDLResponse(emptyList(), 0, System.currentTimeMillis() - started, "", if (failed > 0) "$failed of ${entries.size} videos failed" else "")
+        else YoutubeDLResponse(emptyList(), 1, System.currentTimeMillis() - started, "", lastError.ifBlank { "The playlist has no videos" })
+    }
+
+    private fun File.readLinesOrEmpty() = if (exists()) readLines() else emptyList()
+    private fun File.lineCount() = readLinesOrEmpty().count { it.isNotBlank() }
 
     internal fun formatSelector(c: Choice) = Formats.formatSelector(c)
 

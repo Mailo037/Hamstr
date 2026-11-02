@@ -11,6 +11,7 @@ import app.hamstr.res.base_moss
 import app.hamstr.res.base_oled
 import app.hamstr.res.base_plum
 import org.jetbrains.compose.resources.StringResource
+import kotlinx.coroutines.flow.updateAndGet
 
 data class Settings(
     val mode: Mode = Mode.Video,
@@ -73,6 +74,11 @@ data class Settings(
     val toured: Boolean = false,
     // The app's language as a tag from AppLanguages; empty follows the device. Android 13+ keeps it in the system instead.
     val language: String = "",
+    // Where finished files go. The desktop keeps a whole path, the phone a folder inside
+    // Download; empty means Hamstr's own (Downloads/Hamstr, Download/Hamstr).
+    val downloadFolder: String = "",
+    // Android 14+: downloads started in Hamstr run as a user-initiated transfer job (no daily limit).
+    val transferJobs: Boolean = true,
 ) {
     fun defaultChoice() = Choice(mode, height, container, audioFormat, subtitles)
 
@@ -147,12 +153,15 @@ object Prefs {
             startWithSystem = sp.getBoolean("startWithSystem", false),
             toured = sp.getBoolean("toured", false),
             language = sp.getString("language", "")!!,
+            downloadFolder = sp.getString("downloadFolder", "")!!,
+            transferJobs = sp.getBoolean("transferJobs", true),
         )
     }
 
+    /** Changes settings in one step: edits from two threads at once don't undo each other. */
+    @Synchronized
     fun edit(block: (Settings) -> Settings) {
-        val s = block(_settings.value)
-        _settings.value = s
+        val s = _settings.updateAndGet(block)
         sp.edit()
             .putString("mode", s.mode.name)
             .putInt("height", s.height ?: 0)
@@ -202,6 +211,8 @@ object Prefs {
             .putBoolean("startWithSystem", s.startWithSystem)
             .putBoolean("toured", s.toured)
             .putString("language", s.language)
+            .putString("downloadFolder", s.downloadFolder)
+            .putBoolean("transferJobs", s.transferJobs)
             .apply()
     }
 }

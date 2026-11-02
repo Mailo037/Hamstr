@@ -123,11 +123,18 @@ object Cheek {
         updates.listFiles()?.filter { it.isDirectory && it.name != version }?.forEach { it.deleteRecursively() }
     }
 
-    /** What cheek can't do yet goes to yt-dlp: playlists, subtitles, a custom format string. */
+    /**
+     * What cheek can't do here goes to yt-dlp: a custom format string, and subtitles before
+     * Cheek 0.3.2. Playlists come one video at a time: cheek can't run the phone's Python
+     * yt-dlp itself, so [Engine] resolves each video and hands it over.
+     */
     fun handles(task: DownloadTask): Boolean {
         val c = task.choice
-        return available && !Engine.playlists(task) && c.mode != Mode.Custom && !(c.mode == Mode.Video && c.subtitles)
+        return available && c.mode != Mode.Custom && (!(c.mode == Mode.Video && c.subtitles) || embedsSubtitles())
     }
+
+    /** From Cheek 0.3.2 on it writes the site's subtitles into the file itself. */
+    private fun embedsSubtitles() = !newer("0.3.2", _active.value)
 
     fun destroy(id: String) {
         processes.remove(id)?.destroy()
@@ -159,9 +166,10 @@ object Cheek {
     /**
      * Downloads [info]: yt-dlp's JSON, from which cheek picks [format] itself when given, or
      * cheek's own from [resolve]. Progress arrives through [callback] in yt-dlp's own shapes,
-     * so the service treats both engines alike.
+     * so the service treats both engines alike. [playlistTitle] names the playlist a single
+     * video was taken from.
      */
-    fun execute(task: DownloadTask, info: String, format: String?, tempDir: File, outputDir: File, pathFile: File, callback: ((Float, Long, String) -> Unit)?, mediaFile: Boolean = true): YoutubeDLResponse {
+    fun execute(task: DownloadTask, info: String, format: String?, tempDir: File, outputDir: File, pathFile: File, callback: ((Float, Long, String) -> Unit)?, mediaFile: Boolean = true, playlistTitle: String? = null): YoutubeDLResponse {
         val started = System.currentTimeMillis()
         val work = File(tempDir, task.id).apply { mkdirs() }
         val infoFile = File(work, "cheek-info.json").apply { writeText(info) }
@@ -180,6 +188,9 @@ object Cheek {
             when (c.mode) {
                 Mode.Audio -> addAll(listOf("-x", "--audio-format", c.audioFormat))
                 else -> addAll(listOf("--merge-output-format", c.container))
+            }
+            if (c.mode == Mode.Video && c.subtitles && embedsSubtitles()) {
+                addAll(listOf("--embed-subs", "--sub-langs", Prefs.settings.value.subtitleLanguages().joinToString(",")))
             }
         }
         // The title and thumbnail are known before the first byte, like yt-dlp's before_dl print.
@@ -248,12 +259,13 @@ object Cheek {
                         postProcessing = true
                         callback?.invoke(100f, -1, Engine.STAGE_PREFIX + e.optString("stage"))
                     }
+                    "stage_progress" -> callback?.invoke(100f, -1, Engine.STAGE_PROGRESS_PREFIX + e.optDouble("percent", 0.0))
                     "done" -> {
                         val o = currentInfo
                         pathFile.appendText(
                             JSONObject().put("filepath", e.optString("path")).put("title", o.opt("title"))
                                 .put("thumbnail", o.opt("thumbnail")).put("duration", o.opt("duration"))
-                                .put("playlist_title", if (playlistEntries != null) rootInfo.opt("title") else null).toString() + "\n",
+                                .put("playlist_title", if (playlistEntries != null) rootInfo.opt("title") else playlistTitle).toString() + "\n",
                         )
                     }
                     "error" -> failure = e.optString("message")

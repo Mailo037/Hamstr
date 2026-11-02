@@ -173,7 +173,7 @@
     <string name="share_other_apps">Delen via andere apps</string>
     <string name="share_copy_file">Bestand kopiëren</string>
     <string name="share_copy_files">Bestanden kopiëren</string>
-    <string name="share_file_nearby_hint">Om naar een Hamstr-apparaat te sturen, kies Link.</string>
+    <string name="share_file_nearby_hint">Het bestand zelf gaat naar een Hamstr-apparaat in de buurt, via hetzelfde Wi-Fi of, langzamer, via Bluetooth, verzegeld zodat alleen dat apparaat het kan openen.</string>
     <string name="share_unavailable">Dit bestand kan niet meer worden gedeeld.</string>
     <string name="menu_rename">Hernoemen</string>
     <string name="menu_info">Bestandsinfo</string>
@@ -466,7 +466,7 @@
     <string name="add_files">Bestanden van je telefoon toevoegen</string>
     <string name="add_files_hint">Video’s, muziek, documenten. Ze worden gekopieerd naar Download/Hamstr.</string>
     <string name="add_files_desktop">Bestanden van deze computer toevoegen</string>
-    <string name="add_files_hint_desktop">Video’s, muziek, documenten. Ze worden gekopieerd naar Downloads/Hamstr.</string>
+    <string name="add_files_hint_desktop">Video’s, muziek, documenten. Ze worden gekopieerd naar je Hamstr-map.</string>
     <string name="upd_tap">Tik om bij te werken, geen browser nodig</string>
     <string name="upd_update">Bijwerken</string>
     <string name="upd_new">nieuw</string>
@@ -656,14 +656,14 @@
     <string name="nearby_always">Altijd toestaan</string>
     <string name="nearby_once">Alleen deze keer</string>
     <string name="nearby_decline">Weigeren</string>
-    <string name="nearby_ask_hint">“Altijd toestaan” zorgt dat links van dit apparaat direct in je voorraad komen.</string>
+    <string name="nearby_ask_hint">“Altijd toestaan” laat links en bestanden van dit apparaat zonder te vragen binnen.</string>
     <string name="nearby_received">Van %1$s</string>
     <string name="nearby_waiting">%1$d wachten om verzonden te worden</string>
     <string name="page_devices">Apparaten</string>
     <string name="set_nearby">Zichtbaar voor apparaten in de buurt</string>
-    <string name="set_nearby_hint">Andere Hamstr-apps kunnen deze vinden en er links naartoe sturen</string>
+    <string name="set_nearby_hint">Andere Hamstr-apps kunnen deze vinden en er links en bestanden naartoe sturen</string>
     <string name="set_nearby_bluetooth">Bluetooth</string>
-    <string name="set_nearby_bluetooth_hint">Vindt ook telefoons zonder gedeeld Wi-Fi</string>
+    <string name="set_nearby_bluetooth_hint">Vindt ook apparaten zonder gedeeld Wi-Fi</string>
     <string name="set_nearby_bluetooth_off">Nog niet toegestaan. Tik om het toe te staan.</string>
     <string name="set_nearby_bluetooth_disabled">Bluetooth staat uit. Tik om het aan te zetten.</string>
     <string name="set_device_name">Naam van dit apparaat</string>
@@ -739,4 +739,26 @@
     <string name="desktop_update_opened">Het installatieprogramma is geopend; installeer het zoals de eerste keer.</string>
     <string name="desktop_update_coming">Hamstr %1$s is onderweg</string>
     <string name="desktop_update_coming_hint">Het installatieprogramma voor deze computer wordt nog gebouwd; Hamstr kijkt over een paar minuten opnieuw.</string>
+    <string name="set_nearby_bluetooth_none">Deze computer heeft geen Bluetooth die Hamstr kan gebruiken</string>
+    <string name="set_nearby_bluetooth_missing">Deze versie van Hamstr kwam zonder zijn Bluetooth-hulpje</string>
+    <string name="nearby_files_here">Bestanden gaan alleen naar een apparaat dat hier is</string>
+    <string name="nearby_files_bluetooth">Via Bluetooth, langzamer</string>
+    <string name="nearby_sending_percent" formatted="false">Versturen · %1$d %</string>
+    <string name="nearby_declined">Geweigerd</string>
+    <plurals name="nearby_files_offer">
+        <item quantity="one">%1$d bestand · %2$s</item>
+        <item quantity="other">%1$d bestanden · %2$s</item>
+    </plurals>
+    <string name="set_folder_phone">Map in Download</string>
+    <string name="set_folder_phone_hint">Nieuwe downloads gaan naar deze map in Download; leeg betekent Download/Hamstr. Wat al in je voorraad zit, blijft waar het is.</string>
+    <string name="add_options">Opties</string>
+    <string name="add_kind">Video of audio</string>
+    <string name="add_subtitles_hint">In je talen, als de site ze heeft</string>
+    <string name="add_subs_short">Ondertitels</string>
+    <string name="desktop_folder_change">Map kiezen</string>
+    <string name="desktop_folder_reset">Terug naar die van Hamstr</string>
+    <string name="desktop_folder_hint">Nieuwe downloads gaan hierheen; wat al in je voorraad zit, blijft waar het is.</string>
+    <string name="desktop_cheek_update">Cheek bijwerken</string>
+    <string name="set_transfer_jobs">Lange downloads zonder daglimiet</string>
+    <string name="set_transfer_jobs_hint">Wat je in Hamstr start, draait als een van Androids downloadtaken, die Android niet na zes uur per dag stopt.</string>
 </resources>

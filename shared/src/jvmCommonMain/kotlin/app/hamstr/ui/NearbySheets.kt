@@ -67,28 +67,47 @@ import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
-internal enum class Sending { Busy, Sent, Queued, Failed }
+internal enum class Sending { Busy, Sent, Queued, Failed, Declined }
 
 /** Kept by the share sheet so switching Link / File preserves device order and send status. */
 internal class NearbyTargetsState {
     val sending = mutableStateMapOf<String, Sending>()
+    val sendingFiles = mutableStateMapOf<String, Sending>()
+    /** How far files to each device have got, 0 to 1. */
+    val progress = mutableStateMapOf<String, Float>()
     val order = LinkedHashMap<String, Peer>()
     val here = HashSet<String>()
 }
 
+/** The link to another Hamstr; one for a device that is away waits in the outbox until it shows up. */
+@Composable
+internal fun NearbyTargets(url: String, title: String?, targets: NearbyTargetsState, scope: CoroutineScope) =
+    NearbyTargets(targets, scope, targets.sending, files = false) { p, _ -> Nearby.send(p, url, title) }
+
+/** The files themselves, to another Hamstr on the same network. */
+@Composable
+internal fun NearbyFileTargets(files: List<java.io.File>, targets: NearbyTargetsState, scope: CoroutineScope) =
+    NearbyTargets(targets, scope, targets.sendingFiles, files = true) { p, progress -> Nearby.sendFiles(p, files, progress) }
+
 /**
  * Inline targets in the share sheet: nearby Hamstr apps, then remembered ones that are away. A tap
- * sends the link; one for a device that is away waits in the outbox until it shows up.
+ * sends; [files] only go to a device on the same network, so the others wait greyed out.
  */
 @Composable
-internal fun NearbyTargets(url: String, title: String?, targets: NearbyTargetsState, scope: CoroutineScope) {
+private fun NearbyTargets(
+    targets: NearbyTargetsState,
+    scope: CoroutineScope,
+    state: MutableMap<String, Sending>,
+    files: Boolean,
+    send: suspend (Peer, (Float) -> Unit) -> SendResult,
+) {
     val c = Hamstr.colors
     val s by Prefs.settings.collectAsState()
     val peers by Nearby.peers.collectAsState()
     val known by Nearby.known.collectAsState()
-    val state = targets.sending
     DisposableEffect(Unit) {
         Nearby.discover(true)
         onDispose { Nearby.discover(false) }
@@ -123,14 +142,20 @@ internal fun NearbyTargets(url: String, title: String?, targets: NearbyTargetsSt
             } else Group {
                 list.forEachIndexed { i, p ->
                     if (i > 0) Divider()
-                    PeerRow(p, state[p.id], left = !p.online && p.id in here) {
-                        if (state[p.id] == Sending.Busy) return@PeerRow
+                    val reachable = !files || Nearby.takesFiles(p)
+                    PeerRow(
+                        p, state[p.id], left = !p.online && p.id in here, progress = if (files) targets.progress[p.id] else null,
+                        unreachable = !reachable, slow = files && reachable && Nearby.filesOverBluetooth(p),
+                    ) {
+                        if (state[p.id] == Sending.Busy || !reachable) return@PeerRow
                         state[p.id] = Sending.Busy
+                        targets.progress.remove(p.id)
                         scope.launch {
-                            state[p.id] = when (runCatching { Nearby.send(p, url, title) }.getOrDefault(SendResult.Failed)) {
+                            state[p.id] = when (runCatching { send(p) { f -> targets.progress[p.id] = f } }.getOrDefault(SendResult.Failed)) {
                                 SendResult.Sent -> Sending.Sent
                                 SendResult.Queued -> Sending.Queued
                                 SendResult.Failed -> Sending.Failed
+                                SendResult.Declined -> Sending.Declined
                             }
                         }
                     }
@@ -158,10 +183,12 @@ private fun Looking() {
 }
 
 @Composable
-private fun PeerRow(p: Peer, sending: Sending?, left: Boolean, onClick: () -> Unit) {
+private fun PeerRow(p: Peer, sending: Sending?, left: Boolean, progress: Float? = null, unreachable: Boolean = false, slow: Boolean = false, onClick: () -> Unit) {
     val c = Hamstr.colors
-    val dim by animateFloatAsState(if (p.online) 1f else 0.55f, Specs.blend(), label = "dim")
-    val sub = if (p.online) {
+    val dim by animateFloatAsState(if (p.online && !unreachable) 1f else 0.55f, Specs.blend(), label = "dim")
+    val sub = if (unreachable) stringResource(Res.string.nearby_files_here)
+    else if (slow) stringResource(Res.string.nearby_files_bluetooth)
+    else if (p.online) {
         val ways = buildList {
             if (Via.Wifi in p.via) add(stringResource(Res.string.nearby_via_wifi))
             if (Via.Bluetooth in p.via) add(stringResource(Res.string.nearby_via_bluetooth))
@@ -188,11 +215,12 @@ private fun PeerRow(p: Peer, sending: Sending?, left: Boolean, onClick: () -> Un
         }
         Spacer(Modifier.width(10.dp))
         when (sending) {
-            Sending.Busy -> Badge(stringResource(Res.string.nearby_sending))
+            Sending.Busy -> Badge(progress?.let { stringResource(Res.string.nearby_sending_percent, (it * 100).toInt()) } ?: stringResource(Res.string.nearby_sending))
             Sending.Sent -> Badge(stringResource(Res.string.nearby_sent), accent = true)
             Sending.Queued -> Badge(stringResource(Res.string.nearby_queued))
             Sending.Failed -> Badge(stringResource(Res.string.nearby_failed))
-            null -> Icon(Res.drawable.ic_send, tint = if (p.online) c.accent else c.ghost, size = 20.dp)
+            Sending.Declined -> Badge(stringResource(Res.string.nearby_declined))
+            null -> Icon(Res.drawable.ic_send, tint = if (p.online && !unreachable) c.accent else c.ghost, size = 20.dp)
         }
     }
 }
@@ -210,13 +238,22 @@ private fun kindIcon(kind: DeviceKind): DrawableResource = when (kind) {
     DeviceKind.Desktop -> Res.drawable.ic_computer
 }
 
-/** A device that isn't trusted yet wants to send a link: accept it once, always, or not. */
+/** A device that isn't trusted yet wants to send a link or files: accept once, always, or not. */
 @Composable
 fun RequestSheet(r: Request, onDone: () -> Unit) {
     val c = Hamstr.colors
     Sheet {
-        SheetHeader(stringResource(Res.string.nearby_ask_title, r.from.name), subtitle = r.title ?: r.url, leading = { DeviceIcon(r.from.kind) })
-        if (r.title != null) {
+        val subtitle = if (r.files.isNotEmpty()) {
+            pluralStringResource(Res.plurals.nearby_files_offer, r.files.size, r.files.size, formatBytes(r.files.sumOf { it.size }))
+        } else r.title ?: r.url
+        SheetHeader(stringResource(Res.string.nearby_ask_title, r.from.name), subtitle = subtitle, leading = { DeviceIcon(r.from.kind) })
+        if (r.files.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            r.files.take(4).forEach { f ->
+                Txt("${f.name} · ${formatBytes(f.size)}", style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp))
+            }
+            if (r.files.size > 4) Txt("…", style = Hamstr.type.mono, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp))
+        } else if (r.title != null) {
             Spacer(Modifier.height(6.dp))
             Txt(r.url, style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp))
         }

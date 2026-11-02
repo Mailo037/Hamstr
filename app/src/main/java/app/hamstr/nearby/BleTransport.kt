@@ -38,28 +38,32 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Hamstr in Bluetooth range, without a shared Wi-Fi. Each phone advertises Hamstr's service
- * with its id and runs a small GATT server: one characteristic to read who it is, one to write
- * a link into, in chunks. Other phones scan for the service, read a newcomer's name once and
- * write links into it. Only starts when Bluetooth is on and its permissions are granted;
- * [refresh] tries again after either changes.
+ * with its id and runs its GATT server ([Ble] has what the characteristics mean, [BleServer]
+ * answers them). Other devices scan for the service, read a newcomer's hello once, write links
+ * into it and hold a stream open for files. A computer advertises the service without its id;
+ * who it is comes from its hello. An advertisement only names an id, so anyone could repeat
+ * it; a link counts as delivered only once its receipt checks out. Only starts when Bluetooth
+ * is on and its permissions are granted; [refresh] tries again after either changes.
  */
 @SuppressLint("MissingPermission")
-class BleTransport(private val context: Context) : Transport {
+class BleTransport(private val context: Context) : StreamTransport {
     override val via = Via.Bluetooth
+    override val chunk = Ble.CHUNK
 
     private class Spot(val device: BluetoothDevice, val heard: Long)
 
     private val manager = context.getSystemService(BluetoothManager::class.java)
-    private val spots = ConcurrentHashMap<String, Spot>()
+    // Every device advertising an id lately, by its Bluetooth address.
+    private val spots = ConcurrentHashMap<String, ConcurrentHashMap<String, Spot>>()
+    // Ids learned from a hello, for devices that don't advertise theirs (computers).
+    private val ids = ConcurrentHashMap<String, String>()
     private val looked = ConcurrentHashMap<String, Long>()
-    private val incoming = ConcurrentHashMap<String, ByteArrayOutputStream>()
+    private var answers = BleServer()
     private val gattLock = Mutex()
     private var scope: CoroutineScope? = null
     private var settingsJob: Job? = null
@@ -106,29 +110,48 @@ class BleTransport(private val context: Context) : Transport {
         if (scanning != null) { stopScan(); startScan() }
     }
 
-    override fun reaches(id: String) = spots[id]?.let { System.currentTimeMillis() - it.heard < 15_000 } == true
+    private fun places(id: String): List<BluetoothDevice> {
+        val now = System.currentTimeMillis()
+        return spots[id]?.values?.filter { now - it.heard < 15_000 }?.sortedByDescending { it.heard }?.map { it.device }.orEmpty()
+    }
 
-    override suspend fun send(id: String, message: ByteArray): Boolean {
-        val device = spots[id]?.device ?: return false
-        return gattLock.withLock {
-            session(device) { s ->
-                val inbox = s.characteristic(INBOX) ?: return@session false
-                val size = (s.mtu - 3 - 1).coerceAtLeast(19)
-                val chunks = message.toList().chunked(size)
-                chunks.withIndex().all { (i, part) ->
-                    val last = i == chunks.lastIndex
-                    s.write(inbox, byteArrayOf(if (last) 1 else 0) + part.toByteArray())
-                }
-            } == true
+    override fun reaches(id: String) = places(id).isNotEmpty()
+
+    override suspend fun send(id: String, message: ByteArray, accept: (ByteArray) -> Boolean): Boolean {
+        for (device in places(id)) {
+            val ok = gattLock.withLock { session(device) { s -> Ble.send(s, message, accept) } == true }
+            if (ok) return true
         }
+        return false
+    }
+
+    override suspend fun exchange(id: String, block: (Wire) -> Boolean): Boolean {
+        for (device in places(id)) {
+            // Files hold the connection as long as they take; links wait for it meanwhile.
+            val ok = gattLock.withLock {
+                session(device, within = null) { s ->
+                    s.gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+                    block(Ble.wire(s))
+                } == true
+            }
+            if (ok) return true
+        }
+        return false
     }
 
     private fun up() {
         val adapter = manager?.adapter ?: return
+        answers = BleServer()
         server = manager.openGattServer(context, serverCallback)?.apply {
             addService(BluetoothGattService(SERVICE, BluetoothGattService.SERVICE_TYPE_PRIMARY).apply {
                 addCharacteristic(BluetoothGattCharacteristic(INFO, BluetoothGattCharacteristic.PROPERTY_READ, BluetoothGattCharacteristic.PERMISSION_READ))
                 addCharacteristic(BluetoothGattCharacteristic(INBOX, BluetoothGattCharacteristic.PROPERTY_WRITE, BluetoothGattCharacteristic.PERMISSION_WRITE))
+                addCharacteristic(BluetoothGattCharacteristic(RECEIPT, BluetoothGattCharacteristic.PROPERTY_READ, BluetoothGattCharacteristic.PERMISSION_READ))
+                addCharacteristic(BluetoothGattCharacteristic(
+                    STREAM,
+                    BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
+                    BluetoothGattCharacteristic.PERMISSION_READ or BluetoothGattCharacteristic.PERMISSION_WRITE,
+                ))
             })
         }
         val advertiser = adapter.bluetoothLeAdvertiser ?: return
@@ -139,7 +162,7 @@ class BleTransport(private val context: Context) : Transport {
             AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM).setConnectable(true).build(),
             AdvertiseData.Builder().addServiceUuid(ParcelUuid(SERVICE)).setIncludeDeviceName(false).build(),
-            AdvertiseData.Builder().addManufacturerData(MAKER, hex(Nearby.id)).setIncludeDeviceName(false).build(),
+            AdvertiseData.Builder().addManufacturerData(Ble.MAKER, hex(Nearby.id)).setIncludeDeviceName(false).build(),
             cb,
         )
         advertising = cb
@@ -154,7 +177,6 @@ class BleTransport(private val context: Context) : Transport {
         runCatching { server?.close() }
         server = null
         spots.clear()
-        incoming.clear()
     }
 
     private fun startScan() {
@@ -180,79 +202,79 @@ class BleTransport(private val context: Context) : Transport {
     }
 
     private fun found(result: ScanResult) {
-        val raw = result.scanRecord?.getManufacturerSpecificData(MAKER)?.takeIf { it.size == 8 } ?: return
-        val id = raw.joinToString("") { "%02x".format(it) }
+        val address = result.device.address
+        val raw = result.scanRecord?.getManufacturerSpecificData(Ble.MAKER)?.takeIf { it.size == 8 }
+        val id = raw?.joinToString("") { "%02x".format(it) } ?: ids[address]
         if (id == Nearby.id) return
         val now = System.currentTimeMillis()
-        spots[id] = Spot(result.device, now)
-        val known = Nearby.peers.value[id]
-        if (known != null && known.key.isNotEmpty()) {
-            Nearby.seen(id, known.name, known.kind, known.key, via)
-            return
+        if (id != null) {
+            spot(id, result.device, now)
+            val known = Nearby.peers.value[id]
+            if (known != null && known.key.isNotEmpty()) {
+                Nearby.seen(id, known.name, known.kind, known.key, via)
+                return
+            }
         }
-        // A newcomer: read its name and key once, not on every advertisement.
-        val address = result.device.address
+        // A newcomer, or a computer that only advertises the service: read its hello once, not on every advertisement.
         if (now - (looked[address] ?: 0) < 60_000) return
         looked[address] = now
         scope?.launch { lookUp(result.device) }
     }
 
-    private suspend fun lookUp(device: BluetoothDevice) = gattLock.withLock {
-        val hello = session(device) { s -> s.characteristic(INFO)?.let { s.read(it) } } ?: return@withLock
-        val m = runCatching { JSONObject(String(hello, Charsets.UTF_8)) }.getOrNull() ?: return@withLock
-        val kind = runCatching { DeviceKind.valueOf(m.optString("kind")) }.getOrDefault(DeviceKind.Phone)
-        Nearby.seen(m.optString("id"), m.optString("name").take(60), kind, m.optString("key"), via)
+    private fun spot(id: String, device: BluetoothDevice, now: Long) {
+        spots.getOrPut(id) { ConcurrentHashMap() }.apply {
+            put(device.address, Spot(device, now))
+            values.removeIf { now - it.heard > 60_000 }
+        }
     }
 
-    // --- Server: others read who this is and write links in ------------------------------
+    private suspend fun lookUp(device: BluetoothDevice) = gattLock.withLock {
+        val peer = session(device) { s -> Ble.hello(s) } ?: return@withLock
+        ids[device.address] = peer.id
+        spot(peer.id, device, System.currentTimeMillis())
+        Nearby.seen(peer.id, peer.name, peer.kind, peer.key, via)
+    }
+
+    // --- Server: others read who this is and write links and files in -------------------
 
     private val serverCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_DISCONNECTED) incoming.remove(device.address)
+            if (newState == BluetoothProfile.STATE_DISCONNECTED) answers.disconnected(device.address)
         }
 
         override fun onCharacteristicReadRequest(device: BluetoothDevice, requestId: Int, offset: Int, c: BluetoothGattCharacteristic) {
-            val value = Nearby.hello().toString().toByteArray(Charsets.UTF_8)
-            val from = offset.coerceIn(0, value.size)
-            server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value.copyOfRange(from, value.size))
+            val value = answers.read(device.address, c.uuid.toString(), offset)
+            server?.sendResponse(device, requestId, if (value != null) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_FAILURE, offset, value ?: ByteArray(0))
         }
 
         override fun onCharacteristicWriteRequest(
             device: BluetoothDevice, requestId: Int, c: BluetoothGattCharacteristic,
             preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?,
         ) {
-            var status = BluetoothGatt.GATT_SUCCESS
-            if (c.uuid != INBOX || value == null || value.isEmpty()) status = BluetoothGatt.GATT_FAILURE
-            else {
-                val buf = incoming.getOrPut(device.address) { ByteArrayOutputStream() }
-                buf.write(value, 1, value.size - 1)
-                when {
-                    buf.size() > MAX_MESSAGE -> { incoming.remove(device.address); status = BluetoothGatt.GATT_FAILURE }
-                    value[0] == 1.toByte() -> {
-                        incoming.remove(device.address)
-                        if (!Nearby.receive(buf.toByteArray())) status = BluetoothGatt.GATT_FAILURE
-                    }
-                }
-            }
-            if (responseNeeded) server?.sendResponse(device, requestId, status, offset, null)
+            // Hamstr's pieces each fit in one write; a long (prepared) write isn't one of them.
+            val ok = !preparedWrite && offset == 0 && value != null && answers.write(device.address, c.uuid.toString(), value)
+            if (responseNeeded) server?.sendResponse(device, requestId, if (ok) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_FAILURE, offset, null)
         }
     }
 
     // --- Client: one connection at a time, its callbacks turned into suspending steps ----
 
-    private suspend fun <T> session(device: BluetoothDevice, block: suspend (Session) -> T): T? {
+    /** Connects to [device] and runs [block]; [within] bounds the whole session, null only the connecting. */
+    private suspend fun <T> session(device: BluetoothDevice, within: Long? = 20_000, block: suspend (Session) -> T): T? {
         val s = Session()
         val gatt = device.connectGatt(context, false, s, BluetoothDevice.TRANSPORT_LE) ?: return null
         s.gatt = gatt
         return try {
-            withTimeoutOrNull(20_000) {
-                if (s.await(Step.Connect) != 0) return@withTimeoutOrNull null
-                gatt.requestMtu(247)
+            val ready = withTimeoutOrNull(20_000) {
+                if (s.await(Step.Connect) != 0) return@withTimeoutOrNull false
+                gatt.requestMtu(517)
                 s.await(Step.Mtu)
                 gatt.discoverServices()
-                if (s.await(Step.Services) != 0) return@withTimeoutOrNull null
-                block(s)
-            }
+                s.await(Step.Services) == 0
+            } == true
+            if (!ready) null
+            else if (within == null) block(s)
+            else withTimeoutOrNull(within) { block(s) }
         } finally {
             runCatching { gatt.disconnect() }
             runCatching { gatt.close() }
@@ -261,11 +283,15 @@ class BleTransport(private val context: Context) : Transport {
 
     private enum class Step { Connect, Mtu, Services, Read, Write }
 
-    private inner class Session : BluetoothGattCallback() {
+    private inner class Session : BluetoothGattCallback(), GattLink {
         lateinit var gatt: BluetoothGatt
         var mtu = 23
         private var value: ByteArray? = null
         private val events = Channel<Pair<Step, Int>>(Channel.UNLIMITED)
+
+        override val writeSize get() = minOf(mtu - 3, 512)
+        override val fastWrites get() =
+            find(STREAM)?.let { it.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0 } == true
 
         /** Waits for [step]; a dropped connection ends every wait with -1. */
         suspend fun await(step: Step): Int {
@@ -276,23 +302,31 @@ class BleTransport(private val context: Context) : Transport {
             }
         }
 
-        fun characteristic(uuid: UUID) = gatt.getService(SERVICE)?.getCharacteristic(uuid)
+        fun find(uuid: UUID) = gatt.getService(SERVICE)?.getCharacteristic(uuid)
 
-        suspend fun read(c: BluetoothGattCharacteristic): ByteArray? {
+        override suspend fun read(characteristic: String): ByteArray? {
+            val c = find(UUID.fromString(characteristic)) ?: return null
             if (!gatt.readCharacteristic(c)) return null
             return if (await(Step.Read) == 0) value else null
         }
 
         @Suppress("DEPRECATION")
-        suspend fun write(c: BluetoothGattCharacteristic, bytes: ByteArray): Boolean {
-            val started = if (Build.VERSION.SDK_INT >= 33) {
-                gatt.writeCharacteristic(c, bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothGatt.GATT_SUCCESS
-            } else {
-                c.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                c.value = bytes
-                gatt.writeCharacteristic(c)
+        override suspend fun write(characteristic: String, bytes: ByteArray, fast: Boolean): Boolean {
+            val c = find(UUID.fromString(characteristic)) ?: return false
+            val type = if (fast) BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            // A full queue says busy at once; it drains within a connection event or two.
+            repeat(50) {
+                val started = if (Build.VERSION.SDK_INT >= 33) {
+                    gatt.writeCharacteristic(c, bytes, type) == BluetoothGatt.GATT_SUCCESS
+                } else {
+                    c.writeType = type
+                    c.value = bytes
+                    gatt.writeCharacteristic(c)
+                }
+                if (started) return await(Step.Write) == 0
+                kotlinx.coroutines.delay(10)
             }
-            return started && await(Step.Write) == 0
+            return false
         }
 
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -323,12 +357,11 @@ class BleTransport(private val context: Context) : Transport {
 
     companion object {
         private const val TAG = "Nearby"
-        private val SERVICE: UUID = UUID.fromString("6d3a0001-5a1e-4c7b-9f3e-48616d737472")
-        private val INFO: UUID = UUID.fromString("6d3a0002-5a1e-4c7b-9f3e-48616d737472")
-        private val INBOX: UUID = UUID.fromString("6d3a0003-5a1e-4c7b-9f3e-48616d737472")
-        // The Bluetooth SIG's id for tests and unregistered makers; the payload is Hamstr's 8-byte id.
-        private const val MAKER = 0xFFFF
-        private const val MAX_MESSAGE = 64 * 1024
+        private val SERVICE: UUID = UUID.fromString(Ble.SERVICE)
+        private val INFO: UUID = UUID.fromString(Ble.INFO)
+        private val INBOX: UUID = UUID.fromString(Ble.INBOX)
+        private val RECEIPT: UUID = UUID.fromString(Ble.RECEIPT)
+        private val STREAM: UUID = UUID.fromString(Ble.STREAM)
 
         /** The one that is running, so the app can [refresh] it once a permission is granted. */
         var instance: BleTransport? = null

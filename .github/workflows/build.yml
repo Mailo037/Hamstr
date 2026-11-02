@@ -31,8 +31,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # The phone's unit tests, the shared code's on the desktop JVM (Nearby, the stash, the
+      # engine's rules) and the desktop app's own (its player skips without fetched tools).
       - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
+        run: ./gradlew --no-daemon testDebugUnitTest :shared:desktopTest :desktop:test
 
       - name: Debug APKs
         run: ./gradlew --no-daemon assembleDebug
@@ -45,3 +47,29 @@ jobs:
           name: hamstr-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 7
+
+  # The desktop's Bluetooth helper on every system it ships for, since this computer only builds its own.
+  bluetooth:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop/ble
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: D-Bus headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo build --locked --release

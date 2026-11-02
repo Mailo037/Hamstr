@@ -29,12 +29,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.hamstr.Platform
+import app.hamstr.data.Choice
+import app.hamstr.data.Prefs
 import app.hamstr.ui.components.Badge
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
@@ -51,13 +54,23 @@ import app.hamstr.ui.theme.Radii
 /**
  * The "+" sheet: type or paste a link, take the one on the clipboard, or bring in files
  * that are already on the phone or the computer. [onSend] opens the outgoing share sheet.
+ * With [onStash] the link goes with a choice of its own (video or audio, quality, format),
+ * folded under the field and starting from the defaults; the phone picks those in its share sheet.
  */
 @Composable
-fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Unit, onSend: ((String) -> Unit)? = null) {
+fun AddSheet(
+    clipboardLink: String?,
+    onLink: (String) -> Unit,
+    onFiles: () -> Unit,
+    onSend: ((String) -> Unit)? = null,
+    onStash: ((String, Choice) -> Unit)? = null,
+) {
     val c = Hamstr.colors
     var text by remember { mutableStateOf(TextFieldValue("")) }
+    var choice by remember { mutableStateOf(Prefs.settings.value.defaultChoice()) }
+    var options by remember { mutableStateOf(false) }
     val link = app.hamstr.engine.MediaLinks.find(text.text)
-    val submit = { if (link != null) onLink(link) }
+    val submit = { if (link != null) onStash?.invoke(link, choice) ?: onLink(link) }
 
     Sheet {
         SheetHeader(stringResource(Res.string.add_title), leading = { HamstrMark(36.dp) })
@@ -84,6 +97,27 @@ fun AddSheet(clipboardLink: String?, onLink: (String) -> Unit, onFiles: () -> Un
                 Icon(Res.drawable.ic_content_paste, tint = c.muted, size = 18.dp)
                 Badge(stringResource(Res.string.add_clipboard), accent = true)
                 Txt(clipboardLink.orEmpty(), style = Hamstr.type.mono, color = c.muted, maxLines = 1, modifier = Modifier.weight(1f))
+            }
+        }
+
+        if (onStash != null) {
+            Row(
+                Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(Radii.control))
+                    .pressable({ options = !options })
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Res.drawable.ic_settings, tint = c.muted, size = 18.dp)
+                Txt(stringResource(Res.string.add_options), style = Hamstr.type.bodyMedium, color = c.muted)
+                Txt(choiceSummary(choice), style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.weight(1f))
+                Icon(Res.drawable.ic_expand_more, tint = c.ghost, size = 18.dp, modifier = Modifier.graphicsLayer { rotationZ = if (options) 180f else 0f })
+            }
+            AnimatedVisibility(options, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                Column(Modifier.padding(top = 4.dp)) { ChoicePicker(choice) { choice = it } }
             }
         }
 

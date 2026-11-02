@@ -1,47 +1,29 @@
 package app.hamstr.player
 
-import org.jetbrains.compose.resources.DrawableResource
 import app.hamstr.res.*
 import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.unit.sp
 import app.hamstr.data.Lyrics
 import app.hamstr.data.MiniStyle
 import app.hamstr.data.Prefs
-import app.hamstr.data.Playlists
 import app.hamstr.ui.components.rubberBand
-import app.hamstr.ui.formatDuration
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -52,8 +34,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.graphics.Brush
 import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
@@ -62,7 +42,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -88,13 +67,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -114,7 +89,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import app.hamstr.data.DownloadTask
-import app.hamstr.ui.components.AsciiImage
 import app.hamstr.ui.components.Badge
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.DecodeText
@@ -122,12 +96,9 @@ import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.IconButton
 import app.hamstr.ui.components.Txt
-import app.hamstr.ui.components.pressable
 import app.hamstr.ui.components.rememberVelocityStretch
-import app.hamstr.ui.components.stretchX
 import app.hamstr.ui.formatBadge
 import app.hamstr.ui.canHaveVersions
-import app.hamstr.ui.rememberImage
 import app.hamstr.ui.theme.Hamstr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -137,9 +108,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.lerp
-import app.hamstr.ui.components.animateSelection
 import app.hamstr.ui.components.Specs
-import app.hamstr.ui.components.iconSwap
 
 /** Live player facts the UI draws from. */
 @Stable
@@ -658,607 +627,5 @@ fun PlayerHost(
                 }
             }
         }
-    }
-}
-
-@Composable
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private fun VideoSurface(
-    controller: Player?,
-    ui: PlayerUi,
-    t: DownloadTask,
-    expanded: Boolean,
-    immersive: Boolean,
-    forced: Boolean,
-    onExitFullscreen: () -> Unit,
-    onTapMini: () -> Unit,
-    onMinimize: () -> Unit,
-    onMenu: () -> Unit,
-    onShare: () -> Unit,
-    onQuality: (() -> Unit)?,
-) {
-    val context = LocalContext.current
-    val c = Hamstr.colors
-    val haptics = LocalHapticFeedback.current
-    var seekLabel by remember { mutableStateOf<String?>(null) }
-    var overlay by remember { mutableStateOf(true) }
-    LaunchedEffect(seekLabel) { if (seekLabel != null) { delay(650); seekLabel = null } }
-    LaunchedEffect(overlay, immersive, ui.isPlaying) { if (immersive && overlay && ui.isPlaying) { delay(2600); overlay = false } }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .pointerInput(expanded, immersive) {
-                detectTapGestures(
-                    onTap = { if (!expanded) onTapMini() else if (immersive) overlay = !overlay },
-                    onDoubleTap = { pos ->
-                        if (!expanded || controller == null) return@detectTapGestures
-                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        if (pos.x < size.width / 2) { controller.seekBack(); seekLabel = "« 10 s" } else { controller.seekForward(); seekLabel = "10 s »" }
-                    },
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (controller != null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                PlayerSurface(controller, Modifier.aspectFit(ui.aspect), SURFACE_TYPE_TEXTURE_VIEW)
-            }
-        }
-        seekLabel?.let {
-            Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
-                Txt(it, style = Hamstr.type.mono, color = Color.White)
-            }
-        }
-        if (immersive && controller != null) {
-            val a by animateFloatAsState(if (overlay) 1f else 0f, tween(200), label = "overlay")
-            // As in a video app held sideways: what plays top left, actions top right,
-            // play in the middle and the timeline along the bottom, over soft scrims.
-            if (a > 0f) Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = a }
-                    .background(Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.72f), 0.3f to Color.Black.copy(alpha = 0.18f),
-                        0.65f to Color.Black.copy(alpha = 0.18f), 1f to Color.Black.copy(alpha = 0.78f),
-                    ))
-                    .windowInsetsPadding(WindowInsets.displayCutout),
-            ) {
-                Row(
-                    Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(Res.drawable.ic_expand_more, stringResource(R.string.player_minimize), onMinimize, tint = Color.White, background = Color.Transparent)
-                    Spacer(Modifier.width(4.dp))
-                    Column(Modifier.weight(1f)) {
-                        Txt(t.title, style = Hamstr.type.bodyMedium, color = Color.White, maxLines = 1)
-                        Spacer(Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            t.source?.let { Badge(it) }
-                            if (onQuality != null) Row(
-                                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onQuality).padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Badge(formatBadge(t), accent = true)
-                                Icon(Res.drawable.ic_expand_more, tint = c.accent, size = 16.dp)
-                            } else Badge(formatBadge(t))
-                        }
-                    }
-                    // One pill for the actions, so they read as a group rather than loose buttons.
-                    Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.35f))) {
-                        val none = Color.Transparent
-                        IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(context, t) }, tint = Color.White, background = none)
-                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), onShare, tint = Color.White, background = none)
-                        IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = none)
-                        if (forced) IconButton(Res.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = none)
-                    }
-                }
-                Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(Res.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
-                    PlayPause(ui.isPlaying, size = 64.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
-                    IconButton(Res.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = Color.White, background = Color.Transparent)
-                }
-                Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp, vertical = 14.dp)) {
-                    Scrubber(controller, ui)
-                }
-            }
-        }
-    }
-}
-
-/** Keeps a surface at the video's aspect ratio inside whatever box it gets. */
-private fun Modifier.aspectFit(aspect: Float): Modifier = this.layout { measurable, constraints ->
-        val maxW = constraints.maxWidth
-        val maxH = constraints.maxHeight
-        var w = maxW
-        var h = (w / aspect).roundToInt()
-        if (h > maxH) { h = maxH; w = (h * aspect).roundToInt() }
-        val p = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(max(w, 1), max(h, 1)))
-        layout(p.width, p.height) { p.place(0, 0) }
-    }
-
-/** Audio cover: the thumbnail; tap it and it dissolves into ASCII (and back). */
-@Composable
-private fun Cover(t: DownloadTask, ev: Float) {
-    val bitmap = rememberImage(t.thumbnail, 720)
-    val reveal = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-    AsciiImage(
-        bitmap = bitmap,
-        reveal = reveal.value,
-        cell = 7.dp,
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(ev > 0.98f) {
-                detectTapGestures {
-                    if (ev > 0.98f) scope.launch { reveal.animateTo(if (reveal.targetValue > 0.5f) 0f else 1f, tween(700)) } else Playback.expand()
-                }
-            },
-    )
-}
-
-/** Image viewer with pinch-zoom and pan. */
-@Composable
-private fun ImageView(file: File?, zoomable: Boolean) {
-    val bitmap = remember(file) { file?.let { runCatching { android.graphics.BitmapFactory.decodeFile(it.absolutePath) }.getOrNull() } }
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    val state = rememberTransformableState { zoom, pan, _ ->
-        scale = (scale * zoom).coerceIn(1f, 6f)
-        offset = if (scale == 1f) androidx.compose.ui.geometry.Offset.Zero else offset + pan
-    }
-    val image = remember(bitmap) { bitmap?.asImageBitmap() }
-    Canvas(
-        Modifier
-            .fillMaxSize()
-            .then(if (zoomable) Modifier.transformable(state) else Modifier.clickable { Playback.expand() })
-            .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
-    ) {
-        val img = image ?: return@Canvas
-        val s = min(size.width / img.width, size.height / img.height)
-        val w = img.width * s
-        val h = img.height * s
-        drawImage(img, dstOffset = IntOffset(((size.width - w) / 2).roundToInt(), ((size.height - h) / 2).roundToInt()), dstSize = androidx.compose.ui.unit.IntSize(w.roundToInt(), h.roundToInt()))
-    }
-}
-
-@Composable
-private fun Transport(
-    controller: Player,
-    ui: PlayerUi,
-    video: Boolean,
-    onFullscreen: () -> Unit,
-    lyrics: Boolean?,
-    onLyrics: () -> Unit,
-    onQueue: () -> Unit,
-    onSleep: () -> Unit,
-) {
-    if (!video && lyrics != null) return SongTransport(controller, ui, lyrics, onLyrics, onQueue, onSleep)
-    val c = Hamstr.colors
-    val haptics = LocalHapticFeedback.current
-    val queue by Playback.queue.collectAsState()
-    Scrubber(controller, ui)
-    Spacer(Modifier.height(18.dp))
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        val speeds = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
-        Box(
-            Modifier.weight(1f),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(c.surface)
-                    .pressable({
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                        val next = speeds[(speeds.indexOfFirst { abs(it - ui.speed) < 0.01f } + 1) % speeds.size]
-                        controller.setPlaybackSpeed(next)
-                    }, label = stringResource(R.string.player_speed))
-                    .heightIn(min = 40.dp)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) { Txt("${if (ui.speed % 1f == 0f) ui.speed.toInt() else ui.speed}×", style = Hamstr.type.mono) }
-        }
-        // In a queue the side buttons skip between files; for one file they jump 10 s.
-        if (queue.size > 1) {
-            IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
-        } else {
-            IconButton(Res.drawable.ic_replay_10, stringResource(R.string.player_back_10), { controller.seekBack() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
-        }
-        Spacer(Modifier.width(10.dp))
-        PlayPause(ui.isPlaying, size = 68.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
-        Spacer(Modifier.width(10.dp))
-        if (queue.size > 1) {
-            IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 48.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
-        } else {
-            IconButton(Res.drawable.ic_forward_10, stringResource(R.string.player_forward_10), { controller.seekForward() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
-        }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            if (video) IconButton(Res.drawable.ic_fullscreen, stringResource(R.string.player_fullscreen), onFullscreen)
-        }
-    }
-    Spacer(Modifier.height(14.dp))
-    // The modes in one row: repeat, shuffle, the sleep timer, lyrics and the queue. It
-    // scrolls sideways when the screen is narrow and sits centred when it fits.
-    val sleep by Playback.sleep.collectAsState()
-    val now by produceState(System.currentTimeMillis(), sleep) {
-        while (sleep is Playback.Sleep.At) { value = System.currentTimeMillis(); delay(1000) }
-    }
-    val chips = rememberScrollState()
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Row(
-            Modifier.edgeFade(chips, Orientation.Horizontal).horizontalScroll(chips),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val repeatLabel = stringResource(
-                when (ui.repeat) {
-                    Player.REPEAT_MODE_ONE -> R.string.player_repeat_one
-                    Player.REPEAT_MODE_ALL -> R.string.player_repeat_all
-                    else -> R.string.player_repeat_off
-                },
-            )
-            ToggleChip(
-                if (ui.repeat == Player.REPEAT_MODE_ONE) Res.drawable.ic_repeat_one else Res.drawable.ic_repeat,
-                repeatLabel, on = ui.repeat != Player.REPEAT_MODE_OFF,
-            ) {
-                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                controller.repeatMode = when (ui.repeat) {
-                    Player.REPEAT_MODE_OFF -> if (queue.size > 1) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_ONE
-                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                    else -> Player.REPEAT_MODE_OFF
-                }
-            }
-            if (queue.size > 1) ToggleChip(Res.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle) {
-                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                controller.shuffleModeEnabled = !ui.shuffle
-            }
-            ToggleChip(
-                Res.drawable.ic_timer,
-                when (val s = sleep) {
-                    is Playback.Sleep.At -> fmt((s.endsAt - now).coerceAtLeast(0))
-                    Playback.Sleep.EndOfTrack -> stringResource(R.string.sleep_end_short)
-                    null -> stringResource(R.string.sleep)
-                },
-                on = sleep != null, mono = sleep is Playback.Sleep.At, onClick = onSleep,
-            )
-            if (lyrics != null) ToggleChip(Res.drawable.ic_lyrics, stringResource(R.string.lyrics), on = lyrics) {
-                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                onLyrics()
-            }
-            val current by Playback.current.collectAsState()
-            val at = queue.indexOfFirst { it.id == current?.id } + 1
-            ToggleChip(
-                Res.drawable.ic_queue_music,
-                if (queue.size > 1) "$at / ${queue.size}" else stringResource(R.string.queue_title),
-                on = false, mono = queue.size > 1, onClick = onQueue,
-            )
-        }
-    }
-}
-
-/** A small pill that is lit while its mode is on. */
-@Composable
-private fun ToggleChip(icon: DrawableResource, label: String, on: Boolean, mono: Boolean = false, onClick: () -> Unit) {
-    val c = Hamstr.colors
-    val p = animateSelection(on)
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(lerp(c.surface, c.accent.copy(alpha = 0.18f), p))
-            .pressable(onClick, label = label)
-            .heightIn(min = 40.dp)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(icon, tint = lerp(c.muted, c.accent, p), size = 18.dp)
-        Txt(label, style = if (mono) Hamstr.type.mono else Hamstr.type.small, color = lerp(c.muted, c.accent, p), maxLines = 1)
-    }
-}
-
-/** Accent circle; the icon swaps with Slate's scale crossfade. */
-@Composable
-fun PlayPause(playing: Boolean, size: Dp, onClick: () -> Unit) {
-    val c = Hamstr.colors
-    val haptics = LocalHapticFeedback.current
-    Box(
-        Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(c.accent)
-            .pressable({ haptics.performHapticFeedback(HapticFeedbackType.ContextClick); onClick() }, label = stringResource(if (playing) R.string.player_pause else R.string.player_play), pressedScale = 0.9f),
-        contentAlignment = Alignment.Center,
-    ) {
-        AnimatedContent(
-            targetState = playing,
-            transitionSpec = { iconSwap() },
-            label = "playPause",
-        ) { p -> Icon(if (p) Res.drawable.ic_pause else Res.drawable.ic_play_arrow, tint = c.onAccent, size = size * 0.45f) }
-    }
-}
-
-/**
- * Seek bar: drag anywhere on it; the thumb grows while held, stretches with its speed,
- * and the time label follows the finger. Seeks on release.
- */
-@Composable
-private fun Scrubber(controller: Player, ui: PlayerUi) {
-    val c = Hamstr.colors
-    val haptics = LocalHapticFeedback.current
-    var dragPos by remember { mutableStateOf<Float?>(null) }
-    val fraction = dragPos ?: if (ui.duration > 0) ui.position / ui.duration.toFloat() else 0f
-    val thumb by animateFloatAsState(if (dragPos != null) 20f else 12f, spring(dampingRatio = 0.5f, stiffness = 600f), label = "thumb")
-    BoxWithConstraints(Modifier.fillMaxWidth().height(28.dp)) {
-        val w = constraints.maxWidth.toFloat()
-        val stretch by rememberVelocityStretch({ fraction * w }, sensitivity = 0.00012f, max = 0.5f)
-        Box(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(w) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { dragPos = (it.x / w).coerceIn(0f, 1f); haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) },
-                        onHorizontalDrag = { ch, dx -> ch.consume(); dragPos = ((dragPos ?: 0f) + dx / w).coerceIn(0f, 1f) },
-                        onDragEnd = { dragPos?.let { controller.seekTo((it * ui.duration).toLong()) }; dragPos = null },
-                        onDragCancel = { dragPos = null },
-                    )
-                }
-                .pointerInput(w) { detectTapGestures { controller.seekTo(((it.x / w).coerceIn(0f, 1f) * ui.duration).toLong()) } },
-        ) {
-            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(4.dp).clip(CircleShape).background(c.line))
-            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(fraction.coerceIn(0f, 1f)).height(4.dp).clip(CircleShape).background(c.accent))
-            Box(
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .offset { IntOffset((fraction * w - thumb.dp.toPx() / 2).roundToInt(), 0) }
-                    .size(thumb.dp)
-                    .stretchX { stretch }
-                    .clip(CircleShape)
-                    .background(c.ink),
-            )
-        }
-    }
-    Row(Modifier.fillMaxWidth()) {
-        Txt(fmt(((dragPos ?: -1f).takeIf { it >= 0f }?.let { (it * ui.duration).toLong() }) ?: ui.position), style = Hamstr.type.mono, color = if (dragPos != null) c.accent else c.ghost, modifier = Modifier.weight(1f))
-        Txt(fmt(ui.duration), style = Hamstr.type.mono, color = c.ghost)
-    }
-}
-
-private fun fmt(ms: Long): String {
-    val s = (ms / 1000).coerceAtLeast(0)
-    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
-}
-
-/** One entry in the mini player: picture, title and a line under it. [ui] is set for what plays now. */
-@Composable
-private fun MiniSlot(t: DownloadTask, ui: PlayerUi?, picture: Boolean, inset: Float, mediaH: Float, modifier: Modifier) {
-    val c = Hamstr.colors
-    val density = LocalDensity.current
-    val h = with(density) { mediaH.toDp() }
-    val w = if (kindOf(t) == Kind.Video) h * 16f / 9f else h
-    Row(modifier.fillMaxSize().padding(start = with(density) { inset.toDp() }), verticalAlignment = Alignment.CenterVertically) {
-        // What plays now is drawn by the morphing media on top; only a turning queue needs pictures here.
-        Box(Modifier.width(w).height(h).clip(RoundedCornerShape(14.dp)).background(if (picture) c.black else Color.Transparent)) {
-            if (picture) AsciiImage(rememberImage(t.thumbnail, 240), reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxSize())
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
-            Spacer(Modifier.height(2.dp))
-            val line = if (ui != null && ui.duration > 0) "${fmt(ui.position)} / ${fmt(ui.duration)}"
-            else listOfNotNull(t.uploader?.let(Lyrics::cleanArtist) ?: t.source, formatDuration(t.durationSec).takeIf { t.durationSec > 0 }).joinToString(" · ")
-            Txt(line, style = Hamstr.type.mono, color = c.ghost, maxLines = 1)
-        }
-    }
-}
-
-/** The heart: puts what plays into Favorites, or takes it out. */
-@Composable
-private fun FavoriteButton(t: DownloadTask) {
-    val c = Hamstr.colors
-    val haptics = LocalHapticFeedback.current
-    val lists by Playlists.lists.collectAsState()
-    val fav = remember(lists, t.id) { Playlists.isFavorite(t) }
-    val name = stringResource(R.string.pl_favorites)
-    AnimatedContent(fav, transitionSpec = { iconSwap() }, label = "favorite") { on ->
-        IconButton(
-            if (on) Res.drawable.ic_favorite else Res.drawable.ic_favorite_border,
-            stringResource(if (on) R.string.fav_remove else R.string.fav_add),
-            {
-                haptics.performHapticFeedback(if (on) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
-                Playlists.toggleFavorite(t, name)
-            },
-            tint = if (on) c.accent else c.muted, background = Color.Transparent,
-        )
-    }
-}
-
-private enum class LyricsLoad { Loading, Searching, Ready, Missing }
-
-/**
- * A song's lyrics where its cover was. Saved ones show at once; otherwise LRCLIB is asked
- * and what it finds is kept. Timed lyrics follow the song (the line that is sung lights up
- * and stays in view) and a tap on a line jumps there.
- */
-@Composable
-private fun LyricsPanel(t: DownloadTask, controller: Player, ui: PlayerUi, onEdit: () -> Unit) {
-    val c = Hamstr.colors
-    val saved by Lyrics.saved.collectAsState()
-    var load by remember(t.id) { mutableStateOf(LyricsLoad.Loading) }
-    var attempt by remember(t.id) { mutableIntStateOf(0) }
-    LaunchedEffect(t.id, attempt) {
-        if (attempt == 0 && Lyrics.load(t.id) != null) { load = LyricsLoad.Ready; return@LaunchedEffect }
-        load = LyricsLoad.Searching
-        load = Lyrics.find(t).fold({ Lyrics.save(t.id, it); LyricsLoad.Ready }, { LyricsLoad.Missing })
-    }
-    val text = saved[t.id]
-    val lines = remember(text) { text?.let(Lyrics::parse).orEmpty() }
-    Box(Modifier.fillMaxSize().background(c.overlay)) {
-        when {
-            lines.isNotEmpty() -> LyricLines(lines, controller, ui)
-            load == LyricsLoad.Missing -> Column(
-                Modifier.align(Alignment.Center).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(Res.drawable.ic_lyrics, tint = c.ghost, size = 32.dp)
-                Spacer(Modifier.height(10.dp))
-                Txt(stringResource(R.string.lyrics_none), style = Hamstr.type.bodyMedium)
-                Spacer(Modifier.height(4.dp))
-                Txt(stringResource(R.string.lyrics_none_hint), style = Hamstr.type.small, color = c.muted)
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HButton(stringResource(R.string.lyrics_retry), { attempt++ }, kind = ButtonKind.Neutral, icon = Res.drawable.ic_refresh)
-                    HButton(stringResource(R.string.lyrics_add), onEdit, kind = ButtonKind.Primary, icon = Res.drawable.ic_edit)
-                }
-            }
-            else -> Txt(
-                stringResource(if (load == LyricsLoad.Searching) R.string.lyrics_searching else R.string.lyrics_loading),
-                style = Hamstr.type.mono, color = c.ghost, modifier = Modifier.align(Alignment.Center),
-            )
-        }
-        if (lines.isNotEmpty()) IconButton(
-            Res.drawable.ic_edit, stringResource(R.string.lyrics_edit), onEdit,
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp), tint = c.muted, background = c.overlay,
-        )
-    }
-}
-
-@Composable
-private fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: PlayerUi) {
-    val c = Hamstr.colors
-    val timed = lines.first().at >= 0
-    val list = rememberLazyListState()
-    // A little ahead, so the line lights up as it is sung rather than after.
-    val now = if (timed) lines.indexOfLast { it.at <= ui.position + 250 } else -1
-    LaunchedEffect(now) {
-        if (now >= 0 && !list.isScrollInProgress) list.animateScrollToItem(now, -(list.layoutInfo.viewportSize.height * 0.35f).toInt())
-    }
-    LazyColumn(
-        Modifier.fillMaxSize().edgeFade(list, Orientation.Vertical, length = 22.dp),
-        state = list,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(lines) { i, l ->
-            val p = animateSelection(i == now)
-            Txt(
-                l.text.ifEmpty { "♪" },
-                style = if (timed) Hamstr.type.section.copy(fontSize = 20.sp, lineHeight = 26.sp) else Hamstr.type.body.copy(fontSize = 16.sp, lineHeight = 23.sp),
-                color = if (timed) lerp(c.ghost, c.ink, p) else c.ink,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .then(if (timed) Modifier.clickable { controller.seekTo(l.at); controller.play() } else Modifier)
-                    .padding(vertical = 2.dp),
-            )
-        }
-    }
-}
-
-/** The average colour of a cover, toned so white text stays readable on it; eases between songs. */
-@Composable
-private fun rememberCoverColor(url: String?): Color {
-    val c = Hamstr.colors
-    val bitmap = rememberImage(url, 96)
-    val target = remember(bitmap) {
-        bitmap?.let { b ->
-            val hsv = FloatArray(3)
-            android.graphics.Color.colorToHSV(android.graphics.Bitmap.createScaledBitmap(b.asAndroidBitmap(), 1, 1, true).getPixel(0, 0), hsv)
-            hsv[1] = (hsv[1] * 1.25f).coerceAtMost(0.7f)
-            hsv[2] = hsv[2].coerceIn(0.3f, 0.55f)
-            Color(android.graphics.Color.HSVToColor(hsv))
-        }
-    }
-    return animateColorAsState(target ?: c.overlay, tween(600), label = "coverColor").value
-}
-
-/**
- * A song's controls, laid out like a music app's: the timeline, then shuffle, previous,
- * play, next and repeat in one row, and under it the sleep timer and speed on the left,
- * lyrics and the queue on the right. A lit mode is accent with a dot under it.
- */
-@Composable
-private fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onLyrics: () -> Unit, onQueue: () -> Unit, onSleep: () -> Unit) {
-    val c = Hamstr.colors
-    val haptics = LocalHapticFeedback.current
-    val queue by Playback.queue.collectAsState()
-    Scrubber(controller, ui)
-    Spacer(Modifier.height(10.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        ModeButton(Res.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle, enabled = queue.size > 1) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            controller.shuffleModeEnabled = !ui.shuffle
-        }
-        IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 52.dp, tint = c.ink, background = Color.Transparent)
-        PlayPause(ui.isPlaying, size = 72.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
-        IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 52.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
-        ModeButton(
-            if (ui.repeat == Player.REPEAT_MODE_ONE) Res.drawable.ic_repeat_one else Res.drawable.ic_repeat,
-            stringResource(
-                when (ui.repeat) {
-                    Player.REPEAT_MODE_ONE -> R.string.player_repeat_one
-                    Player.REPEAT_MODE_ALL -> R.string.player_repeat_all
-                    else -> R.string.player_repeat_off
-                },
-            ),
-            on = ui.repeat != Player.REPEAT_MODE_OFF,
-        ) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            controller.repeatMode = when (ui.repeat) {
-                Player.REPEAT_MODE_OFF -> if (queue.size > 1) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_ONE
-                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                else -> Player.REPEAT_MODE_OFF
-            }
-        }
-    }
-    Spacer(Modifier.height(14.dp))
-    val sleep by Playback.sleep.collectAsState()
-    val now by produceState(System.currentTimeMillis(), sleep) {
-        while (sleep is Playback.Sleep.At) { value = System.currentTimeMillis(); delay(1000) }
-    }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        ToggleChip(
-            Res.drawable.ic_timer,
-            when (val s = sleep) {
-                is Playback.Sleep.At -> fmt((s.endsAt - now).coerceAtLeast(0))
-                Playback.Sleep.EndOfTrack -> stringResource(R.string.sleep_end_short)
-                null -> stringResource(R.string.sleep)
-            },
-            on = sleep != null, mono = sleep is Playback.Sleep.At, onClick = onSleep,
-        )
-        Spacer(Modifier.width(8.dp))
-        val speeds = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (abs(ui.speed - 1f) > 0.01f) c.accent.copy(alpha = 0.18f) else c.surface)
-                .pressable({
-                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    controller.setPlaybackSpeed(speeds[(speeds.indexOfFirst { abs(it - ui.speed) < 0.01f } + 1) % speeds.size])
-                }, label = stringResource(R.string.player_speed))
-                .heightIn(min = 40.dp)
-                .padding(horizontal = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) { Txt("${if (ui.speed % 1f == 0f) ui.speed.toInt() else ui.speed}×", style = Hamstr.type.mono, color = if (abs(ui.speed - 1f) > 0.01f) c.accent else c.muted) }
-        Spacer(Modifier.weight(1f))
-        ModeButton(Res.drawable.ic_lyrics, stringResource(R.string.lyrics), on = lyrics) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            onLyrics()
-        }
-        ModeButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), on = false, onClick = onQueue)
-    }
-}
-
-/** An icon that is accent with a dot under it while its mode is on. */
-@Composable
-private fun ModeButton(icon: DrawableResource, label: String, on: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    val c = Hamstr.colors
-    val p = animateSelection(on)
-    Box(contentAlignment = Alignment.Center) {
-        IconButton(icon, label, { if (enabled) onClick() }, tint = if (!enabled) c.line else lerp(c.muted, c.accent, p), background = Color.Transparent, size = 44.dp)
-        Box(
-            Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp).size(4.dp)
-                .graphicsLayer { alpha = p; scaleX = p; scaleY = p }
-                .clip(CircleShape).background(c.accent),
-        )
     }
 }

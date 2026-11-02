@@ -30,13 +30,15 @@
 - Choose video (up to 4K; mp4, mkv or webm), audio (opus, m4a or mp3) or your own yt-dlp format string. Subtitles and whole playlists are optional.
 - Downloads run in a queue with progress notifications. You can pause, resume and retry them, and run up to three at once.
 - Cheek fetches supported files and HLS/DASH fragments over parallel connections. Settings › Engine lets you switch to yt-dlp.
-- Files go to `Download/Hamstr` and show up in every gallery and music app.
+- Files go to `Download/Hamstr` (or a folder of your own, Settings › Queue) and show up in every gallery and music app. On a computer they go to `Downloads/Hamstr` or any folder you pick.
+- Downloads you start in Hamstr keep going for as long as they need on Android 14 and later, without the daily limit Android sets for background work.
 - With *Instant stash* on, sharing starts the download straight away, without the sheet.
 - A song that is locked with DRM (Spotify, Apple Music, SoundCloud Go) gets looked up on YouTube Music by title, artist and length, with an offer to stash that one instead. Not the right one? Listen into the other matches and pick it by ear.
 
 **Send**
 - See a video on the computer and want it on the phone? *Send to a device* passes the link to another Hamstr nearby, like AirDrop. It's in the + sheet, the share sheet and every download's menu.
-- Hamstr apps on the same Wi-Fi find each other by themselves; phones also find each other over Bluetooth.
+- Or send the file itself: in the share sheet under *File*, to a Hamstr on the same Wi-Fi. It lands in that device's stash.
+- Hamstr apps on the same Wi-Fi find each other by themselves, and over Bluetooth without one: phones and computers alike. Files go too, slower over Bluetooth.
 - The first link from a device asks; *Always allow* lets that device's links go straight into the stash. A link for a device that is away waits until it shows up.
 - Every message is signed with the sending device's own key. Nothing goes through a server.
 
@@ -64,8 +66,8 @@
 
 **Updates**
 - Hamstr checks this repository's releases and installs new versions in place, without a browser detour (Settings › About).
-- yt-dlp updates itself once a day, so sites keep working between app releases.
-- Cheek updates itself from [its own releases](https://github.com/Mailo037/cheek/releases) once a day, so a new Cheek doesn't need a new Hamstr. Hamstr takes releases that keep Cheek's command line (same major version, for 0.x the same minor) and falls back to the copy inside the APK.
+- yt-dlp updates itself once a day, so sites keep working between app releases, on the phone and on the computer.
+- Cheek updates itself from [its own releases](https://github.com/Mailo037/cheek/releases) once a day, so a new Cheek doesn't need a new Hamstr. Hamstr takes releases that keep Cheek's command line (same major version, for 0.x the same minor) and that Cheek's release key signed, and falls back to the copy it came with.
 
 ## Install
 
@@ -89,7 +91,9 @@ For your computer:
 | `Hamstr-x.y.z-macos-arm64.dmg` | Macs with Apple silicon |
 | `Hamstr-x.y.z-linux-x64.deb` | Debian, Ubuntu and the like |
 
-The installers aren't signed yet, so Windows SmartScreen (*More info › Run anyway*) and macOS Gatekeeper (right-click › *Open*) ask before the first start. The desktop app updates itself too (Settings › About): it installs the new version and opens again. `SHA256SUMS.txt` in each release lists the checksums of every file.
+The installers aren't signed yet, so Windows SmartScreen (*More info › Run anyway*) and macOS Gatekeeper (right-click › *Open*) ask before the first start. The desktop app updates itself too (Settings › About): it installs the new version and opens again, and only one whose checksums carry Hamstr's release signature. `SHA256SUMS.txt` in each release lists the checksums of every file, `SHA256SUMS.txt.sig` signs them.
+
+On the computer the library lists everything you stashed, with search, and plays videos and songs in Hamstr's own player. Pick quality and format for a link under *Options* in the + sheet, or drop links and files on the window.
 
 ## How it works
 
@@ -119,7 +123,7 @@ needed. The provider must expose an accessible stream; resolution times out afte
  Settings › About ──► GitHub Releases API ──► APK for this ABI ──► PackageInstaller
 ```
 
-yt-dlp resolves links once, in a Python process that stays running for a few minutes so the next link skips its start. Cheek picks the streams from that JSON by yt-dlp's rules and downloads them by default; direct files, HLS playlists and plain pages that no yt-dlp extractor knows, Cheek resolves itself, without Python. Playlists, subtitles, custom formats and unsupported download protocols fall back to yt-dlp. FFmpeg merges streams and converts audio when needed.
+yt-dlp resolves links once, in a Python process that stays running for a few minutes so the next link skips its start. Cheek picks the streams from that JSON by yt-dlp's rules and downloads them by default; direct files, HLS playlists and plain pages that no yt-dlp extractor knows, Cheek resolves itself, without Python. A playlist goes one video at a time: yt-dlp lists it and resolves each video just before Cheek downloads it. Custom formats, subtitles with a Cheek before 0.3.2 and unsupported download protocols fall back to yt-dlp. FFmpeg merges streams and converts audio when needed.
 
 ## License
 

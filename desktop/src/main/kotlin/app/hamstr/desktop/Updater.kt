@@ -2,6 +2,8 @@ package app.hamstr.desktop
 
 import app.hamstr.Log
 import app.hamstr.data.Prefs
+import app.hamstr.engine.ReleaseKeys
+import app.hamstr.engine.Versions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,7 +17,6 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
-import java.security.MessageDigest
 import java.util.Base64
 import java.util.zip.ZipInputStream
 import kotlin.system.exitProcess
@@ -28,6 +29,9 @@ data class Release(
     val installerName: String,
     val size: Long,
     val sums: String?,
+    val signature: String? = null,
+    /** The installer's SHA-256 from the release's signed checksums, once they list it. */
+    val sha256: String? = null,
 )
 
 sealed interface UpdateState {
@@ -129,9 +133,10 @@ object Updater {
         if (job?.isActive == true) return
         job = scope.launch {
             _state.value = UpdateState.Checking
-            _state.value = runCatching { latest() }.fold(
+            _state.value = runCatching { latest()?.let(::signed) }.fold(
                 onSuccess = { r ->
-                    coming = r != null && newer(r.version, version) && r.installer == null
+                    // The installer counts once the release's signed checksums list it (release.yml signs them last).
+                    coming = r != null && newer(r.version, version) && (r.installer == null || r.sha256 == null)
                     // A release still being built is looked at again soon, so it isn't a finished check.
                     if (!coming) Prefs.edit { it.copy(lastAppCheck = System.currentTimeMillis()) }
                     when {
@@ -154,8 +159,10 @@ object Updater {
         if (job?.isActive == true) return
         job = scope.launch {
             try {
+                // Nothing runs that the release key didn't vouch for.
+                val expected = signed(release).sha256 ?: error("This update isn't signed, so Hamstr won't install it")
                 val file = download(release, url)
-                release.sums?.let { verify(file, it) }
+                verify(file, expected)
                 _state.value = UpdateState.Installing(release, restarts = kind != Kind.None)
                 when (kind) {
                     Kind.Setup -> {
@@ -371,6 +378,7 @@ object Updater {
             // Hamstr-<version>-<system><suffix>; release.yml uploads them after the release is out.
             val installer = assets.firstOrNull { it.getString("name").endsWith("-$system${kind.suffix}") }
             val sums = assets.firstOrNull { it.getString("name") == "SHA256SUMS.txt" }
+            val signature = assets.firstOrNull { it.getString("name") == "SHA256SUMS.txt.sig" }
             return Release(
                 version = json.getString("tag_name").removePrefix("v"),
                 page = json.getString("html_url"),
@@ -378,6 +386,7 @@ object Updater {
                 installerName = installer?.getString("name").orEmpty(),
                 size = installer?.optLong("size") ?: 0,
                 sums = sums?.getString("browser_download_url"),
+                signature = signature?.getString("browser_download_url"),
             )
         } finally {
             conn.disconnect()
@@ -421,42 +430,43 @@ object Updater {
         return out
     }
 
-    /** The installer's hash against the "<hash>  <name>" line its release published. */
-    private fun verify(file: File, sumsUrl: String) {
-        val conn = open(sumsUrl)
-        val sums = try {
-            if (conn.responseCode != 200) error("Checksums: HTTP ${conn.responseCode}")
-            conn.inputStream.bufferedReader().use { it.readText() }
+    /**
+     * [release] with its installer's hash, read from the release's checksums once the release
+     * key's signature over them holds; without that hash nothing gets installed.
+     */
+    private fun signed(release: Release): Release {
+        if (release.installer == null || release.sums == null || release.signature == null) return release
+        return runCatching {
+            val sums = fetch(release.sums)
+            if (!ReleaseKeys.verify(sums, fetch(release.signature), releaseKey)) {
+                Log.w(TAG, "SHA256SUMS.txt of ${release.version} has no valid signature")
+                return release
+            }
+            release.copy(sha256 = ReleaseKeys.sums(String(sums))[release.installerName])
+        }.getOrElse { Log.w(TAG, "No checksums for ${release.version}", it); release }
+    }
+
+    // A test release (AGENTS.md) is signed with a test key; real releases only with Hamstr's own.
+    private val releaseKey = System.getenv("HAMSTR_RELEASE_KEY")?.takeIf { System.getenv("HAMSTR_RELEASES") != null } ?: ReleaseKeys.HAMSTR
+
+    private fun fetch(url: String): ByteArray {
+        val conn = open(url)
+        return try {
+            if (conn.responseCode != 200) error("HTTP ${conn.responseCode} for ${url.substringAfterLast('/')}")
+            conn.inputStream.use { it.readBytes() }
         } finally {
             conn.disconnect()
         }
-        val expected = sums.lineSequence().map { it.trim().split(Regex("\\s+"), limit = 2) }
-            .firstOrNull { it.size == 2 && it[1].removePrefix("*") == file.name }?.get(0)?.lowercase()
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buf = ByteArray(64 * 1024)
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
-                digest.update(buf, 0, n)
-            }
-        }
-        val actual = digest.digest().joinToString("") { "%02x".format(it) }
-        if (expected != actual) {
+    }
+
+    /** The installer against the hash its release's signed checksums give. */
+    private fun verify(file: File, expected: String) {
+        if (ReleaseKeys.sha256(file) != expected) {
             file.delete()
             error("The download doesn't match its checksum")
         }
     }
 
     /** True when [a] is a later version than [b] (1.10.0 > 1.9.2). */
-    fun newer(a: String, b: String): Boolean {
-        fun parts(v: String) = v.removePrefix("v").substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
-        val x = parts(a)
-        val y = parts(b)
-        for (i in 0 until maxOf(x.size, y.size)) {
-            val d = x.getOrElse(i) { 0 } - y.getOrElse(i) { 0 }
-            if (d != 0) return d > 0
-        }
-        return false
-    }
+    fun newer(a: String, b: String) = Versions.newer(a, b)
 }

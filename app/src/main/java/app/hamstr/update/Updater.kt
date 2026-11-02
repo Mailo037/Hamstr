@@ -325,16 +325,7 @@ object Updater {
     }
 
     /** True when [a] is a later version than [b] (1.10.0 > 1.9.2). */
-    fun newer(a: String, b: String): Boolean {
-        fun parts(v: String) = v.removePrefix("v").substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
-        val x = parts(a)
-        val y = parts(b)
-        for (i in 0 until maxOf(x.size, y.size)) {
-            val d = x.getOrElse(i) { 0 } - y.getOrElse(i) { 0 }
-            if (d != 0) return d > 0
-        }
-        return false
-    }
+    fun newer(a: String, b: String) = app.hamstr.engine.Versions.newer(a, b)
 }
 
 class InstallReceiver : BroadcastReceiver() {

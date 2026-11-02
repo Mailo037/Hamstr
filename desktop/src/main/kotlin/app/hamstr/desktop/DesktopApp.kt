@@ -80,6 +80,7 @@ import java.io.File
 
 private enum class Tab(val label: StringResource, val icon: DrawableResource) {
     Stash(Res.string.tab_stash, Res.drawable.ic_download),
+    Library(Res.string.tab_library, Res.drawable.ic_grid_view),
     Settings(Res.string.tab_settings, Res.drawable.ic_settings),
 }
 
@@ -96,19 +97,26 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     // HAMSTR_OPEN=Engine (or any settings page) starts on that page, for screenshots.
     // After a new language, the window comes back where it was picked.
     val open = remember { Language.reopen.also { Language.reopen = null } ?: Page.entries.firstOrNull { it.name.equals(System.getenv("HAMSTR_OPEN"), ignoreCase = true) } }
-    var tab by remember { mutableStateOf(if (open != null) Tab.Settings else Tab.Stash) }
+    // HAMSTR_OPEN=Library starts on the library.
+    val library = remember { System.getenv("HAMSTR_OPEN").equals("Library", ignoreCase = true) }
+    var tab by remember { mutableStateOf(if (open != null) Tab.Settings else if (library) Tab.Library else Tab.Stash) }
     var page by remember { mutableStateOf(open ?: Page.Appearance) }
     var adding by remember { mutableStateOf(false) }
     var clipLink by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
+    var playing by remember { mutableStateOf<DownloadTask?>(null) }
     val requests by Nearby.requests.collectAsState()
     // The tour on a first start; HAMSTR_TOUR=<page> opens it on that page, for screenshots.
     val tourAt = remember { System.getenv("HAMSTR_TOUR")?.toIntOrNull() }
     var touring by remember { mutableStateOf(tourAt != null || TourGate.due()) }
-    val sheetOpen = touring || adding || menuFor != null || sharing != null || requests.isNotEmpty()
+    val sheetOpen = touring || adding || menuFor != null || sharing != null || playing != null || requests.isNotEmpty()
 
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
+    // Videos and songs play in Hamstr; documents and the like open in the system's app.
+    fun play(t: DownloadTask) {
+        if (playable(t)) playing = t else t.filePath?.let { Files.open(File(it)) }
+    }
 
     Box(
         Modifier
@@ -139,12 +147,15 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                                         onAdd = { clipboardLink()?.let(Queue::stash) ?: run { clipLink = null; adding = true } },
                                         onOpenAdd = { clipLink = clipboardLink(); adding = true },
                                         onMenu = { menuFor = it },
-                                        onPlay = { t, _ -> t.filePath?.let { Files.open(File(it)) } },
+                                        onPlay = { t, _ -> play(t) },
                                         onHide = { list -> DownloadStore.setHidden(list.map { it.id }.toSet(), true) },
                                         onRetryEngine = Queue::retryStart,
                                         onShowAll = {},
                                     )
                                 }
+                            }
+                            Tab.Library -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                Box(Modifier.widthIn(max = 880.dp)) { DesktopLibrary(visible, onPlay = ::play, onMenu = { menuFor = it }) }
                             }
                             Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true })
                         }
@@ -158,11 +169,12 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                             onLink = { Queue.stash(it); adding = false; tab = Tab.Stash },
                             onFiles = { adding = false; Files.pickAndImport() },
                             onSend = { adding = false; sharing = ShareContent(it) },
+                            onStash = { link, choice -> Queue.stash(link, choice); adding = false; tab = Tab.Stash },
                         )
                     }
                 }
                 Overlay(menuFor != null, onDismiss = { menuFor = null }) {
-                    menuFor?.let { t -> DesktopSheet { FileMenu(t, onShare = { menuFor = null; sharing = ShareContent.from(listOf(t)) }) { menuFor = null } } }
+                    menuFor?.let { t -> DesktopSheet { FileMenu(t, onShare = { menuFor = null; sharing = ShareContent.from(listOf(t)) }, onPlay = { menuFor = null; play(it) }) { menuFor = null } } }
                 }
                 Overlay(sharing != null, onDismiss = { sharing = null }) {
                     sharing?.let { content ->
@@ -176,6 +188,9 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                             )
                         }
                     }
+                }
+                Overlay(playing != null, onDismiss = { playing = null }) {
+                    playing?.let { t -> DesktopPlayer(t) { playing = null } }
                 }
                 val request = requests.firstOrNull()
                 Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {
@@ -275,13 +290,14 @@ private val ITEM = 40.dp
 
 /** A download's menu: open it, find it, copy its link or take it off the list. */
 @Composable
-private fun FileMenu(t: DownloadTask, onShare: () -> Unit, onClose: () -> Unit) {
+private fun FileMenu(t: DownloadTask, onShare: () -> Unit, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit) {
     val file = t.filePath?.let(::File)?.takeIf { it.exists() }
     Sheet {
         SheetHeader(t.title, subtitle = statusLine(t))
         Spacer(Modifier.height(16.dp))
         Group {
             if (file != null && t.status == Status.Done) {
+                if (playable(t)) MenuRow(Res.drawable.ic_play_arrow, stringResource(Res.string.player_play)) { onPlay(t) }
                 MenuRow(Res.drawable.ic_open_in_new, stringResource(Res.string.desktop_open)) { Files.open(file); onClose() }
                 MenuRow(Res.drawable.ic_folder_open, stringResource(Res.string.desktop_show_in_folder)) { Files.reveal(file); onClose() }
             }

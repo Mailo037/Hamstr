@@ -9,6 +9,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.job.JobParameters
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,7 @@ import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.Handler
@@ -66,8 +68,10 @@ import java.io.File
 import kotlin.coroutines.resume
 
 /**
- * Runs the download queue in the foreground with one progress notification.
- * Pause = stop the yt-dlp process (its .part file stays); resume runs it again.
+ * Runs the download queue with one progress notification: as a foreground service, or, on
+ * Android 14 and later when the user started the downloads in Hamstr, held by a
+ * user-initiated data transfer job ([DownloadJob]), which Android doesn't cut off after six
+ * hours a day. Pause = stop the yt-dlp process (its .part file stays); resume runs it again.
  * Without a usable network, queued downloads wait and start on their own once it's back;
  * a connection that breaks mid-download is retried a few times with growing pauses.
  */
@@ -83,11 +87,19 @@ class DownloadService : Service() {
     private var lastNotify = 0L
     // Set once Android's daily limit for background downloads ran out, until the next start.
     @Volatile private var halted = false
+    // The transfer job that holds the queue now; the service then runs bound, without a foreground service.
+    @Volatile private var host: DownloadJob? = null
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    /** What the job binds to. */
+    inner class Local : Binder() {
+        val service get() = this@DownloadService
+    }
+
+    override fun onBind(intent: Intent?): IBinder = Local()
 
     override fun onCreate() {
         super.onCreate()
+        current = this
         // Network changes (and the Wi-Fi-only switch) start waiting downloads or hold running ones.
         scope.launch {
             combine(Network.state, Prefs.settings) { _, s -> s.wifiOnly to Network.allows(s.wifiOnly) }
@@ -100,18 +112,56 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
         halted = false
-        goForeground()
-        val id = intent?.getStringExtra(EXTRA_ID)
-        when (intent?.action) {
+        if (host == null) goForeground()
+        handle(intent?.action, intent?.getStringExtra(EXTRA_ID))
+        // Held by a transfer job the service runs bound; this start only carried the command.
+        if (host != null) stopSelf(startId)
+        return START_NOT_STICKY
+    }
+
+    /** A command from the notification, the app, or a transfer job taking over. On the main thread. */
+    internal fun handle(action: String?, id: String?) {
+        when (action) {
             ACTION_PAUSE -> id?.let { stop(it, Status.Paused) }
             ACTION_PAUSE_ALL -> synchronized(this) { jobs.keys.toList() }.forEach { stop(it, Status.Paused) }
             ACTION_CANCEL -> id?.let { stop(it, Status.Canceled) }
-            ACTION_RESUME -> id?.let { DownloadStore.update(it) { t -> t.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0) } }
+            ACTION_RESUME -> id?.let { DownloadStore.update(it, block = ::resumed) }
             ACTION_START -> DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage == Stage.PausedBySystem }
                 .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
         }
         pump()
-        return START_NOT_STICKY
+    }
+
+    /** A transfer job took the queue over: from now on no foreground service, and no daily limit. */
+    internal fun attach(job: DownloadJob) {
+        host = job
+        halted = false
+        // A foreground service from before (downloads started in the background) can end; the job's notification stays.
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+        mainHandler.post { handle(ACTION_START, null) }
+    }
+
+    internal fun detach(job: DownloadJob) {
+        if (host === job) host = null
+    }
+
+    /**
+     * Android ended the job: the network went, or the user stopped Hamstr in the task
+     * manager. Running downloads stop and wait; true asks Android to start the job again later.
+     */
+    internal fun jobStopped(job: DownloadJob, reason: Int): Boolean {
+        if (host !== job) return false
+        val byUser = Build.VERSION.SDK_INT >= 31 && reason == JobParameters.STOP_REASON_USER
+        val stage = when {
+            byUser -> null
+            !Network.state.value.online -> Stage.WaitingForNetwork
+            else -> Stage.PausedBySystem
+        }
+        halted = true
+        synchronized(this) { jobs.keys.toList() }.forEach { stop(it, if (byUser) Status.Paused else Status.Queued, stage) }
+        mainHandler.removeCallbacks(retryTick)
+        host = null
+        return !byUser && DownloadStore.tasks.value.any { it.status.active }
     }
 
     private fun goForeground() {
@@ -198,6 +248,9 @@ class DownloadService : Service() {
                 if (runJob.isActive) {
                     when {
                         line.startsWith(Engine.METADATA_PREFIX) -> updateMetadata(task.id, line.removePrefix(Engine.METADATA_PREFIX))
+                        line.startsWith(Engine.STAGE_PROGRESS_PREFIX) -> line.removePrefix(Engine.STAGE_PROGRESS_PREFIX).toFloatOrNull()?.let { pct ->
+                            DownloadStore.update(task.id, persist = false) { if (it.status == Status.Running && it.stage != null) it.copy(stageProgress = (pct / 100f).coerceIn(0f, 1f)) else it }
+                        }
                         line.startsWith(Engine.STAGE_PREFIX) -> setStage(task.id, Stage.fromEngine(line.removePrefix(Engine.STAGE_PREFIX)))
                         line.startsWith("[download]") -> {
                             val now = SystemClock.elapsedRealtime()
@@ -291,7 +344,7 @@ class DownloadService : Service() {
 
     private fun setStage(id: String, stage: Stage?) {
         stage ?: return
-        DownloadStore.update(id, persist = false) { if (it.status == Status.Running) it.copy(stage = stage, speed = "", etaSec = -1) else it }
+        DownloadStore.update(id, persist = false) { if (it.status == Status.Running) it.copy(stage = stage, stageProgress = -1f, speed = "", etaSec = -1) else it }
         notifyProgress(force = true)
     }
 
@@ -363,10 +416,14 @@ class DownloadService : Service() {
         // newly started foreground service before its start command is handled.
         mainHandler.post {
             synchronized(this) {
-                if (scope.isActive && jobs.isEmpty() && stopping.isEmpty() && DownloadStore.tasks.value.none { it.status == Status.Queued && it.stage != Stage.PausedBySystem } &&
-                    stopSelfResult(lastStartId)
-                ) {
-                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                val idle = scope.isActive && jobs.isEmpty() && stopping.isEmpty() &&
+                    DownloadStore.tasks.value.none { it.status == Status.Queued && it.stage != Stage.PausedBySystem }
+                val job = host
+                when {
+                    !idle -> {}
+                    // The job ends and lets go of the service, which then stops by itself.
+                    job != null -> job.done()
+                    stopSelfResult(lastStartId) -> ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 }
             }
         }
@@ -399,6 +456,7 @@ class DownloadService : Service() {
     }
 
     override fun onDestroy() {
+        if (current === this) current = null
         mainHandler.removeCallbacksAndMessages(null)
         synchronized(this) { jobs.keys.toList() }.forEach { YoutubeDL.getInstance().destroyProcessById(it); Cheek.destroy(it) }
         scope.cancel()
@@ -413,51 +471,15 @@ class DownloadService : Service() {
         if (!force && now - lastNotify < 700) return
         lastNotify = now
         // The foreground notification has to stay; with Hamstr's switch off it just goes quiet.
-        if (mayPost()) postNotification(NOTIF_PROGRESS, progressNotification())
+        if (!mayPost()) return
+        val n = progressNotification()
+        host?.update(n) ?: postNotification(NOTIF_PROGRESS, n)
     }
 
-    private fun progressNotification(): android.app.Notification {
-        val tasks = DownloadStore.tasks.value
-        val running = tasks.filter { it.status == Status.Running }
-        val queued = tasks.filter { it.status == Status.Queued }
-        val b = NotificationCompat.Builder(this, if (Prefs.settings.value.notifications) CH_PROGRESS else CH_QUIET)
-            .setSmallIcon(R.drawable.ic_stat_hamstr)
-            .setColor(Prefs.settings.value.accent)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setContentIntent(openApp())
-        when {
-            running.size == 1 -> {
-                val t = running[0]
-                val pct = (t.progress * 100).toInt()
-                val stage = t.stage?.let { stageText(this, t) }
-                b.setContentTitle(t.title)
-                    .setContentText(
-                        stage ?: listOf("$pct %", t.speed, eta(t.etaSec), if (queued.isNotEmpty()) getString(R.string.notif_queued, queued.size) else "")
-                            .filter { it.isNotEmpty() }.joinToString(" · "),
-                    )
-                    .setProgress(100, pct, t.progress <= 0f || t.stage?.waiting == false)
-                    .addAction(0, getString(R.string.notif_pause), action(ACTION_PAUSE, t.id))
-                    .addAction(0, getString(R.string.notif_cancel), action(ACTION_CANCEL, t.id))
-            }
-            running.size > 1 -> {
-                val avg = running.map { it.progress }.average().toFloat()
-                b.setContentTitle(getString(R.string.notif_many, running.size))
-                    .setContentText(running.joinToString(" · ") { "${(it.progress * 100).toInt()} % ${it.title.take(24)}" })
-                    .setProgress(100, (avg * 100).toInt(), false)
-                    .addAction(0, getString(R.string.notif_pause_all), action(ACTION_PAUSE_ALL, ""))
-            }
-            queued.any { it.stage != null } -> {
-                val t = queued.first { it.stage != null }
-                b.setContentTitle(stageText(this, t))
-                    .setContentText(if (queued.size == 1) getString(R.string.notif_waiting_one) else getString(R.string.notif_waiting_many, queued.size))
-            }
-            else -> b.setContentTitle("Hamstr").setContentText(getString(R.string.notif_preparing)).setProgress(0, 0, true)
-        }
-        return b.build()
-    }
+    private fun progressNotification(): android.app.Notification = progressNotification(this)
+
+    private fun resumed(t: DownloadTask) = t.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0)
+
 
     /**
      * "Open when done": once the last download is in, Hamstr comes up playing it. From the
@@ -511,7 +533,7 @@ class DownloadService : Service() {
             .setStyle(NotificationCompat.BigTextStyle().bigText("${t.title}\n${getString(why.title)} · ${getString(why.hint)}"))
             .setAutoCancel(true)
             .setContentIntent(openApp())
-            .addAction(0, getString(R.string.notif_retry), action(ACTION_RESUME, id))
+            .addAction(0, getString(R.string.notif_retry), action(this, ACTION_RESUME, id))
             .build()
         postNotification(id.hashCode(), n)
     }
@@ -532,16 +554,7 @@ class DownloadService : Service() {
     /** Android allows it and the switch in Hamstr's settings is on. */
     private fun canNotify() = mayPost() && Prefs.settings.value.notifications
 
-    private fun action(action: String, id: String): PendingIntent = PendingIntent.getService(
-        this, (action + id).hashCode(),
-        Intent(this, DownloadService::class.java).setAction(action).putExtra(EXTRA_ID, id),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
-
-    private fun openApp(): PendingIntent = PendingIntent.getActivity(
-        this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
+    private fun openApp(): PendingIntent = openApp(this)
 
     private suspend fun scan(file: File): Uri? = withTimeoutOrNull(10_000) {
         // Indexing is optional; a missing scanner callback must not occupy a queue slot forever.
@@ -554,6 +567,10 @@ class DownloadService : Service() {
 
     companion object {
         const val ACTION_START = "app.hamstr.START"
+
+        /** The running service, if there is one; [send] hands it commands directly while a job holds it. */
+        @Volatile internal var current: DownloadService? = null
+
         const val ACTION_PAUSE = "app.hamstr.PAUSE"
         const val ACTION_PAUSE_ALL = "app.hamstr.PAUSE_ALL"
         const val ACTION_RESUME = "app.hamstr.RESUME"
@@ -562,7 +579,7 @@ class DownloadService : Service() {
         const val CH_PROGRESS = "progress"
         const val CH_DONE = "done"
         const val CH_QUIET = "quiet"
-        private const val NOTIF_PROGRESS = 1
+        internal const val NOTIF_PROGRESS = 1
         private const val NOTIF_TIMEOUT = 2
         private val SPEED = Regex("""at\s+~?\s*([\d.]+\s*[KMG]?i?B/s)""")
         private val POSTPROCESSOR = Regex("""^\[(\w+)]""")
@@ -648,7 +665,79 @@ class DownloadService : Service() {
             send(context, ACTION_START)
         }
 
+
+        private fun action(context: Context, action: String, id: String): PendingIntent = PendingIntent.getService(
+            context, (action + id).hashCode(),
+            Intent(context, DownloadService::class.java).setAction(action).putExtra(EXTRA_ID, id),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
+            context, 0, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        /** The one ongoing notification: what runs, how far, and what waits. */
+        fun progressNotification(context: Context): android.app.Notification {
+            val tasks = DownloadStore.tasks.value
+            val running = tasks.filter { it.status == Status.Running }
+            val queued = tasks.filter { it.status == Status.Queued }
+            val b = NotificationCompat.Builder(context, if (Prefs.settings.value.notifications) CH_PROGRESS else CH_QUIET)
+                .setSmallIcon(R.drawable.ic_stat_hamstr)
+                .setColor(Prefs.settings.value.accent)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                .setContentIntent(openApp(context))
+            when {
+                running.size == 1 -> {
+                    val t = running[0]
+                    val pct = (t.progress * 100).toInt()
+                    val stage = t.stage?.let { stageText(context, t) }
+                    b.setContentTitle(t.title)
+                        .setContentText(
+                            stage ?: listOf("$pct %", t.speed, eta(t.etaSec), if (queued.isNotEmpty()) context.getString(R.string.notif_queued, queued.size) else "")
+                                .filter { it.isNotEmpty() }.joinToString(" · "),
+                        )
+                        .setProgress(100, pct, t.progress <= 0f || t.stage?.waiting == false)
+                        .addAction(0, context.getString(R.string.notif_pause), action(context, ACTION_PAUSE, t.id))
+                        .addAction(0, context.getString(R.string.notif_cancel), action(context, ACTION_CANCEL, t.id))
+                }
+                running.size > 1 -> {
+                    val avg = running.map { it.progress }.average().toFloat()
+                    b.setContentTitle(context.getString(R.string.notif_many, running.size))
+                        .setContentText(running.joinToString(" · ") { "${(it.progress * 100).toInt()} % ${it.title.take(24)}" })
+                        .setProgress(100, (avg * 100).toInt(), false)
+                        .addAction(0, context.getString(R.string.notif_pause_all), action(context, ACTION_PAUSE_ALL, ""))
+                }
+                queued.any { it.stage != null } -> {
+                    val t = queued.first { it.stage != null }
+                    b.setContentTitle(stageText(context, t))
+                        .setContentText(if (queued.size == 1) context.getString(R.string.notif_waiting_one) else context.getString(R.string.notif_waiting_many, queued.size))
+                }
+                else -> b.setContentTitle("Hamstr").setContentText(context.getString(R.string.notif_preparing)).setProgress(0, 0, true)
+            }
+            return b.build()
+        }
+
         fun send(context: Context, action: String, id: String? = null) {
+            // A job holds the queue: the command goes straight in, no service start (and no foreground service).
+            val held = current?.takeIf { it.host != null }
+            if (held != null) {
+                Handler(Looper.getMainLooper()).post { held.handle(action, id) }
+                return
+            }
+            // Asked for with Hamstr open on Android 14+: a transfer job, which has no daily limit.
+            if ((action == ACTION_START || action == ACTION_RESUME) && DownloadJob.usable(context)) {
+                if (current == null) {
+                    if (action == ACTION_RESUME && id != null) DownloadStore.update(id) { t -> t.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0) }
+                    if (DownloadJob.schedule(context)) return
+                } else {
+                    // Already running as a foreground service: the job takes it over once it starts.
+                    DownloadJob.schedule(context)
+                }
+            }
             val i = Intent(context, DownloadService::class.java).setAction(action)
             if (id != null) i.putExtra(EXTRA_ID, id)
             ContextCompat.startForegroundService(context, i)

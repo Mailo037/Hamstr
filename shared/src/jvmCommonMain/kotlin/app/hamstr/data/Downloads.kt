@@ -85,6 +85,8 @@ data class DownloadTask(
     val stage: Stage? = null,
     val attempts: Int = 0,
     val retryAt: Long = 0,
+    /** How far the current [stage] is, 0 to 1, when the engine reports it; -1 otherwise. */
+    val stageProgress: Float = -1f,
 ) {
     /** The first download of a link and all its other qualities share this key. */
     val family get() = versionOf ?: id
@@ -119,7 +121,16 @@ object DownloadStore {
         if (::file.isInitialized) return
         file = File(dir, "downloads.json")
         val atomic = AtomicJson(file)
-        val loaded = runCatching { decode(atomic.read()) }.getOrDefault(emptyList())
+        val text = runCatching { atomic.read() }.getOrNull()
+        val read = text?.let { runCatching { read(it) }.getOrNull() }
+        // Whatever can't be read (a newer version's entry, a damaged file) is kept aside before
+        // the next save writes the list without it.
+        if (text != null && (read == null || read.skipped > 0)) {
+            runCatching { File(dir, "downloads.unreadable-${System.currentTimeMillis()}.json").writeText(text) }
+                .onFailure { Log.e("HamstrStore", "Could not keep the unreadable download history", it) }
+            Log.w("HamstrStore", "Kept ${read?.skipped ?: "all"} unreadable downloads aside")
+        }
+        val loaded = read?.tasks.orEmpty()
         // A process death interrupts running work; it resumes as queued (yt-dlp continues .part files).
         _tasks.value = loaded.map { if (it.status == Status.Running) it.copy(status = Status.Queued, speed = "", etaSec = -1) else it }
         scope.launch {
@@ -206,8 +217,17 @@ object DownloadStore {
         save()
     }
 
-    /** The saved list, as read from downloads.json or a copy of it. */
-    fun decode(text: String): List<DownloadTask> = JSONArray(text).let { a -> List(a.length()) { fromJson(a.getJSONObject(it)) } }
+    /** The saved list, as read from downloads.json or a copy of it; entries it can't read are left out. */
+    fun decode(text: String): List<DownloadTask> = read(text).tasks
+
+    class Read(val tasks: List<DownloadTask>, val skipped: Int)
+
+    /** Reads every entry on its own, so one it doesn't understand can't take the others with it. */
+    fun read(text: String): Read {
+        val a = JSONArray(text)
+        val tasks = (0 until a.length()).mapNotNull { i -> runCatching { fromJson(a.getJSONObject(i)) }.getOrNull() }
+        return Read(tasks, a.length() - tasks.size)
+    }
 
     private fun save() {
         if (!::file.isInitialized) return
@@ -235,14 +255,15 @@ object DownloadStore {
         source = o.optStringOrNull("source"),
         durationSec = o.optInt("duration"),
         choice = Choice(
-            mode = Mode.valueOf(o.optString("mode", "Video")),
+            mode = runCatching { Mode.valueOf(o.optString("mode", "Video")) }.getOrDefault(Mode.Video),
             height = o.optInt("height").takeIf { it > 0 },
             container = o.optString("container", "mp4"),
             audioFormat = o.optString("audioFormat", "opus"),
             subtitles = o.optBoolean("subtitles"),
             customFormat = o.optString("customFormat"),
         ),
-        status = Status.valueOf(o.optString("status", "Queued")),
+        // A state this version doesn't know (from a newer Hamstr) waits to be tried again.
+        status = runCatching { Status.valueOf(o.optString("status", "Queued")) }.getOrDefault(Status.Paused),
         progress = o.optDouble("progress", 0.0).toFloat(),
         filePath = o.optStringOrNull("filePath"),
         contentUri = o.optStringOrNull("contentUri"),

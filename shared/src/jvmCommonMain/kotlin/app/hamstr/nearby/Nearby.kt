@@ -4,11 +4,13 @@ import app.hamstr.Log
 import app.hamstr.data.AtomicJson
 import app.hamstr.data.KeyValues
 import app.hamstr.data.Prefs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +19,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -55,11 +59,25 @@ data class Peer(
     val online get() = via.isNotEmpty()
 }
 
-/** A link another device wants to send, waiting for "Accept" because the sender isn't trusted yet. */
-data class Request(val id: String, val from: Peer, val url: String, val title: String?)
+/** A file another device offers. */
+data class Offer(val name: String, val size: Long)
 
-/** What happened to a link sent with [Nearby.send]. */
-enum class SendResult { Sent, Queued, Failed }
+/**
+ * A link (or, with [files], some files) another device wants to send, waiting for "Accept"
+ * because the sender isn't trusted yet.
+ */
+data class Request(val id: String, val from: Peer, val url: String, val title: String?, val files: List<Offer> = emptyList())
+
+/** What happened to a link or files sent with [Nearby.send] or [Nearby.sendFiles]. */
+enum class SendResult { Sent, Queued, Failed, Declined }
+
+/** One connection to another device: whole messages, each way, until it closes. */
+interface Wire {
+    fun read(max: Int): ByteArray
+    fun write(bytes: ByteArray)
+    /** How long a [read] may wait, in milliseconds. */
+    var timeout: Int
+}
 
 /** Something that finds devices and carries messages: Wi-Fi on both apps, Bluetooth on the phone. */
 interface Transport {
@@ -69,18 +87,43 @@ interface Transport {
     /** Look harder for others, e.g. while the send sheet is open. */
     fun discover(on: Boolean) {}
     fun reaches(id: String): Boolean
-    suspend fun send(id: String, message: ByteArray): Boolean
+    /**
+     * Hands [message] to device [id] and passes its reply to [accept]. Places that answer
+     * with something [accept] refuses (anyone can claim to be [id] on a network) don't count:
+     * the next place it was heard at is tried.
+     */
+    suspend fun send(id: String, message: ByteArray, accept: (ByteArray) -> Boolean): Boolean
+}
+
+/** A transport that can also hold a connection open for more than one message: files. */
+interface StreamTransport : Transport {
+    /** The largest piece of a file per frame: smaller where the bytes go slower. */
+    val chunk: Int get() = 256 * 1024
+    /** Runs [block] on a connection to [id], trying each place it was heard at until [block] returns true. */
+    suspend fun exchange(id: String, block: (Wire) -> Boolean): Boolean
 }
 
 /**
- * Sending links between Hamstr apps nearby, like AirDrop: devices on the same Wi-Fi or in
- * Bluetooth range show up by themselves. The first link from a device asks; "Always allow"
- * remembers it. A link for a device that is away waits in the outbox until it shows up.
+ * Sending links and files between Hamstr apps nearby, like AirDrop: devices on the same Wi-Fi
+ * or in Bluetooth range show up by themselves. The first link from a device asks; "Always
+ * allow" remembers it. A link for a device that is away waits in the outbox until it shows up.
+ *
+ * Who a device is gets proven, not claimed: its beacons are signed, a message is sealed to the
+ * receiver's key so nobody else on the network can read it, and it only counts as delivered
+ * when the receiver signs for it. Messages name their receiver and expire, so one can't be
+ * played again to another device.
  */
 object Nearby {
     private const val TAG = "Nearby"
     private const val GONE_AFTER = 15_000L
-    private const val MAX_AGE = 24 * 60 * 60_000L
+    /** How old a signed beacon or message may be; also how long nonces are remembered. */
+    internal const val MAX_AGE = 10 * 60_000L
+    private const val PROTOCOL = 2
+    /** The largest piece of a file per frame. */
+    private const val CHUNK = 256 * 1024
+    private const val MAX_REPLY = 16 * 1024
+    /** How long a device that isn't trusted yet waits for "Accept" on files. */
+    private const val ASK_FOR = 120_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var store: KeyValues
@@ -96,6 +139,9 @@ object Nearby {
     val publicKey: String get() = b64(keys.public.encoded)
     val name: String get() = Prefs.settings.value.deviceName.ifBlank { defaultName }
 
+    /** Where files from other devices land until they are complete; the app moves them on. */
+    @Volatile var inbox: File? = null
+
     private var transports: List<Transport> = emptyList()
     private var available = true
     private var running = false
@@ -103,6 +149,8 @@ object Nearby {
 
     /** Called with a link to stash, from a trusted device or after "Accept". */
     var onLink: (url: String, title: String?, from: Peer) -> Unit = { _, _, _ -> }
+    /** Called with files that arrived complete, each with the name the sender gave it. */
+    var onFiles: (files: List<Pair<File, String>>, from: Peer) -> Unit = { files, _ -> files.forEach { it.first.delete() } }
     /** Called when an untrusted device asks; the app tells the user (a notification, the window). */
     var onRequest: (Request) -> Unit = {}
 
@@ -123,7 +171,12 @@ object Nearby {
 
     data class Outgoing(val to: String, val url: String, val title: String?, val at: Long)
 
-    private val nonces = LinkedHashSet<String>()
+    // Nonces seen in the last MAX_AGE, oldest first.
+    private val nonces = LinkedHashMap<String, Long>()
+    // Answers to file offers that wait for the user, by request id.
+    private val decisions = HashMap<String, CompletableDeferred<Boolean>>()
+    private val saves = Channel<Unit>(Channel.CONFLATED)
+    private val random = SecureRandom()
 
     fun init(store: KeyValues, dir: File, kind: DeviceKind, defaultName: String, transports: List<Transport>, initiallyAvailable: Boolean = true) {
         available = initiallyAvailable
@@ -131,10 +184,13 @@ object Nearby {
         this.kind = kind
         this.defaultName = defaultName
         this.transports = transports
+        if (inbox == null) inbox = File(dir, "nearby-inbox")
         file = AtomicJson(File(dir, "nearby.json"))
         keys = loadKeys()
         id = idOf(keys.public.encoded)
         load()
+        // One writer, off the window's thread: devices are remembered from every transport at once.
+        scope.launch { for (ignored in saves) writeNow() }
         scope.launch {
             Prefs.settings.map { it.nearby }.distinctUntilChanged().collect { updateAvailability() }
         }
@@ -184,7 +240,15 @@ object Nearby {
 
     private fun remembered(id: String) = synchronized(devices) { id in devices }
 
-    /** A transport heard a device. Its waiting links go out now. */
+    /** Whether files can go to [peer] now: over the shared network, or slower over Bluetooth. */
+    fun takesFiles(peer: Peer) = transports.any { it is StreamTransport && it.reaches(peer.id) }
+
+    /** Whether files to [peer] would have to go over Bluetooth, because there is no shared network. */
+    fun filesOverBluetooth(peer: Peer) = transports.filterIsInstance<StreamTransport>().filter { it.reaches(peer.id) }.let { ts ->
+        ts.isNotEmpty() && ts.none { it.via == Via.Wifi }
+    }
+
+    /** A transport heard a device whose [hello] checked out. Its waiting links go out now. */
     fun seen(id: String, name: String, kind: DeviceKind, key: String, via: Via) {
         if (id == this.id || idOf(unb64(key) ?: return) != id) return
         val now = System.currentTimeMillis()
@@ -213,24 +277,92 @@ object Nearby {
     // Runs in Nearby's own scope, so closing the sheet (or the share window) doesn't cut it off.
     suspend fun send(peer: Peer, url: String, title: String?): SendResult = scope.async {
         remember(peer)
-        if (deliver(peer.id, url, title)) return@async SendResult.Sent
+        if (deliver(peer.id, peer.key, url, title)) return@async SendResult.Sent
         _outbox.update { it + Outgoing(peer.id, url, title, System.currentTimeMillis()) }
         save()
         SendResult.Queued
     }.await()
 
-    private suspend fun deliver(to: String, url: String, title: String?): Boolean {
-        val message = sign(JSONObject().put("t", "link").put("url", url).put("title", title ?: ""))
+    private suspend fun deliver(to: String, key: String, url: String, title: String?): Boolean {
+        val publicKey = Seal.publicKey(key) ?: return false
+        val nonce = nonce()
+        val message = Seal.seal(publicKey, sign(JSONObject().put("t", "link").put("to", to).put("url", url).put("title", title ?: ""), nonce)).bytes
         for (t in transports.sortedBy { it.via.ordinal }) {
             if (!t.reaches(to)) continue
-            if (runCatching { t.send(to, message) }.onFailure { Log.w(TAG, "${t.via} send failed", it) }.getOrDefault(false)) return true
+            val ok = runCatching { t.send(to, message) { reply -> receipt(reply, to, nonce) != null } }
+                .onFailure { Log.w(TAG, "${t.via} send failed", it) }.getOrDefault(false)
+            if (ok) return true
         }
         return false
     }
 
+    /**
+     * Sends [files] over the shared network, or over Bluetooth when there is none. A device that
+     * doesn't trust this one yet asks first; [progress] runs from 0 to 1 while the bytes go.
+     */
+    suspend fun sendFiles(peer: Peer, files: List<File>, progress: (Float) -> Unit = {}): SendResult = scope.async {
+        val lan = transports.filterIsInstance<StreamTransport>().sortedBy { it.via.ordinal }.firstOrNull { it.reaches(peer.id) } ?: return@async SendResult.Failed
+        val publicKey = Seal.publicKey(peer.key) ?: return@async SendResult.Failed
+        val present = files.filter { it.isFile }
+        if (present.isEmpty()) return@async SendResult.Failed
+        remember(peer)
+        val nonce = nonce()
+        val list = JSONArray(present.map { JSONObject().put("name", it.name).put("size", it.length()) })
+        // The list goes in as text: a signature has to cover exactly what was sent.
+        val sealed = Seal.seal(publicKey, sign(JSONObject().put("t", "files").put("to", peer.id).put("files", list.toString()), nonce))
+        val total = present.sumOf { it.length() }.coerceAtLeast(1)
+        var result = SendResult.Failed
+        runCatching {
+            lan.exchange(peer.id) { wire ->
+                wire.write(sealed.bytes)
+                wire.timeout = (ASK_FOR + 10_000).toInt()
+                val answer = receipt(wire.read(MAX_REPLY), peer.id, nonce) ?: return@exchange false
+                if (!answer.optBoolean("ok")) {
+                    result = SendResult.Declined
+                    return@exchange true
+                }
+                wire.timeout = 30_000
+                val frames = Frames(sealed.dataKey)
+                val chunk = lan.chunk.coerceIn(1024, CHUNK)
+                val buf = ByteArray(chunk)
+                var sent = 0L
+                for (f in present) {
+                    val size = f.length()
+                    var left = size
+                    f.inputStream().use { input ->
+                        do {
+                            val n = fill(input, buf, minOf(chunk.toLong(), left).toInt())
+                            left -= n
+                            wire.write(frames.seal(buf, n, last = left <= 0 || n == 0))
+                            sent += n
+                            progress((sent.toFloat() / total).coerceIn(0f, 1f))
+                        } while (left > 0 && n > 0)
+                    }
+                }
+                wire.timeout = 60_000
+                val done = receipt(wire.read(MAX_REPLY), peer.id, nonce)
+                result = if (done?.optBoolean("ok") == true && done.optBoolean("done")) SendResult.Sent else SendResult.Failed
+                true
+            }
+        }.onFailure { Log.w(TAG, "Sending files failed", it) }
+        result
+    }.await()
+
+    /** Reads up to [n] bytes, as many as there are. */
+    private fun fill(input: java.io.InputStream, buf: ByteArray, n: Int): Int {
+        var got = 0
+        while (got < n) {
+            val r = input.read(buf, got, n - got)
+            if (r < 0) break
+            got += r
+        }
+        return got
+    }
+
     private suspend fun flush(to: String) {
+        val key = synchronized(devices) { devices[to]?.key } ?: _peers.value[to]?.key ?: return
         for (o in _outbox.value.filter { it.to == to }) {
-            if (!deliver(o.to, o.url, o.title)) return
+            if (!deliver(o.to, key, o.url, o.title)) return
             _outbox.update { it - o }
             save()
         }
@@ -242,31 +374,109 @@ object Nearby {
         save()
     }
 
-    /** A transport received a message. Returns false when it isn't a valid one. */
-    fun receive(bytes: ByteArray): Boolean {
-        val m = runCatching { JSONObject(String(bytes, Charsets.UTF_8)) }.getOrNull() ?: return false
-        val from = verify(m) ?: return false
-        if (m.optString("t") != "link") return false
-        val url = m.optString("url").takeIf { it.startsWith("http") } ?: return false
-        val title = m.optString("title").ifBlank { null }
+    /**
+     * A transport received a message: returns the signed receipt to send back, or null when
+     * it isn't a valid message for this device. Files need [wire], the connection they come
+     * on; for those the answers go over it here and an empty receipt comes back.
+     */
+    fun receive(bytes: ByteArray, wire: Wire? = null): ByteArray? {
+        val opened = Seal.open(keys.private, bytes) ?: return null
+        val m = runCatching { JSONObject(String(opened.plain, Charsets.UTF_8)) }.getOrNull() ?: return null
+        val from = verify(m) ?: return null
+        // For this device, now, and only once.
+        if (m.optString("to") != id || !fresh(m.optString("n"), m.optLong("ts"))) return null
         val peer = _peers.value[from.id]?.copy(name = from.name) ?: from
-        if (trusted(from.id)) {
-            Log.i(TAG, "Link from ${from.name}")
-            onLink(url, title, peer)
-        } else {
-            val r = Request(UUID.randomUUID().toString(), peer, url, title)
+        return when (m.optString("t")) {
+            "link" -> {
+                val url = m.optString("url").takeIf { it.startsWith("http://") || it.startsWith("https://") } ?: return null
+                val title = m.optString("title").ifBlank { null }
+                if (trusted(from.id)) {
+                    Log.i(TAG, "Link from ${from.name}")
+                    onLink(url, title, peer)
+                } else {
+                    val r = Request(UUID.randomUUID().toString(), peer, url, title)
+                    _requests.update { it + r }
+                    onRequest(r)
+                }
+                receipt(from.id, m.optString("n"), ok = true)
+            }
+            "files" -> {
+                if (wire == null) return receipt(from.id, m.optString("n"), ok = false)
+                takeFiles(peer, m, opened.dataKey, wire)
+                ByteArray(0)
+            }
+            else -> null
+        }
+    }
+
+    /** The files of an offer: asks when the sender isn't trusted, then reads them into the inbox. */
+    private fun takeFiles(from: Peer, m: JSONObject, dataKey: ByteArray, wire: Wire) {
+        val nonce = m.optString("n")
+        val offers = runCatching {
+            val a = JSONArray(m.getString("files"))
+            List(a.length()) { i -> a.getJSONObject(i).let { Offer(safeName(it.getString("name")), it.getLong("size")) } }
+        }.getOrNull()?.takeIf { list -> list.isNotEmpty() && list.all { it.size >= 0 } }
+        val dir = inbox
+        val total = offers?.sumOf { it.size } ?: 0
+        if (offers == null || dir == null || !dir.apply { mkdirs() }.isDirectory || dir.usableSpace < total + 64L * 1024 * 1024) {
+            wire.write(receipt(from.id, nonce, ok = false))
+            return
+        }
+        val accepted = trusted(from.id) || run {
+            val r = Request(UUID.randomUUID().toString(), from, "", null, offers)
+            val decision = CompletableDeferred<Boolean>()
+            synchronized(decisions) { decisions[r.id] = decision }
             _requests.update { it + r }
             onRequest(r)
+            val answer = runBlocking { withTimeoutOrNull(ASK_FOR) { decision.await() } } ?: false
+            synchronized(decisions) { decisions.remove(r.id) }
+            _requests.update { list -> list.filterNot { it.id == r.id } }
+            answer
         }
-        return true
+        wire.write(receipt(from.id, nonce, ok = accepted))
+        if (!accepted) return
+        val frames = Frames(dataKey)
+        val parts = mutableListOf<Pair<File, String>>()
+        try {
+            wire.timeout = 30_000
+            for (offer in offers) {
+                val part = File(dir, "${UUID.randomUUID()}.part")
+                parts += part to offer.name
+                var got = 0L
+                part.outputStream().buffered(CHUNK).use { out ->
+                    while (true) {
+                        val (data, last) = frames.open(wire.read(CHUNK + 64))
+                        got += data.size
+                        check(got <= offer.size) { "More than offered" }
+                        out.write(data)
+                        if (last) break
+                    }
+                }
+                check(got == offer.size) { "Cut short" }
+            }
+            wire.write(receipt(from.id, nonce, ok = true, done = true))
+        } catch (e: Exception) {
+            Log.w(TAG, "Files from ${from.name} didn't arrive", e)
+            parts.forEach { it.first.delete() }
+            return
+        }
+        onFiles(parts, from)
     }
+
+    /** A sender's name for a file, without folders or characters a file system refuses. */
+    internal fun safeName(name: String): String =
+        name.substringAfterLast('/').substringAfterLast('\\').replace(Regex("""[\x00-\x1f:*?"<>|]"""), "_")
+            .trim().trimStart('.').take(180).ifBlank { "file" }
 
     /** The user answered a request: [always] trusts the device from now on. */
     fun answer(r: Request, accept: Boolean, always: Boolean = false) {
         _requests.update { list -> list.filterNot { it.id == r.id } }
-        if (!accept) return
-        if (always) trust(r.from, true) else remember(r.from)
-        onLink(r.url, r.title, r.from)
+        if (accept && always) trust(r.from, true) else if (accept) remember(r.from)
+        if (r.files.isNotEmpty()) {
+            synchronized(decisions) { decisions[r.id] }?.complete(accept)
+            return
+        }
+        if (accept) onLink(r.url, r.title, r.from)
     }
 
     fun trusted(id: String) = synchronized(devices) { devices[id]?.trusted == true }
@@ -294,36 +504,47 @@ object Nearby {
         save()
     }
 
-    /** Who this device is, for beacons and Bluetooth: id, name, kind and public key. */
-    fun hello(): JSONObject = JSONObject().put("hamstr", 1).put("id", id).put("name", name).put("kind", kind.name).put("key", publicKey)
+    /**
+     * Who this device is, for beacons and Bluetooth: id, name, kind and public key, signed.
+     * [port] is where links go on the network; [bye] says it is leaving.
+     */
+    fun hello(port: Int? = null, bye: Boolean = false): JSONObject = sign(JSONObject().put("hamstr", PROTOCOL).put("t", "hello").apply {
+        if (port != null) put("port", port)
+        if (bye) put("bye", true)
+    })
+
+    /** The device a beacon or Bluetooth hello is from, when its signature holds and it is recent. */
+    fun checkHello(m: JSONObject): Peer? = if (m.optInt("hamstr") == PROTOCOL && m.optString("t") == "hello") verify(m) else null
 
     // --- Signing -------------------------------------------------------------------------
 
-    private fun sign(body: JSONObject): ByteArray {
-        body.put("v", 1).put("id", id).put("name", name).put("kind", kind.name).put("key", publicKey)
-            .put("ts", System.currentTimeMillis()).put("n", b64(ByteArray(12).also { SecureRandom().nextBytes(it) }))
+    private fun nonce() = b64(ByteArray(12).also(random::nextBytes))
+
+    private fun sign(body: JSONObject, nonce: String = nonce()): JSONObject {
+        body.put("v", PROTOCOL).put("id", id).put("name", name).put("kind", kind.name).put("key", publicKey)
+            .put("ts", System.currentTimeMillis()).put("n", nonce)
         val sig = Signature.getInstance("SHA256withECDSA").run {
             initSign(keys.private)
             update(signed(body))
             sign()
         }
-        return body.put("sig", b64(sig)).toString().toByteArray(Charsets.UTF_8)
+        return body.put("sig", b64(sig))
     }
 
-    /** The fields a signature covers, in a fixed order. */
-    private fun signed(m: JSONObject) = listOf("v", "t", "id", "name", "kind", "key", "ts", "n", "url", "title")
-        .joinToString("\n") { m.opt(it)?.toString().orEmpty() }.toByteArray(Charsets.UTF_8)
+    private fun JSONObject.bytes() = toString().toByteArray(Charsets.UTF_8)
 
+    private fun Seal.seal(to: java.security.PublicKey, m: JSONObject) = seal(to, m.bytes())
+
+    /** Every field but the signature, sorted, so both sides sign the same bytes whatever their JSON library's order. */
+    internal fun signed(m: JSONObject) = m.keys().asSequence().filter { it != "sig" }.sorted()
+        .joinToString("\n") { "$it=${m.get(it)}" }.toByteArray(Charsets.UTF_8)
+
+    /** The sender of a signed message, when its key matches its id, the signature holds and it is recent. */
     private fun verify(m: JSONObject): Peer? {
         val key = unb64(m.optString("key")) ?: return null
         val id = m.optString("id")
         if (idOf(key) != id || id == this.id) return null
         if (kotlin.math.abs(System.currentTimeMillis() - m.optLong("ts")) > MAX_AGE) return null
-        val nonce = m.optString("n")
-        synchronized(nonces) {
-            if (!nonces.add(nonce)) return null
-            if (nonces.size > 500) nonces.remove(nonces.first())
-        }
         val ok = runCatching {
             Signature.getInstance("SHA256withECDSA").run {
                 initVerify(KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(key)))
@@ -334,6 +555,32 @@ object Nearby {
         if (!ok) return null
         val kind = runCatching { DeviceKind.valueOf(m.optString("kind")) }.getOrDefault(DeviceKind.Phone)
         return Peer(id, m.optString("name").take(60).ifBlank { "Hamstr" }, kind, m.optString("key"))
+    }
+
+    /** True the first time a nonce shows up within [MAX_AGE]. */
+    private fun fresh(nonce: String, ts: Long): Boolean {
+        if (nonce.isEmpty()) return false
+        val now = System.currentTimeMillis()
+        synchronized(nonces) {
+            val it = nonces.entries.iterator()
+            while (it.hasNext()) { if (now - it.next().value > 2 * MAX_AGE) it.remove() else break }
+            if (nonce in nonces) return false
+            nonces[nonce] = now
+            if (nonces.size > 5_000) nonces.remove(nonces.keys.first())
+        }
+        return kotlin.math.abs(now - ts) <= MAX_AGE
+    }
+
+    /** This device's signed answer to message [nonce] from [to]. */
+    private fun receipt(to: String, nonce: String, ok: Boolean, done: Boolean = false): ByteArray =
+        sign(JSONObject().put("t", "ack").put("to", to).put("re", nonce).put("ok", ok).apply { if (done) put("done", true) }).bytes()
+
+    /** The receipt in [reply], when [from] signed it for this device's message [nonce]. */
+    private fun receipt(reply: ByteArray, from: String, nonce: String): JSONObject? {
+        val m = runCatching { JSONObject(String(reply, Charsets.UTF_8)) }.getOrNull() ?: return null
+        val signer = verify(m) ?: return null
+        if (signer.id != from || m.optString("t") != "ack" || m.optString("to") != id || m.optString("re") != nonce) return null
+        return m
     }
 
     private fun loadKeys(): KeyPair {
@@ -357,22 +604,27 @@ object Nearby {
         val list = root.optJSONArray("devices") ?: JSONArray()
         synchronized(devices) {
             for (i in 0 until list.length()) {
-                val d = list.getJSONObject(i)
+                val d = list.optJSONObject(i) ?: continue
                 val kind = runCatching { DeviceKind.valueOf(d.optString("kind")) }.getOrDefault(DeviceKind.Phone)
-                val p = Peer(d.getString("id"), d.optString("name"), kind, d.optString("key"), d.optLong("seen"), trusted = d.optBoolean("trusted"))
+                val p = runCatching { Peer(d.getString("id"), d.optString("name"), kind, d.optString("key"), d.optLong("seen"), trusted = d.optBoolean("trusted")) }.getOrNull() ?: continue
                 devices[p.id] = p
             }
             _peers.value = devices.toMap()
-            _known.value = devices.values.toList()
+            _known.value = devices.values.sortedBy { it.name.lowercase() }
         }
         val out = root.optJSONArray("outbox") ?: JSONArray()
-        _outbox.value = (0 until out.length()).map { i ->
-            val o = out.getJSONObject(i)
-            Outgoing(o.getString("to"), o.getString("url"), o.optString("title").ifBlank { null }, o.optLong("at"))
+        _outbox.value = (0 until out.length()).mapNotNull { i ->
+            val o = out.optJSONObject(i) ?: return@mapNotNull null
+            runCatching { Outgoing(o.getString("to"), o.getString("url"), o.optString("title").ifBlank { null }, o.optLong("at")) }.getOrNull()
         }
     }
 
     private fun save() {
+        synchronized(devices) { _known.value = devices.values.sortedBy { it.name.lowercase() } }
+        saves.trySend(Unit)
+    }
+
+    private fun writeNow() {
         val root = JSONObject()
         synchronized(devices) {
             val live = _peers.value
@@ -381,7 +633,6 @@ object Nearby {
                 JSONObject().put("id", k.id).put("name", k.name).put("kind", k.kind.name).put("key", k.key).put("seen", seen).put("trusted", k.trusted)
             }))
         }
-        synchronized(devices) { _known.value = devices.values.sortedBy { it.name.lowercase() } }
         root.put("outbox", JSONArray(_outbox.value.map { JSONObject().put("to", it.to).put("url", it.url).put("title", it.title ?: "").put("at", it.at) }))
         runCatching { file.write(root.toString()) }.onFailure { Log.w(TAG, "Couldn't save nearby.json", it) }
     }

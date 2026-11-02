@@ -169,7 +169,7 @@
     <string name="share_other_apps">他のアプリで共有</string>
     <string name="share_copy_file">ファイルをコピー</string>
     <string name="share_copy_files">ファイルをコピー</string>
-    <string name="share_file_nearby_hint">Hamstr の端末に送るには、「リンク」を選んでください。</string>
+    <string name="share_file_nearby_hint">ファイルそのものを近くの Hamstr 端末に送ります。同じ Wi-Fi 経由、または低速ですが Bluetooth 経由で、その端末だけが開けるように封をして届けます。</string>
     <string name="share_unavailable">このファイルはもう共有できません。</string>
     <string name="menu_rename">名前を変更</string>
     <string name="menu_info">ファイル情報</string>
@@ -459,7 +459,7 @@
     <string name="add_files">スマホからファイルを追加</string>
     <string name="add_files_hint">動画、音楽、ドキュメント。Download/Hamstr にコピーされます。</string>
     <string name="add_files_desktop">このコンピューターからファイルを追加</string>
-    <string name="add_files_hint_desktop">動画、音楽、ドキュメント。Downloads/Hamstr にコピーされます。</string>
+    <string name="add_files_hint_desktop">動画、音楽、ドキュメント。Hamstr のフォルダにコピーされます。</string>
     <string name="upd_tap">タップして更新、ブラウザ不要</string>
     <string name="upd_update">更新</string>
     <string name="upd_new">新</string>
@@ -646,12 +646,12 @@
     <string name="nearby_always">常に許可</string>
     <string name="nearby_once">今回だけ</string>
     <string name="nearby_decline">拒否</string>
-    <string name="nearby_ask_hint">「常に許可」を選ぶと、この端末からのリンクはそのままストックに入ります。</string>
+    <string name="nearby_ask_hint">「常に許可」を選ぶと、この端末からのリンクとファイルを確認なしで受け取ります。</string>
     <string name="nearby_received">%1$s から</string>
     <string name="nearby_waiting">送信待ち: %1$d 件</string>
     <string name="page_devices">デバイス</string>
     <string name="set_nearby">近くの端末に表示</string>
-    <string name="set_nearby_hint">他の Hamstr アプリがこの端末を見つけてリンクを送れます</string>
+    <string name="set_nearby_hint">他の Hamstr アプリがこの端末を見つけてリンクやファイルを送れます</string>
     <string name="set_nearby_bluetooth">Bluetooth</string>
     <string name="set_nearby_bluetooth_hint">共有 Wi-Fi がない端末も見つけます</string>
     <string name="set_nearby_bluetooth_off">まだ許可されていません。タップして許可してください。</string>
@@ -729,4 +729,25 @@
     <string name="desktop_update_opened">インストーラーを開きました。初回と同じようにインストールしてください。</string>
     <string name="desktop_update_coming">Hamstr %1$s が近日公開</string>
     <string name="desktop_update_coming_hint">このコンピューター向けのインストーラーはまだビルド中です。数分後にもう一度確認します。</string>
+    <string name="set_nearby_bluetooth_none">このコンピュータには Hamstr が使える Bluetooth がありません</string>
+    <string name="set_nearby_bluetooth_missing">この Hamstr のビルドには Bluetooth ヘルパーが含まれていません</string>
+    <string name="nearby_files_here">ファイルはここにある端末にだけ送れます</string>
+    <string name="nearby_files_bluetooth">Bluetooth 経由（低速）</string>
+    <string name="nearby_sending_percent" formatted="false">送信中 · %1$d %</string>
+    <string name="nearby_declined">拒否されました</string>
+    <plurals name="nearby_files_offer">
+        <item quantity="other">%1$d 個のファイル · %2$s</item>
+    </plurals>
+    <string name="set_folder_phone">Download 内のフォルダ</string>
+    <string name="set_folder_phone_hint">新しいダウンロードは Download 内のこのフォルダに入ります。空欄なら Download/Hamstr です。ストック済みのものはそのままです。</string>
+    <string name="add_options">オプション</string>
+    <string name="add_kind">動画か音声か</string>
+    <string name="add_subtitles_hint">サイトにあれば、あなたの言語で</string>
+    <string name="add_subs_short">字幕</string>
+    <string name="desktop_folder_change">フォルダを選ぶ</string>
+    <string name="desktop_folder_reset">Hamstr のフォルダに戻す</string>
+    <string name="desktop_folder_hint">新しいダウンロードはここに入ります。ストック済みのものはそのままです。</string>
+    <string name="desktop_cheek_update">Cheek を更新</string>
+    <string name="set_transfer_jobs">1 日の上限なしで長いダウンロード</string>
+    <string name="set_transfer_jobs_hint">Hamstr で始めたダウンロードは Android のダウンロードジョブとして動くので、1 日 6 時間を過ぎても止められません。</string>
 </resources>

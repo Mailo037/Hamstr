@@ -43,6 +43,10 @@ import androidx.compose.runtime.collectAsState
 import app.hamstr.ui.components.LocalAmbient
 import java.awt.Dimension
 import java.awt.SystemTray
+import java.awt.datatransfer.DataFlavor
+import java.awt.dnd.DnDConstants
+import java.awt.dnd.DropTarget
+import java.awt.dnd.DropTargetDropEvent
 import java.io.File
 import kotlin.system.exitProcess
 
@@ -60,10 +64,11 @@ fun main(args: Array<String>) {
     // Started again by an update: did the new version arrive?
     args.firstOrNull { it.startsWith(Updater.UPDATED_FLAG) }?.let { Updater.restarted(it.removePrefix(Updater.UPDATED_FLAG)) }
     Updater.watch()
+    Nearby.inbox = Paths.inbox
     Nearby.init(
         PropertiesFile(File(Paths.data, "nearby.properties")), Paths.data, DeviceKind.Desktop,
         defaultName = System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "Computer",
-        transports = listOf(LanTransport()),
+        transports = listOf(LanTransport(), DesktopBluetooth),
     )
     val icon = Thread.currentThread().contextClassLoader.getResourceAsStream("hamstr_window.png")?.use { BitmapPainter(loadImageBitmap(it)) }
     // Not every Linux desktop has a tray; there closing the window quits as before.
@@ -85,6 +90,10 @@ fun main(args: Array<String>) {
             Nearby.onLink = { url, title, from ->
                 Queue.stash(url)
                 if (tray) trayState.sendNotification(Notification(received.replace("%s", from.name), title ?: url))
+            }
+            Nearby.onFiles = { files, from ->
+                val kept = Files.adopt(files, from.name)
+                if (tray && kept.isNotEmpty()) trayState.sendNotification(Notification(received.replace("%s", from.name), kept.joinToString(", ") { it.name }))
             }
         }
         if (tray) key(language) {
@@ -121,6 +130,22 @@ fun main(args: Array<String>) {
             LaunchedEffect(Unit) { Instance.show.collect { visible = true; window.isMinimized = false; window.toFront() } }
             LaunchedEffect(Unit) {
                 window.minimumSize = Dimension(760, 520)
+                // Files dropped on the window come in like picked ones; a dropped link is stashed.
+                window.contentPane.dropTarget = object : DropTarget() {
+                    override fun drop(e: DropTargetDropEvent) {
+                        e.acceptDrop(DnDConstants.ACTION_COPY)
+                        val t = e.transferable
+                        runCatching {
+                            when {
+                                t.isDataFlavorSupported(DataFlavor.javaFileListFlavor) ->
+                                    Files.import((t.getTransferData(DataFlavor.javaFileListFlavor) as List<*>).filterIsInstance<File>())
+                                t.isDataFlavorSupported(DataFlavor.stringFlavor) ->
+                                    (t.getTransferData(DataFlavor.stringFlavor) as? String)?.let(MediaLinks::find)?.let { Queue.stash(it) }
+                            }
+                        }
+                        e.dropComplete(true)
+                    }
+                }
                 frame.round()
                 if (Paths.mac) window.rootPane.apply {
                     putClientProperty("apple.awt.fullWindowContent", true)

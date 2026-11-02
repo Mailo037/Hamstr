@@ -152,9 +152,16 @@ jobs:
         run: |
           if [ ! -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then choco install innosetup -y --no-progress; fi
 
+      # The Bluetooth helper (desktop/ble) is Rust; on Linux it speaks to BlueZ over D-Bus.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: D-Bus headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
       - name: Installer
         shell: bash
-        run: ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${TAG#v}"
+        run: ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${TAG#v}" -Phamstr.requireBle=true
 
       - name: Publish
         shell: bash
@@ -180,12 +187,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: SHA256SUMS.txt
+      # Signed with the release key: the desktop app only installs what this signature covers
+      # (ReleaseKeys.HAMSTR). The secret holds the PEM of signing/hamstr-release-key.pem.
+      - name: SHA256SUMS.txt and its signature
         env:
           GH_TOKEN: ${{ github.token }}
+          SIGNING_KEY: ${{ secrets.HAMSTR_SIGNING_KEY }}
         run: |
+          test -n "$SIGNING_KEY" || { echo "HAMSTR_SIGNING_KEY is not set"; exit 1; }
           mkdir all && cd all
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "Hamstr-*"
           sha256sum Hamstr-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
-          gh release upload "$TAG" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+          printf '%s\n' "$SIGNING_KEY" > key.pem
+          openssl dgst -sha256 -sign key.pem -out SHA256SUMS.txt.sig SHA256SUMS.txt
+          rm key.pem
+          gh release upload "$TAG" SHA256SUMS.txt SHA256SUMS.txt.sig --repo "$GITHUB_REPOSITORY" --clobber

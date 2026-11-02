@@ -588,7 +588,23 @@ private fun QueuePage() {
             onClick = { openFolder(context) },
         ) { Icon(Res.drawable.ic_folder_open, tint = Hamstr.colors.muted, size = 20.dp) }
         Divider()
+        // A folder inside Download: Android lets any kind of file live there, the other shared folders not.
+        var folder by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(s.downloadFolder)) }
+        SettingBlock(stringResource(R.string.set_folder_phone)) {
+            app.hamstr.ui.components.SheetField(
+                folder,
+                { v -> folder = v; Prefs.edit { it.copy(downloadFolder = v.text.take(120)) } },
+                "Hamstr", Res.drawable.ic_folder_open, mono = true,
+            )
+            Spacer(Modifier.height(6.dp))
+            app.hamstr.ui.components.Txt(stringResource(R.string.set_folder_phone_hint), style = Hamstr.type.small, color = Hamstr.colors.ghost)
+        }
+        Divider()
         FxRow(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_hint), s.wifiOnly) { v -> Prefs.edit { it.copy(wifiOnly = v) } }
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            Divider()
+            FxRow(stringResource(R.string.set_transfer_jobs), stringResource(R.string.set_transfer_jobs_hint), s.transferJobs) { v -> Prefs.edit { it.copy(transferJobs = v) } }
+        }
     }
     Spacer(Modifier.height(12.dp))
     Group { NotificationsRow() }

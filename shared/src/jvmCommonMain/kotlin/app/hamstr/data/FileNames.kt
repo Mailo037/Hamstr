@@ -8,6 +8,15 @@ object FileNames {
     fun cleanName(stem: String): String =
         Regex("""^(.*\S) \[[^\[\]]+\]((?: [\w-]+)?)$""").find(stem)?.let { it.groupValues[1] + it.groupValues[2] } ?: stem
 
+    /**
+     * A folder path typed by the user, safe to put under Download: no "..", no characters a
+     * file system refuses, "Hamstr" when nothing is left.
+     */
+    fun subfolder(raw: String): String = raw.split('/', '\\')
+        .map { it.replace(Regex("""[\x00-\x1f:*?"<>|]"""), "_").trim().trimEnd('.') }
+        .filter { it.isNotEmpty() && it != "." && it != ".." }
+        .joinToString("/").ifEmpty { "Hamstr" }
+
     /** [name] in [dir], or "name (1).ext" and so on when it is taken. */
     fun freeName(dir: File, name: String): File {
         val base = name.substringBeforeLast('.', name)

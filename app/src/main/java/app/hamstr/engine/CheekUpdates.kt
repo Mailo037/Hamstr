@@ -15,11 +15,11 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 
 /**
  * Cheek updates itself from its own GitHub releases, the way yt-dlp does, so a new Cheek
- * doesn't need a new Hamstr release. The copy inside the APK stays as the fallback.
+ * doesn't need a new Hamstr release. Only releases signed with Cheek's release key go in
+ * ([ReleaseKeys]); the copy inside the APK stays as the fallback.
  */
 object CheekUpdates {
     private const val TAG = "HamstrCheek"
@@ -30,7 +30,7 @@ object CheekUpdates {
     val updating: StateFlow<Boolean> = _updating.asStateFlow()
     private val mutex = Mutex()
 
-    private class Latest(val version: String, val binary: String, val sums: String)
+    private class Latest(val version: String, val binary: String, val sums: String, val signature: String?)
 
     /** Only looks; nothing is downloaded. */
     suspend fun checkVersion() = withContext(Dispatchers.IO) { mutex.withLock {
@@ -52,14 +52,14 @@ object CheekUpdates {
         try {
             val latest = latest()
             if (Cheek.accepts(latest.version)) {
-                val sums = String(download(latest.sums)).lineSequence().filter { it.isNotBlank() }.associate { line ->
-                    val (hash, name) = line.trim().split(Regex("\\s+"), limit = 2)
-                    name.removePrefix("*") to hash.lowercase()
-                }
+                // The checksums only count when Cheek's release key signed them: Hamstr runs this file.
+                val sumsText = download(latest.sums)
+                val signature = latest.signature ?: error("Cheek ${latest.version} isn't signed; keeping ${Cheek.active.value}")
+                check(ReleaseKeys.verify(sumsText, download(signature), ReleaseKeys.CHEEK)) { "Cheek ${latest.version} has no valid signature" }
+                val sums = ReleaseKeys.sums(String(sumsText))
                 val bytes = download(latest.binary)
                 val name = latest.binary.substringAfterLast('/')
-                val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-                check(hash == sums[name]) { "Cheek ${latest.version} didn't match its checksum" }
+                check(ReleaseKeys.sha256(bytes) == sums[name]) { "Cheek ${latest.version} didn't match its checksum" }
                 Cheek.install(latest.version, bytes)
             }
             _check.value = EngineVersionCheck.Current
@@ -81,7 +81,8 @@ object CheekUpdates {
         val assets = release.getJSONArray("assets").let { a -> List(a.length()) { a.getJSONObject(it) } }
         fun url(name: String) = assets.firstOrNull { it.optString("name") == name }?.optString("browser_download_url")
             ?: error("Cheek $version has no $name")
-        return Latest(version, url("cheek-android-${Cheek.abi}"), url("SHA256SUMS.txt"))
+        val signature = assets.firstOrNull { it.optString("name") == "SHA256SUMS.txt.sig" }?.optString("browser_download_url")
+        return Latest(version, url("cheek-android-${Cheek.abi}"), url("SHA256SUMS.txt"), signature)
     }
 
     private suspend fun download(url: String, json: Boolean = false): ByteArray = runInterruptible {

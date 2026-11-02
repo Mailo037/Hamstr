@@ -39,6 +39,8 @@ fun stageString(t: DownloadTask, now: Long = System.currentTimeMillis()): Pair<S
 @Composable
 fun stageText(t: DownloadTask, now: Long = System.currentTimeMillis()): String? =
     stageString(t, now)?.let { (res, arg) -> if (arg == null) stringResource(res) else stringResource(res, arg) }
+        // How far ffmpeg is, when the engine says: "Merging video and audio · 42 %".
+        ?.let { text -> if (t.stageProgress >= 0f && t.stage?.waiting == false) text.removeSuffix(" …") + " · ${(t.stageProgress * 100).toInt()} %" else text }
 
 /** The meta line under a download: where it is, how fast, or what it weighs and when it came. */
 @Composable

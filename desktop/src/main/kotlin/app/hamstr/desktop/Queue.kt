@@ -18,6 +18,7 @@ import app.hamstr.engine.Formats
 import app.hamstr.engine.MediaLinks
 import app.hamstr.engine.GlyphLinks
 import app.hamstr.engine.MediaJson
+import app.hamstr.engine.Versions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -51,6 +52,8 @@ object Queue : DownloadControl {
     val engine: StateFlow<EngineState> = _engine.asStateFlow()
 
     private const val PROGRESS = "HAMSTR_PROGRESS "
+    /** The first Cheek that embeds subtitles and downloads yt-dlp's playlists itself. */
+    private const val CHEEK_SUBTITLES = "0.3.2"
     private val POSTPROCESSOR = Regex("""^\[(\w+)]""")
     private val CHEEK_UNSUPPORTED = Regex("isn't supported yet|has no URL|use yt-dlp", RegexOption.IGNORE_CASE)
     // Seconds before each automatic retry of a broken connection, as on the phone.
@@ -83,8 +86,11 @@ object Queue : DownloadControl {
             Log.e(TAG, "yt-dlp doesn't start", e)
             EngineState.Broken(e.message ?: e.toString())
         }
+        if (_engine.value is EngineState.Ready && watching.compareAndSet(false, true)) ToolUpdates.watch()
         pump()
     }
+
+    private val watching = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private val _updatingYtDlp = MutableStateFlow(false)
     /** True while yt-dlp updates itself. */
@@ -99,14 +105,21 @@ object Queue : DownloadControl {
      */
     fun updateYtDlp() {
         if (_updatingYtDlp.value) return
-        _updatingYtDlp.value = true
-        _ytDlpUpdateError.value = null
-        scope.launch {
-            runCatching { output(listOf(Tools.ytDlp.path, "-U", "--update-to", "stable")) }
-                .onFailure { Log.w(TAG, "yt-dlp update failed", it); _ytDlpUpdateError.value = it.message ?: it.toString() }
-            runCatching { _engine.value = EngineState.Ready(output(listOf(Tools.ytDlp.path, "--version")).trim()) }
-            _updatingYtDlp.value = false
+        scope.launch { updateYtDlpNow() }
+    }
+
+    /** [updateYtDlp], waiting for it: the daily update in ToolUpdates. */
+    suspend fun updateYtDlpNow() {
+        if (_engine.value !is EngineState.Ready) return
+        synchronized(this) {
+            if (_updatingYtDlp.value) return
+            _updatingYtDlp.value = true
         }
+        _ytDlpUpdateError.value = null
+        runCatching { output(listOf(Tools.ytDlp.path, "-U", "--update-to", "stable")) }
+            .onFailure { Log.w(TAG, "yt-dlp update failed", it); _ytDlpUpdateError.value = it.message ?: it.toString() }
+        runCatching { _engine.value = EngineState.Ready(output(listOf(Tools.ytDlp.path, "--version")).trim()) }
+        _updatingYtDlp.value = false
     }
 
     /** Queues a link with the default choice from Settings. */
@@ -151,11 +164,17 @@ object Queue : DownloadControl {
             }
             job.start()
         }
-        // The next retry wakes the queue by itself.
-        DownloadStore.tasks.value.filter { it.status == Status.Queued && it.retryAt > now }.minOfOrNull { it.retryAt }?.let { at ->
-            scope.launch { delay(at - now + 50); pump() }
+        // The next retry wakes the queue by itself: one alarm, set for the earliest.
+        val next = DownloadStore.tasks.value.filter { it.status == Status.Queued && it.retryAt > now }.minOfOrNull { it.retryAt }
+        if (next != wakeAt) {
+            wake?.cancel()
+            wakeAt = next
+            wake = next?.let { at -> scope.launch { delay(at - now + 50); synchronized(this@Queue) { wakeAt = null }; pump() } }
         }
     }
+
+    private var wake: Job? = null
+    private var wakeAt: Long? = null
 
     private suspend fun download(task: DownloadTask) {
         DownloadStore.update(task.id) {
@@ -201,15 +220,17 @@ object Queue : DownloadControl {
             val infoFile = File(work, "info.json").apply { writeText(json) }
             Paths.downloads.mkdirs()
             var run: Run? = null
-            if ((single || native) && Prefs.settings.value.engine == DownloadEngine.Cheek && Tools.hasCheek && cheekHandles(task)) {
+            if ((single || native || cheekHandles(task, playlist = true)) && Prefs.settings.value.engine == DownloadEngine.Cheek && Tools.hasCheek && cheekHandles(task)) {
                 run = cheek(task, infoFile, work, paths)
                 // Formats Cheek can't fetch (DASH fragments, DRM) go to yt-dlp after all.
-                if (!native && run.code != 0 && CHEEK_UNSUPPORTED.containsMatchIn(run.err)) run = null.also { paths.delete() }
+                if (!native && run.code != 0 && CHEEK_UNSUPPORTED.containsMatchIn(run.err) && paths.lines().isEmpty()) run = null.also { paths.delete() }
             }
             if (run == null) run = ytDlp(task, if (single) infoFile else null, work, paths)
             if (DownloadStore.get(task.id)?.status != Status.Running) return
-            if (run.code != 0) error(run.err.lines().lastOrNull { it.contains("ERROR") }?.substringAfter("ERROR: ")
+            // A playlist whose songs mostly came keeps those; a single file that failed is a failure.
+            if (run.code != 0 && (single || paths.lines().isEmpty())) error(run.err.lines().lastOrNull { it.contains("ERROR") }?.substringAfter("ERROR: ")
                 ?: run.err.lines().lastOrNull { it.isNotBlank() } ?: "exit ${run.code}")
+            if (run.code != 0) Log.w(TAG, "Some of ${task.url} didn't come: ${run.err.lines().lastOrNull { it.isNotBlank() }}")
             finish(task, paths)
             work.deleteRecursively()
         } catch (e: CancellationException) {
@@ -231,18 +252,32 @@ object Queue : DownloadControl {
         }
     }
 
-    /** What Cheek can't do yet goes to yt-dlp: subtitles and a custom format string. */
-    private fun cheekHandles(task: DownloadTask) = task.choice.mode != Mode.Custom && !(task.choice.mode == Mode.Video && task.choice.subtitles)
+    /**
+     * What Cheek can't do goes to yt-dlp: a custom format string, and, before Cheek 0.3.2,
+     * subtitles and playlists (from 0.3.2 Cheek embeds subtitles and walks yt-dlp's playlists).
+     */
+    private fun cheekHandles(task: DownloadTask, playlist: Boolean = false): Boolean {
+        val full = !Versions.newer(CHEEK_SUBTITLES, Tools.cheekVersion)
+        return task.choice.mode != Mode.Custom &&
+            (full || !(task.choice.mode == Mode.Video && task.choice.subtitles)) &&
+            (full || !playlist)
+    }
 
     private suspend fun cheek(task: DownloadTask, infoFile: File, work: File, paths: File): Run {
         val c = task.choice
+        val s = Prefs.settings.value
         val cmd = buildList {
             addAll(listOf(Tools.cheek.path, "--info-json", infoFile.path, "--json", "-f", Formats.formatSelector(c)))
             addAll(listOf("-P", Paths.downloads.path, "--temp-dir", work.path, "-o", Formats.outputTemplate(task)))
             // Fewer connections per download when several run at once.
-            addAll(listOf("-N", (12 / Prefs.settings.value.parallel.coerceIn(1, 3)).toString()))
+            addAll(listOf("-N", (12 / s.parallel.coerceIn(1, 3)).toString()))
             addAll(listOf("--ffmpeg", Tools.ffmpeg.path, "--embed-thumbnail", "--embed-metadata"))
             if (c.mode == Mode.Audio) addAll(listOf("-x", "--audio-format", c.audioFormat)) else addAll(listOf("--merge-output-format", c.container))
+            if (!Versions.newer(CHEEK_SUBTITLES, Tools.cheekVersion)) {
+                // A playlist's songs are resolved one by one, by Hamstr's own yt-dlp.
+                addAll(listOf("--yt-dlp", Tools.ytDlp.path))
+                if (c.mode == Mode.Video && c.subtitles) addAll(listOf("--embed-subs", "--sub-langs", s.subtitleLanguages().joinToString(",")))
+            }
         }
         val root = JSONObject(infoFile.readText())
         return exec(task.id, cmd) { line ->
@@ -250,10 +285,19 @@ object Queue : DownloadControl {
             when (e.optString("type")) {
                 "progress" -> progress(task.id, e.optDouble("percent", 0.0).toFloat() / 100f, e.optLong("speed"), if (e.isNull("eta")) -1 else e.optLong("eta", -1))
                 "stage" -> stage(task.id, Stage.fromEngine(e.optString("stage")))
-                "done" -> paths.appendText(JSONObject().put("filepath", e.optString("path")).put("title", root.opt("title"))
-                    .put("thumbnail", root.opt("thumbnail")).put("duration", root.opt("duration")).toString() + "\n")
+                "stage_progress" -> stageProgress(task.id, e.optDouble("percent", 0.0).toFloat() / 100f)
+                // Each song of a playlist says what it is; a single file falls back on the info JSON.
+                "done" -> paths.appendText(JSONObject().put("filepath", e.optString("path"))
+                    .put("title", e.opt("title") ?: root.opt("title"))
+                    .put("thumbnail", e.opt("thumbnail") ?: root.opt("thumbnail"))
+                    .put("duration", e.opt("duration") ?: root.opt("duration"))
+                    .put("playlist_title", e.opt("playlist_title")).toString() + "\n")
             }
         }
+    }
+
+    private fun stageProgress(id: String, fraction: Float) {
+        DownloadStore.update(id, persist = false) { if (it.status == Status.Running && it.stage != null) it.copy(stageProgress = fraction.coerceIn(0f, 1f)) else it }
     }
 
     private suspend fun ytDlp(task: DownloadTask, infoFile: File?, work: File, paths: File): Run {
@@ -316,13 +360,16 @@ object Queue : DownloadControl {
 
     private fun stage(id: String, stage: Stage?) {
         stage ?: return
-        DownloadStore.update(id, persist = false) { if (it.status == Status.Running) it.copy(stage = stage, speed = "", etaSec = -1) else it }
+        DownloadStore.update(id, persist = false) { if (it.status == Status.Running) it.copy(stage = stage, stageProgress = -1f, speed = "", etaSec = -1) else it }
     }
 
     private fun speedText(bytesPerSecond: Long) = when {
         bytesPerSecond >= 1 shl 20 -> String.format(Locale.ROOT, "%.1f MB/s", bytesPerSecond / 1048576.0)
         else -> String.format(Locale.ROOT, "%.0f KB/s", bytesPerSecond / 1024.0)
     }
+
+    /** The lines a download wrote to [this] so far, one per finished file. */
+    private fun File.lines(): List<String> = if (exists()) readLines().filter { it.isNotBlank() } else emptyList()
 
     /** The files a download left, as yt-dlp's after_move print or Cheek's done events wrote them. */
     private fun finish(task: DownloadTask, paths: File) {
@@ -363,7 +410,8 @@ object Queue : DownloadControl {
         val err = StringBuffer()
         val errReader = thread(name = "hamstr-stderr") { runCatching { proc.errorStream.bufferedReader().forEachLine { err.appendLine(it) } } }
         try {
-            runCatching { proc.inputStream.bufferedReader().forEachLine(onLine) }
+            // One line that can't be handled must not stop the reading: a full pipe would stall the tool.
+            runCatching { proc.inputStream.bufferedReader().forEachLine { line -> runCatching { onLine(line) }.onFailure { Log.w(TAG, "Odd output line", it) } } }
             val code = proc.waitFor()
             errReader.join(2000)
             Run(code, err.toString())

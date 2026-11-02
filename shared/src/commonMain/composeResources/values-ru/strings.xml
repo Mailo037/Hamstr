@@ -181,7 +181,7 @@
     <string name="share_other_apps">Поделиться через другие приложения</string>
     <string name="share_copy_file">Копировать файл</string>
     <string name="share_copy_files">Копировать файлы</string>
-    <string name="share_file_nearby_hint">Чтобы отправить на устройство с Hamstr, выбери «Ссылка».</string>
+    <string name="share_file_nearby_hint">Сам файл уходит на устройство с Hamstr поблизости — через ту же сеть Wi-Fi или, медленнее, по Bluetooth — запечатанным так, что открыть его сможет только это устройство.</string>
     <string name="share_unavailable">Этот файл больше нельзя отправить.</string>
     <string name="menu_rename">Переименовать</string>
     <string name="menu_info">Информация о файле</string>
@@ -480,7 +480,7 @@
     <string name="add_files">Добавить файлы с телефона</string>
     <string name="add_files_hint">Видео, музыка, документы. Они копируются в Download/Hamstr.</string>
     <string name="add_files_desktop">Добавить файлы с этого компьютера</string>
-    <string name="add_files_hint_desktop">Видео, музыка, документы. Они копируются в Downloads/Hamstr.</string>
+    <string name="add_files_hint_desktop">Видео, музыка, документы. Они копируются в твою папку Hamstr.</string>
     <string name="upd_tap">Нажми, чтобы обновить, браузер не нужен</string>
     <string name="upd_update">Обновить</string>
     <string name="upd_new">новое</string>
@@ -676,14 +676,14 @@
     <string name="nearby_always">Всегда разрешать</string>
     <string name="nearby_once">Только в этот раз</string>
     <string name="nearby_decline">Отклонить</string>
-    <string name="nearby_ask_hint">«Всегда разрешать» пускает ссылки с этого устройства сразу в запасы.</string>
+    <string name="nearby_ask_hint">«Всегда разрешать» пускает ссылки и файлы с этого устройства без вопросов.</string>
     <string name="nearby_received">От %1$s</string>
     <string name="nearby_waiting">Ждут отправки: %1$d</string>
     <string name="page_devices">Устройства</string>
     <string name="set_nearby">Видно ближайшим устройствам</string>
-    <string name="set_nearby_hint">Другие приложения Hamstr смогут найти это и отправить ссылки</string>
+    <string name="set_nearby_hint">Другие приложения Hamstr смогут найти это и отправить ссылки и файлы</string>
     <string name="set_nearby_bluetooth">Bluetooth</string>
-    <string name="set_nearby_bluetooth_hint">Находит и телефоны без общей сети Wi-Fi</string>
+    <string name="set_nearby_bluetooth_hint">Находит и устройства без общей сети Wi-Fi</string>
     <string name="set_nearby_bluetooth_off">Пока не разрешено. Нажми, чтобы разрешить.</string>
     <string name="set_nearby_bluetooth_disabled">Bluetooth выключен. Нажми, чтобы включить.</string>
     <string name="set_device_name">Имя этого устройства</string>
@@ -759,4 +759,28 @@
     <string name="desktop_update_opened">Установщик открыт; установи его так же, как в первый раз.</string>
     <string name="desktop_update_coming">Hamstr %1$s уже в пути</string>
     <string name="desktop_update_coming_hint">Его установщик для этого компьютера ещё собирается; Hamstr проверит снова через несколько минут.</string>
+    <string name="set_nearby_bluetooth_none">На этом компьютере нет Bluetooth, которым может пользоваться Hamstr</string>
+    <string name="set_nearby_bluetooth_missing">Эта сборка Hamstr пришла без своего помощника Bluetooth</string>
+    <string name="nearby_files_here">Файлы уходят только на устройство, которое рядом</string>
+    <string name="nearby_files_bluetooth">По Bluetooth, медленнее</string>
+    <string name="nearby_sending_percent" formatted="false">Отправка · %1$d %</string>
+    <string name="nearby_declined">Отклонено</string>
+    <plurals name="nearby_files_offer">
+        <item quantity="one">%1$d файл · %2$s</item>
+        <item quantity="few">%1$d файла · %2$s</item>
+        <item quantity="many">%1$d файлов · %2$s</item>
+        <item quantity="other">%1$d файла · %2$s</item>
+    </plurals>
+    <string name="set_folder_phone">Папка в Download</string>
+    <string name="set_folder_phone_hint">Новые загрузки попадают в эту папку внутри Download; пусто — значит Download/Hamstr. То, что уже в запасах, остаётся на месте.</string>
+    <string name="add_options">Параметры</string>
+    <string name="add_kind">Видео или аудио</string>
+    <string name="add_subtitles_hint">На твоих языках, если они есть на сайте</string>
+    <string name="add_subs_short">Субтитры</string>
+    <string name="desktop_folder_change">Выбрать папку</string>
+    <string name="desktop_folder_reset">Вернуть папку Hamstr</string>
+    <string name="desktop_folder_hint">Новые загрузки попадают сюда; то, что уже в запасах, остаётся на месте.</string>
+    <string name="desktop_cheek_update">Обновить Cheek</string>
+    <string name="set_transfer_jobs">Долгие загрузки без дневного лимита</string>
+    <string name="set_transfer_jobs_hint">То, что ты запускаешь в Hamstr, работает как одна из задач загрузки Android, которые Android не останавливает через шесть часов в день.</string>
 </resources>
