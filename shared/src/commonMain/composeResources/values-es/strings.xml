@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">Las mejillas del icono toman el acento al salir de la app. Algunos lanzadores tardan un momento, o hay que volver a colocar el icono en la pantalla de inicio.</string>
 
     <string name="set_size">Tamaño</string>
+    <string name="set_language">Idioma</string>
+    <string name="set_language_system">Predeterminado del sistema</string>
     <string name="size_small">Pequeño</string>
     <string name="size_normal">Normal</string>
     <string name="size_large">Grande</string>

@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">As bochechas do ícone do app assumem a cor de destaque quando você sai do app. Alguns lançadores precisam de um momento, ou de colocar o ícone na tela inicial de novo.</string>
 
     <string name="set_size">Tamanho</string>
+    <string name="set_language">Idioma</string>
+    <string name="set_language_system">Padrão do sistema</string>
     <string name="size_small">Pequeno</string>
     <string name="size_normal">Normal</string>
     <string name="size_large">Grande</string>

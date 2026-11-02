@@ -90,7 +90,6 @@ import app.hamstr.ui.components.MARK
 import app.hamstr.ui.components.MarkState
 import app.hamstr.ui.components.PictureLabel
 import app.hamstr.ui.components.ProgressLine
-import app.hamstr.ui.components.RasterBackground
 import app.hamstr.ui.components.SectionHeader
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.Txt
@@ -576,68 +575,139 @@ private fun PlayScene(active: Boolean, modifier: Modifier) {
     }
 }
 
-/** A link travels from the computer to the phone, is let in once and for all, and lands. */
+/**
+ * The two devices find each other (rings go out, the dots between them join up), the link flies
+ * over in an arc and lights the way, the phone asks once, and the download runs to the end there.
+ */
 @Composable
 private fun SendScene(active: Boolean, modifier: Modifier) {
     val c = Hamstr.colors
     val reduce = LocalReduceMotion.current
-    val trip = remember { Animatable(if (reduce) 1f else 0f) }
-    var asked by remember { mutableStateOf(reduce) }
+    val seek = remember { Animatable(if (reduce) 1f else 0f) } // the rings going out
+    val found = remember { Animatable(if (reduce) 1f else 0f) } // the dots joining up
+    val trip = remember { Animatable(if (reduce) 1f else 0f) } // the link on its way
+    val glow = remember { Animatable(0f) } // the way it lit up
+    val land = remember { Animatable(if (reduce) 1f else 0f) } // the ring where it landed
+    val fetch = remember { Animatable(if (reduce) 0.62f else 0f) } // the download on the phone
+    var sending by remember { mutableStateOf(false) }
+    var asked by remember { mutableStateOf(false) }
     var tapAllow by remember { mutableStateOf(false) }
-    var landed by remember { mutableStateOf(false) }
+    var landed by remember { mutableStateOf(reduce) }
+    var row by remember { mutableStateOf(reduce) }
     LaunchedEffect(active, reduce) {
         if (!active || reduce) return@LaunchedEffect
         while (true) {
-            trip.snapTo(0f); asked = false; tapAllow = false; landed = false
-            delay(700)
-            trip.animateTo(1f, tween(1500, easing = FastOutSlowInEasing))
+            seek.snapTo(0f); found.snapTo(0f); trip.snapTo(0f); glow.snapTo(0f); land.snapTo(0f); fetch.snapTo(0f)
+            sending = false; asked = false; tapAllow = false; landed = false; row = false
+            delay(250)
+            coroutineScope {
+                launch { seek.animateTo(1f, tween(1500, easing = LinearOutSlowInEasing)) }
+                launch { delay(350); found.animateTo(1f, tween(900, easing = FastOutSlowInEasing)) }
+            }
+            sending = true
+            delay(250)
+            glow.snapTo(1f)
+            coroutineScope {
+                launch { trip.animateTo(1f, tween(1300, easing = FastOutSlowInEasing)) }
+                launch { delay(450); sending = false }
+            }
+            landed = true
+            land.animateTo(1f, tween(700, easing = LinearOutSlowInEasing))
             asked = true
-            delay(1400)
+            delay(1100)
             tapAllow = true
             delay(620)
             asked = false
             tapAllow = false
-            landed = true
-            delay(2400)
+            row = true
+            coroutineScope {
+                launch { glow.animateTo(0f, tween(900)) }
+                fetch.animateTo(1f, tween(3200, easing = LinearEasing))
+            }
+            delay(1900)
+            landed = false
+            row = false
+            delay(450)
         }
     }
     val poster = rememberPoster(152f, 3)
-    Fit(380.dp, 312.dp, modifier) {
+    Fit(380.dp, 340.dp, modifier) {
         Column(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth().height(132.dp)) {
-                // The way between the two.
-                Canvas(Modifier.align(Alignment.TopCenter).padding(top = 34.dp).width(104.dp).height(4.dp)) {
-                    val step = 10.dp.toPx()
-                    var x = step / 2
-                    while (x < size.width) {
-                        drawCircle(c.line, radius = 1.6.dp.toPx(), center = Offset(x, size.height / 2))
-                        x += step
+            Box(Modifier.fillMaxWidth().height(170.dp)) {
+                // Where the two icons sit, and the arc from the top of one tile to the top of the other.
+                val tileTop = 46.dp
+                val from = Offset(96f, 46f)
+                val over = Offset(190f, -34f)
+                val to = Offset(284f, 46f)
+                fun along(t: Float): Offset {
+                    val u = 1f - t
+                    return from * (u * u) + over * (2f * u * t) + to * (t * t)
+                }
+                // The way: dots that join up from both ends, then light up behind the link.
+                Canvas(Modifier.fillMaxSize()) {
+                    val dots = 17
+                    for (i in 0 until dots) {
+                        val t = (i + 0.5f) / dots
+                        val fromEnd = min(t, 1f - t) * 1.7f
+                        val shown = ((found.value - fromEnd) / 0.15f).coerceIn(0f, 1f)
+                        if (shown <= 0f) continue
+                        val lit = if (t <= trip.value) glow.value else 0f
+                        val p = along(t)
+                        drawCircle(
+                            lerp(c.line, c.accent, lit).copy(alpha = shown),
+                            radius = (1.8f + 1.2f * lit).dp.toPx(),
+                            center = Offset(p.x.dp.toPx(), p.y.dp.toPx()),
+                        )
                     }
                 }
-                DeviceTile(Res.drawable.ic_computer, Sample.COMPUTER, stringResource(Res.string.kind_desktop), lit = false, modifier = Modifier.align(Alignment.TopStart))
-                DeviceTile(Res.drawable.ic_smartphone, Sample.PHONE, stringResource(Res.string.kind_phone), lit = landed, modifier = Modifier.align(Alignment.TopEnd))
-                Row(
+                DeviceTile(Res.drawable.ic_computer, Sample.COMPUTER, stringResource(Res.string.kind_desktop), lit = sending, modifier = Modifier.padding(top = tileTop).align(Alignment.TopStart))
+                DeviceTile(Res.drawable.ic_smartphone, Sample.PHONE, stringResource(Res.string.kind_phone), lit = landed, modifier = Modifier.padding(top = tileTop).align(Alignment.TopEnd))
+                // Rings: the two looking for each other, then the phone where the link lands.
+                Canvas(Modifier.fillMaxSize()) {
+                    val icons = listOf(Offset(14f + 20f, 46f + 14f + 20f), Offset(254f + 14f + 20f, 46f + 14f + 20f))
+                    fun ring(at: Offset, v: Float, strength: Float) {
+                        if (v <= 0f || v >= 1f) return
+                        drawCircle(
+                            c.accent.copy(alpha = (1f - v) * strength),
+                            radius = (22f + 70f * v).dp.toPx(),
+                            center = Offset(at.x.dp.toPx(), at.y.dp.toPx()),
+                            style = Stroke(1.5.dp.toPx()),
+                        )
+                    }
+                    for (at in icons) {
+                        ring(at, seek.value, 0.55f)
+                        ring(at, (seek.value - 0.3f) / 0.7f, 0.35f)
+                    }
+                    ring(icons[1], land.value, 0.8f)
+                    // A short tail behind the link.
+                    val t = trip.value
+                    if (t in 0.02f..0.98f) for (k in 1..4) {
+                        val p = along((t - k * 0.025f).coerceAtLeast(0f))
+                        drawCircle(c.accent.copy(alpha = 0.32f - k * 0.07f), radius = (7f - k).dp.toPx(), center = Offset(p.x.dp.toPx(), p.y.dp.toPx()))
+                    }
+                }
+                // The link itself.
+                Box(
                     Modifier
                         .offset {
-                            val from = 26.dp.toPx()
-                            val to = 250.dp.toPx()
-                            IntOffset((from + (to - from) * trip.value).roundToInt(), 22.dp.roundToPx())
+                            val p = along(trip.value)
+                            IntOffset((p.x.dp - 15.dp).roundToPx(), (p.y.dp - 15.dp).roundToPx())
                         }
                         .graphicsLayer {
                             val t = trip.value
-                            alpha = if (reduce) 0f else min(1f, min(t / 0.12f, (1f - t) / 0.12f)).coerceIn(0f, 1f)
+                            val inOut = min(t / 0.1f, (1f - t) / 0.1f).coerceIn(0f, 1f)
+                            alpha = if (reduce) 0f else inOut
+                            val s = 0.55f + 0.45f * inOut + 0.12f * sin(PI.toFloat() * t)
+                            scaleX = s; scaleY = s
+                            rotationZ = -18f + 36f * t
                         }
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(c.raised)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Res.drawable.ic_link, tint = c.accent, size = 14.dp)
-                    Spacer(Modifier.width(6.dp))
-                    Txt(Sample.LINK, style = Hamstr.type.mono.copy(fontSize = 11.sp), maxLines = 1)
-                }
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(c.accent),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Res.drawable.ic_link, tint = c.onAccent, size = 16.dp) }
             }
-            Box(Modifier.fillMaxWidth().height(150.dp)) {
+            Box(Modifier.fillMaxWidth().height(138.dp)) {
                 CardSwap(asked) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radii.panel)).background(c.overlay).padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -660,11 +730,11 @@ private fun SendScene(active: Boolean, modifier: Modifier) {
                         }
                     }
                 }
-                CardSwap(landed) {
-                    Group { MockRow(Sample.VIDEO, "1080p", stringResource(Res.string.nearby_received, Sample.COMPUTER), poster, 0.18f, done = false, highlighted = true) }
+                CardSwap(row) {
+                    Group { MockRow(Sample.VIDEO, "1080p", stringResource(Res.string.nearby_received, Sample.COMPUTER), poster, fetch.value, done = fetch.value >= 1f, highlighted = true) }
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             Row(Modifier.align(Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Res.drawable.ic_wifi, tint = c.ghost, size = 14.dp)
                 Spacer(Modifier.width(6.dp))
@@ -737,7 +807,6 @@ private fun PhoneFrame(modifier: Modifier, fade: Boolean = true, content: @Compo
                 .clip(RoundedCornerShape(33.dp))
                 .background(c.canvas),
         ) {
-            RasterBackground(Modifier.fillMaxWidth().height(240.dp))
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().height(30.dp).padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                     Txt("9:41", style = Hamstr.type.small.copy(fontWeight = FontWeight.SemiBold))
@@ -768,7 +837,6 @@ private fun WindowFrame(modifier: Modifier, content: @Composable BoxScope.() -> 
                 .clip(RoundedCornerShape(11.dp))
                 .background(c.canvas),
         ) {
-            RasterBackground(Modifier.fillMaxWidth().height(220.dp))
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().height(30.dp).padding(start = 12.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     CellMark(Modifier.size(14.dp))

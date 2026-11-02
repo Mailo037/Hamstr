@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">Les joues de l’icône prennent la couleur d’accent quand tu quittes l’app. Certains lanceurs ont besoin d’un moment, ou qu’on remette l’icône sur l’écran d’accueil.</string>
 
     <string name="set_size">Taille</string>
+    <string name="set_language">Langue</string>
+    <string name="set_language_system">Par défaut du système</string>
     <string name="size_small">Petite</string>
     <string name="size_normal">Normale</string>
     <string name="size_large">Grande</string>

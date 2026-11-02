@@ -71,6 +71,8 @@ data class Settings(
     val startWithSystem: Boolean = false,
     // The first-start tour was shown (or skipped); Settings › About plays it again.
     val toured: Boolean = false,
+    // The app's language as a tag from AppLanguages; empty follows the device. Android 13+ keeps it in the system instead.
+    val language: String = "",
 ) {
     fun defaultChoice() = Choice(mode, height, container, audioFormat, subtitles)
 
@@ -144,6 +146,7 @@ object Prefs {
             trayOnClose = sp.getBoolean("trayOnClose", true),
             startWithSystem = sp.getBoolean("startWithSystem", false),
             toured = sp.getBoolean("toured", false),
+            language = sp.getString("language", "")!!,
         )
     }
 
@@ -198,6 +201,7 @@ object Prefs {
             .putBoolean("trayOnClose", s.trayOnClose)
             .putBoolean("startWithSystem", s.startWithSystem)
             .putBoolean("toured", s.toured)
+            .putString("language", s.language)
             .apply()
     }
 }

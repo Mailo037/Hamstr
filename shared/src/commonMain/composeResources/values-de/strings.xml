@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">Die Backen des Starter-Symbols nehmen die Akzentfarbe an, wenn du die App verlässt. Manche Launcher brauchen einen Moment oder das Symbol muss neu auf den Startbildschirm.</string>
 
     <string name="set_size">Größe</string>
+    <string name="set_language">Sprache</string>
+    <string name="set_language_system">Systemstandard</string>
     <string name="size_small">Klein</string>
     <string name="size_normal">Normal</string>
     <string name="size_large">Groß</string>

@@ -596,6 +596,8 @@
     <string name="set_icon_accent_hint">离开应用时，启动器图标的腮会采用强调色。某些启动器可能需要一点时间，或需要将图标重新放到主屏幕上。</string>
 
     <string name="set_size">大小</string>
+    <string name="set_language">语言</string>
+    <string name="set_language_system">跟随系统</string>
     <string name="size_small">小</string>
     <string name="size_normal">普通</string>
     <string name="size_large">大</string>

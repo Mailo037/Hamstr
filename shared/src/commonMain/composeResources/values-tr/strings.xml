@@ -606,6 +606,8 @@
     <string name="set_icon_accent_hint">Uygulamadan çıktığında başlatıcı simgesinin yanakları vurgu rengini alır. Bazı başlatıcılar bir an bekler ya da simgeyi ana ekrana yeniden yerleştirmen gerekir.</string>
 
     <string name="set_size">Boyut</string>
+    <string name="set_language">Dil</string>
+    <string name="set_language_system">Sistem varsayılanı</string>
     <string name="size_small">Küçük</string>
     <string name="size_normal">Normal</string>
     <string name="size_large">Büyük</string>

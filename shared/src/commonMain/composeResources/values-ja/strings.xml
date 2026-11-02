@@ -596,6 +596,8 @@
     <string name="set_icon_accent_hint">アプリを離れると、ランチャーアイコンのほっぺがアクセントカラーになります。ランチャーによっては、少し待つかホーム画面にアイコンを置き直す必要があります。</string>
 
     <string name="set_size">サイズ</string>
+    <string name="set_language">言語</string>
+    <string name="set_language_system">システムのデフォルト</string>
     <string name="size_small">小</string>
     <string name="size_normal">標準</string>
     <string name="size_large">大</string>

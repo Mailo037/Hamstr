@@ -15,6 +15,8 @@ import app.hamstr.engine.Network
 import app.hamstr.update.Updater
 
 class HamstrApp : Application() {
+    override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
+
     override fun onCreate() {
         super.onCreate()
         Prefs.init(this)
