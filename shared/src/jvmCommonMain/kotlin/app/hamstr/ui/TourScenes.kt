@@ -782,7 +782,9 @@ private fun Fit(width: Dp, height: Dp, modifier: Modifier = Modifier, content: @
     BoxWithConstraints(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         // No room at all (a page squeezed by its words): nothing to draw, and no zero density.
         if (maxWidth < 24.dp || maxHeight < 24.dp) return@BoxWithConstraints
-        val scale = minOf(maxWidth / width, maxHeight / height, 1.3f)
+        // Never above its own size: with more room (smaller text, a small UI size) the picture
+        // would otherwise grow while everything around it shrinks.
+        val scale = minOf(maxWidth / width, maxHeight / height, 1f)
         val outer = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(outer.density * scale, 1f)) {
             Box(Modifier.size(width, height), content = content)

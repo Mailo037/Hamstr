@@ -15,12 +15,15 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.Prefs
 import app.hamstr.data.PropertiesFile
+import app.hamstr.data.UiSize
 import app.hamstr.ui.theme.HamstrTheme
 import java.io.File
 import java.util.Locale
@@ -89,6 +92,17 @@ class TourTest {
         assertEquals(1, done)
     }
 
+    @Test fun swipingTheBackgroundsStaysOnTheLastPage() = runComposeUiTest {
+        setContent { HamstrTheme { Box(Modifier.size(412.dp, 900.dp)) { Tour(onDone = {}, desktop = false, startAt = 6) } } }
+        mainClock.advanceTimeBy(1_000)
+        title("Make it yours").assertExists()
+        // The row is at its start: the whole swipe is left over, and must not turn the page back.
+        onNodeWithText("Graphite").performTouchInput { swipeRight(startX = centerX, endX = centerX + 300f) }
+        mainClock.advanceTimeBy(2_000)
+        title("Make it yours").assertExists()
+        title("Pass links between devices").assertDoesNotExist()
+    }
+
     @Test fun theComputerTalksAboutPastingInstead() = runComposeUiTest {
         setContent { HamstrTheme { Box(Modifier.size(1100.dp, 700.dp)) { Tour(onDone = {}, desktop = true, startAt = 1) } } }
         mainClock.advanceTimeBy(1_000)
@@ -115,6 +129,21 @@ class TourTest {
         shot(File(out, "sideways_7_look.png"), false, 6, 1_500L, 892, 412, 2.625f)
         shot(File(out, "small_7_look.png"), false, 6, 1_500L, 360, 640, 2f)
         shot(File(out, "small_3_choose.png"), false, 2, 5_330L, 360, 640, 2f)
+    }
+
+    /** The last page at every UI size: the picture shrinks and grows with the rest, never against it. */
+    @Test fun rendersTheLastPageAtEverySize() {
+        val out = File(System.getProperty("hamstr.tour") ?: "build/tour").apply { mkdirs() }
+        val file = File.createTempFile("hamstr-size-", ".properties")
+        try {
+            Prefs.init(PropertiesFile(file))
+            for (size in UiSize.entries) {
+                Prefs.edit { it.copy(size = size) }
+                shot(File(out, "size_${size.name.lowercase()}_7_look.png"), false, 6, 1_500L, 412, 892, 2.625f)
+            }
+        } finally {
+            Prefs.init(PropertiesFile(file.apply { delete() }))
+        }
     }
 
     /**
