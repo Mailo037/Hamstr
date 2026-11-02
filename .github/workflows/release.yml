@@ -4,12 +4,25 @@ name: Release
 # and publishes them as a GitHub release. Hamstr's in-app updater installs from there.
 # The desktop app is built on each system and added to it: a setup .exe and a portable .zip
 # for Windows, a .dmg for macOS, a .deb for Linux. SHA256SUMS.txt then covers every file.
+#
+# Without a terminal: Actions › Release › Run workflow on main, with the version (0.9.0). That
+# run checks the version, builds, and makes the tag itself just before it publishes.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the v (e.g. 0.9.0). gradle.properties must say the same."
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+# The release's tag: the pushed one, or v<version> for a run started by hand.
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
 
 jobs:
   release:
@@ -17,6 +30,32 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+
+      # Started by hand: refuse anything that would make a wrong release, before building.
+      - name: Check version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version must look like 1.2.3, not \"$VERSION\"."
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Releases come from main; this run is on $GITHUB_REF_NAME."
+            exit 1
+          fi
+          DEFAULT="$(sed -n 's/^hamstr.version=//p' gradle.properties)"
+          if [ "$DEFAULT" != "$VERSION" ]; then
+            echo "::error::gradle.properties says hamstr.version=$DEFAULT. Set it to $VERSION first (AGENTS.md, Releasing)."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "::error::$TAG already exists. Pick the next version."
+            exit 1
+          fi
+          if [ ! -f ".github/release-notes/$TAG.md" ]; then
+            echo "::warning::No .github/release-notes/$TAG.md; GitHub writes the notes from the commits."
+          fi
 
       - uses: actions/setup-java@v6
         with:
@@ -50,11 +89,11 @@ jobs:
           } > signing/keystore.properties
 
       - name: Build
-        run: ./gradlew --no-daemon assembleRelease -Phamstr.version="${GITHUB_REF_NAME#v}"
+        run: ./gradlew --no-daemon assembleRelease -Phamstr.version="${TAG#v}"
 
       - name: Collect APKs
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${TAG#v}"
           mkdir dist
           for abi in arm64-v8a armeabi-v7a x86_64 universal; do
             cp "app/build/outputs/apk/release/app-$abi-release.apk" "dist/Hamstr-$VERSION-$abi.apk"
@@ -62,13 +101,23 @@ jobs:
           (cd dist && sha256sum *.apk > SHA256SUMS.txt)
           ls -la dist
 
+      # Started by hand, the tag comes only now, once the APKs are built: a failed build leaves
+      # no tag behind. Pushed with this run's token, it starts no second run.
+      - name: Tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Hamstr ${TAG#v}"
+          git push origin "$TAG"
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES=".github/release-notes/$GITHUB_REF_NAME.md"
+          NOTES=".github/release-notes/$TAG.md"
           if [ -f "$NOTES" ]; then set -- --notes-file "$NOTES"; else set -- --generate-notes; fi
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --verify-tag "$@"
+          gh release create "$TAG" dist/* --title "$TAG" --verify-tag "$@"
 
   desktop:
     needs: release
@@ -105,14 +154,14 @@ jobs:
 
       - name: Installer
         shell: bash
-        run: ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${GITHUB_REF_NAME#v}"
+        run: ./gradlew --no-daemon :desktop:packageDistributionForCurrentOS -Phamstr.version="${TAG#v}"
 
       - name: Publish
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${TAG#v}"
           mkdir dist
           for f in desktop/build/compose/binaries/main/*/*; do
             case "$f" in *.exe|*.dmg|*.deb) cp "$f" "dist/Hamstr-$VERSION-${{ matrix.name }}.${f##*.}" ;; esac
@@ -122,7 +171,7 @@ jobs:
             (cd desktop/build/compose/binaries/main/app && 7z a -tzip "$GITHUB_WORKSPACE/dist/Hamstr-$VERSION-${{ matrix.name }}-portable.zip" Hamstr > /dev/null)
           fi
           ls -la dist
-          gh release upload "$GITHUB_REF_NAME" dist/*
+          gh release upload "$TAG" dist/*
 
   # One checksum file for the whole release: the APKs' plus every desktop file.
   checksums:
@@ -136,7 +185,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir all && cd all
-          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "Hamstr-*"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "Hamstr-*"
           sha256sum Hamstr-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
-          gh release upload "$GITHUB_REF_NAME" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
