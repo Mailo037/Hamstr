@@ -372,6 +372,13 @@
     <string name="set_back">返回</string>
     <string name="set_accent">强调色</string>
     <string name="set_background">背景</string>
+    <!-- Appearance › Background -->
+    <string name="base_graphite">石墨</string>
+    <string name="base_oled">OLED 纯黑</string>
+    <string name="base_cocoa">可可</string>
+    <string name="base_midnight">午夜</string>
+    <string name="base_moss">苔藓</string>
+    <string name="base_plum">梅子</string>
     <string name="set_default_mode">分享时的默认选项</string>
     <string name="set_video_quality">视频画质</string>
     <string name="set_video_format">视频格式</string>

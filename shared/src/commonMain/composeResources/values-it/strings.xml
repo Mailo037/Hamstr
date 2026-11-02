@@ -379,6 +379,13 @@
     <string name="set_back">Indietro</string>
     <string name="set_accent">Colore di accento</string>
     <string name="set_background">Sfondo</string>
+    <!-- Appearance › Background -->
+    <string name="base_graphite">Grafite</string>
+    <string name="base_oled">Nero OLED</string>
+    <string name="base_cocoa">Cacao</string>
+    <string name="base_midnight">Mezzanotte</string>
+    <string name="base_moss">Muschio</string>
+    <string name="base_plum">Prugna</string>
     <string name="set_default_mode">Predefinito in condivisione</string>
     <string name="set_video_quality">Qualità video</string>
     <string name="set_video_format">Formato video</string>

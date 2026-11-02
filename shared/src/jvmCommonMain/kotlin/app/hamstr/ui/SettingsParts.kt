@@ -59,7 +59,8 @@ fun LookBlocks() {
         AccentPicker(ACCENTS, s.accent) { a -> Prefs.edit { it.copy(accent = a) } }
     }
     SettingBlock(stringResource(Res.string.set_background)) {
-        Chips(Base.entries.toList(), s.base, { it.label }) { b -> Prefs.edit { it.copy(base = b) } }
+        val names = Base.entries.associateWith { stringResource(it.title) }
+        Chips(Base.entries.toList(), s.base, { names.getValue(it) }) { b -> Prefs.edit { it.copy(base = b) } }
     }
     SettingBlock(stringResource(Res.string.set_size)) {
         val labels = mapOf(UiSize.Small to stringResource(Res.string.size_small), UiSize.Normal to stringResource(Res.string.size_normal), UiSize.Large to stringResource(Res.string.size_large))
