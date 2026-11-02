@@ -88,6 +88,8 @@ git tag v0.5.0
 git push origin v0.5.0
 ```
 
+Without a terminal (or from a session that may not push tags): Actions › Release › Run workflow on `main`, with the version (`0.5.0`). That run refuses a version that isn't `1.2.3`-shaped, a branch other than `main`, a version that differs from `hamstr.version` in `gradle.properties`, and a tag that already exists; it builds, makes the tag itself right before publishing (a failed build leaves no tag) and goes on like a pushed tag. Don't create the release by hand on GitHub's release page: the workflow creates it and stops if one exists.
+
 Before tagging:
 
 1. Set the default version in `gradle.properties` (`hamstr.version`) and, if a new Cheek is out, `hamstr.cheekVersion`.
