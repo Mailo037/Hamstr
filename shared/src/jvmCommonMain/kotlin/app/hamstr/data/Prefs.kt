@@ -61,6 +61,8 @@ data class Settings(
     // Desktop: closing the window keeps Hamstr in the tray; start with the computer, in the tray.
     val trayOnClose: Boolean = true,
     val startWithSystem: Boolean = false,
+    // The first-start tour was shown (or skipped); Settings › About plays it again.
+    val toured: Boolean = false,
 ) {
     fun defaultChoice() = Choice(mode, height, container, audioFormat, subtitles)
 
@@ -133,6 +135,7 @@ object Prefs {
             deviceName = sp.getString("deviceName", "")!!,
             trayOnClose = sp.getBoolean("trayOnClose", true),
             startWithSystem = sp.getBoolean("startWithSystem", false),
+            toured = sp.getBoolean("toured", false),
         )
     }
 
@@ -186,6 +189,7 @@ object Prefs {
             .putString("deviceName", s.deviceName)
             .putBoolean("trayOnClose", s.trayOnClose)
             .putBoolean("startWithSystem", s.startWithSystem)
+            .putBoolean("toured", s.toured)
             .apply()
     }
 }

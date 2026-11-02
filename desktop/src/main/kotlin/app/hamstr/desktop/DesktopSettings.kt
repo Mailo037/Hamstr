@@ -71,7 +71,7 @@ internal enum class Page(val title: StringResource, val icon: DrawableResource) 
 
 /** A settings page, the same categories as on the phone; the side bar lists them. */
 @Composable
-internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit) {
+internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit, onTour: () -> Unit) {
     AnimatedContent(page, Modifier.fillMaxSize(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "page") { p ->
         val scroll = rememberScrollState()
         // A readable column in the middle of the window, its title over it, like the stash.
@@ -84,7 +84,7 @@ internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit
                     Page.Downloads -> DownloadsPage()
                     Page.Engine -> EnginePage(engine)
                     Page.Devices -> NearbySettings()
-                    Page.About -> AboutPage(onQuit)
+                    Page.About -> AboutPage(onQuit, onTour)
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -159,12 +159,16 @@ private fun EnginePage(engine: EngineState) {
 }
 
 @Composable
-private fun AboutPage(onQuit: () -> Unit) {
+private fun AboutPage(onQuit: () -> Unit, onTour: () -> Unit) {
     val c = Hamstr.colors
     val s by Prefs.settings.collectAsState()
     val update by Updater.state.collectAsState()
     Group {
         SettingRow(stringResource(Res.string.set_version), subtitle = "Hamstr " + Updater.version)
+        Divider()
+        SettingRow(stringResource(Res.string.set_tour), subtitle = stringResource(Res.string.set_tour_hint), onClick = onTour) {
+            Icon(Res.drawable.ic_chevron_right, tint = c.ghost, size = 18.dp)
+        }
         Divider()
         SettingRow(stringResource(Res.string.set_source), subtitle = "github.com/${Updater.REPO}", onClick = { Files.browse("https://github.com/${Updater.REPO}") }) {
             Icon(Res.drawable.ic_open_in_new, tint = c.ghost, size = 18.dp)
