@@ -401,6 +401,9 @@ reason, so the next change can fix it or turn it into a rule.
 - `player/PlayerHost.kt` (`rememberCoverColor`): a song's full view has a gradient from its
   cover's colour into the canvas. A second decorative gradient besides the accent glow,
   asked for so a song feels like its cover.
+- `ui/TourScenes.kt`: the tour's pictures are made-up screens of the app, so they carry what
+  those screens have: the song page's cover tint (`PlayScene`) and a bottom fade where a screen
+  would scroll on. Their frames (a phone, a window) are `overlay` bezels around a `canvas` screen.
 - `ui/LibraryScreen.kt`: song rows swipe (play next, favourite), so a sideways drag that
   starts on one doesn't change tabs. The Stash rows already did this. Grid tiles don't
   swipe: half a screen wide, they slid over their neighbours.

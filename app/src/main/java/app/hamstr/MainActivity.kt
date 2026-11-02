@@ -137,6 +137,8 @@ import app.hamstr.ui.canHaveVersions
 import app.hamstr.ui.canSaveAudio
 import app.hamstr.engine.AudioOut
 import app.hamstr.ui.StashScreen
+import app.hamstr.ui.TourOverlay
+import app.hamstr.ui.TourGate
 import app.hamstr.ui.DownloadPreview
 import app.hamstr.ui.UpdateBanner
 import app.hamstr.ui.UpdateSheet
@@ -283,8 +285,10 @@ private fun App(inPip: Boolean) {
     val engine by Engine.state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(Tab.Stash) }
     val fx = LocalFx.current
-    // Shortcuts and the widget are for getting something done fast, so they skip the intro.
-    var introDone by rememberSaveable { mutableStateOf(!fx.intro || MainActivity.pendingAction.value != null) }
+    // A first start opens the tour, whose first page builds the hamster itself; shortcuts and
+    // the widget are for getting something done fast, so they skip both.
+    var touring by rememberSaveable { mutableStateOf(MainActivity.pendingAction.value == null && TourGate.due()) }
+    var introDone by rememberSaveable { mutableStateOf(!fx.intro || MainActivity.pendingAction.value != null || touring) }
     var sheetUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     // A link on its way to another Hamstr nearby, and the question from one that wants to send.
@@ -509,7 +513,7 @@ private fun App(inPip: Boolean) {
                     onPlaylist = { playlistFor = it }, onPlaylistMenu = { playlistMenu = it }, onNewPlaylist = { newList = emptyList() }, onAddToPlaylist = { addToList = it },
                     onHide = hide, onDelete = delete, onShare = share,
                 )
-                Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true }, onDelete = delete, onHint = { hint(it) })
+                Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true }, onDelete = delete, onHint = { hint(it) }, onTour = { touring = true })
             }
         }
         if (landscape) {
@@ -565,7 +569,7 @@ private fun App(inPip: Boolean) {
         var lastOffered by remember { mutableStateOf(offered) }
         if (offered != null) lastOffered = offered
         AnimatedVisibility(
-            offered != null && introDone && !updateSheet && !inPip,
+            offered != null && introDone && !touring && !updateSheet && !inPip,
             enter = slideInVertically(spring(dampingRatio = 0.7f, stiffness = 380f)) { -it * 2 } + fadeIn(),
             exit = slideOutVertically(Specs.leave()) { -it * 2 } + fadeOut(Specs.listOut()),
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -743,6 +747,7 @@ private fun App(inPip: Boolean) {
                 onClose = { updateSheet = false },
             )
         }
+        TourOverlay(touring && !inPip, onDone = { TourGate.done(); touring = false; tab = Tab.Stash })
         if (!introDone) Intro(onDone = { introDone = true })
         // Always cover the entire app in PiP, even if playback stops during the transition.
         // Keep the normal UI composed underneath so tabs and scroll positions survive.

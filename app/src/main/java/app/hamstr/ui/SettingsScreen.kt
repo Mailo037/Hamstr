@@ -146,7 +146,7 @@ private enum class Page(val title: Int, val icon: DrawableResource) {
 }
 
 @Composable
-fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit, onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit) {
+fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit, onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit, onTour: () -> Unit) {
     var page by rememberSaveable { mutableStateOf<Page?>(null) }
     var highlight by rememberSaveable { mutableStateOf<String?>(null) }
     BackHandler(enabled = page != null) { page = null; highlight = null }
@@ -165,7 +165,7 @@ fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit, onDelete
     ) { p ->
         if (p == null) Root(contentPadding) { target, setting -> page = target; highlight = setting }
         else CompositionLocalProvider(LocalSettingHighlight provides highlight) {
-            SubPage(p, contentPadding, onUpdate, onDelete, onHint, onBack = { page = null; highlight = null })
+            SubPage(p, contentPadding, onUpdate, onDelete, onHint, onTour, onBack = { page = null; highlight = null })
         }
     }
 }
@@ -261,6 +261,7 @@ private fun SubPage(
     onUpdate: () -> Unit,
     onDelete: (List<DownloadTask>) -> Unit,
     onHint: (String) -> Unit,
+    onTour: () -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -318,7 +319,7 @@ private fun SubPage(
             Page.Engine -> EnginePage()
             Page.Devices -> DevicesPage()
             Page.Hidden -> HiddenPage(onDelete, onHint)
-            Page.About -> AboutPage(onUpdate)
+            Page.About -> AboutPage(onUpdate, onTour)
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -775,13 +776,17 @@ private fun EnginePage() {
 }
 
 @Composable
-private fun AboutPage(onUpdate: () -> Unit) {
+private fun AboutPage(onUpdate: () -> Unit, onTour: () -> Unit) {
     val c = Hamstr.colors
     val context = LocalContext.current
     val s by Prefs.settings.collectAsState()
     val update by Updater.state.collectAsState()
     Group {
         SettingRow("Hamstr ${BuildConfig.VERSION_NAME}", subtitle = stringResource(R.string.set_about_local))
+        Divider()
+        SettingRow(stringResource(R.string.set_tour), subtitle = stringResource(R.string.set_tour_hint), onClick = onTour) {
+            Icon(Res.drawable.ic_chevron_right, tint = c.ghost)
+        }
         Divider()
         SettingRow(stringResource(R.string.set_source), subtitle = "github.com/${Updater.REPO}", onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/${Updater.REPO}")))
@@ -875,6 +880,7 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry(R.string.set_cheek_version, Page.Engine, "cheek engine installed bundled check version"),
     SettingEntry(R.string.set_ytdlp_auto, Page.Engine, "yt-dlp update auto"),
     SettingEntry(R.string.set_cheek_auto, Page.Engine, "cheek update auto release github"),
+    SettingEntry(R.string.set_tour, Page.About, "tour onboarding intro help guide how start hilfe einführung anleitung"),
     SettingEntry(R.string.set_source, Page.About, "github code source"),
     SettingEntry(R.string.set_app_updates, Page.About, "app update release github"),
     SettingEntry(R.string.set_licenses, Page.About, "license open source gpl"),

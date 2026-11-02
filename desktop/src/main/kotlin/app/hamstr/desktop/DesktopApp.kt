@@ -60,6 +60,8 @@ import app.hamstr.ui.ShareContent
 import app.hamstr.ui.SharingSheet
 import app.hamstr.ui.Overlay
 import app.hamstr.ui.StashScreen
+import app.hamstr.ui.TourOverlay
+import app.hamstr.ui.TourGate
 import app.hamstr.ui.components.Group
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.RasterBackground
@@ -100,7 +102,10 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
     val requests by Nearby.requests.collectAsState()
-    val sheetOpen = adding || menuFor != null || sharing != null || requests.isNotEmpty()
+    // The tour on a first start; HAMSTR_TOUR=<page> opens it on that page, for screenshots.
+    val tourAt = remember { System.getenv("HAMSTR_TOUR")?.toIntOrNull() }
+    var touring by remember { mutableStateOf(tourAt != null || TourGate.due()) }
+    val sheetOpen = touring || adding || menuFor != null || sharing != null || requests.isNotEmpty()
 
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
 
@@ -140,7 +145,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                                     )
                                 }
                             }
-                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit)
+                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true })
                         }
                     }
                 }
@@ -175,6 +180,8 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                 Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {
                     request?.let { r -> DesktopSheet { RequestSheet(r) { tab = Tab.Stash } } }
                 }
+                // Over the side bar and the page, under the title bar: the window still moves and closes.
+                TourOverlay(touring, onDone = { TourGate.done(); touring = false; tab = Tab.Stash }, startAt = (tourAt ?: 1) - 1)
             }
         }
         ResizeEdges(frame)
