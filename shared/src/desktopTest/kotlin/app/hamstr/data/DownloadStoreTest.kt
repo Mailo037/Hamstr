@@ -33,10 +33,15 @@ class DownloadStoreTest {
         val broken = JSONArray().put(entry("a")).put(JSONObject().put("nope", true)).toString()
         File(dir, "downloads.json").writeText(broken)
         DownloadStore.init(dir)
-        assertEquals(listOf("a"), DownloadStore.tasks.value.map { it.id })
-        val kept = dir.listFiles().orEmpty().filter { it.name.startsWith("downloads.unreadable-") }
-        assertEquals(1, kept.size)
-        assertEquals(broken, kept.single().readText())
-        assertTrue(File(dir, "downloads.json").readText().contains("\"a\""))
+        try {
+            assertEquals(listOf("a"), DownloadStore.tasks.value.map { it.id })
+            val kept = dir.listFiles().orEmpty().filter { it.name.startsWith("downloads.unreadable-") }
+            assertEquals(1, kept.size)
+            assertEquals(broken, kept.single().readText())
+            assertTrue(File(dir, "downloads.json").readText().contains("\"a\""))
+        } finally {
+            // The list is the process's own: tests after this one (the tour's first start) expect it empty.
+            DownloadStore.replace(emptyList())
+        }
     }
 }
