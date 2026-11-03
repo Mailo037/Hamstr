@@ -12,17 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.9.6"
+VERSION = "0.9.7"
 FEATURES = [
-    ("DESKTOP REFINEMENTS", "Menus, tooltips and a player that fits"),
-    ("SMOOTHER SHEETS", "Connected edges and simpler sharing"),
-    ("CLEARER FILE DETAILS", "SHA-256 and a quiet mark for changed files"),
+    ("HEADPHONE PAUSE", "A tap on Sony's XM5 pauses again"),
+    ("CALMER DESKTOP PLAYER", "Files open without freezing the window"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.9.6: current Compose test captures; no phone or emulator is needed.
-SHOTS = [("panel_sharing.png", "Sharing")]
+# 0.9.7: the desktop captures from tools/desktop_screens.py --seed; no phone or emulator was connected.
+SHOTS = [("desktop_library.png", "Library")]
 
 
 def sharing_panel(shots):

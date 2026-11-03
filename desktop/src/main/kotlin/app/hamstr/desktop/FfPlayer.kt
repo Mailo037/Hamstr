@@ -14,6 +14,7 @@ import org.json.JSONObject
 import java.io.DataInputStream
 import java.io.EOFException
 import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import javax.sound.sampled.AudioFormat
 import javax.sound.sampled.AudioSystem
@@ -244,11 +245,22 @@ class FfPlayer(private val file: File, start: Double = 0.0) {
     /** Duration, picture size and which streams there are, from ffprobe. */
     private fun probe(): Info? = runCatching {
         val exe = if (Paths.windows) ".exe" else ""
-        val p = ProcessBuilder(File(Tools.dir, "ffprobe$exe").path, "-v", "error", "-show_entries",
-            "format=duration:stream=codec_type,width,height", "-of", "json", file.path).redirectErrorStream(true).start()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(15, TimeUnit.SECONDS)) p.destroyForcibly()
-        val json = JSONObject(out)
+        // A pipe read can block before the timeout, and waiting first can fill the pipe.
+        val output = Files.createTempFile("hamstr-ffprobe-", ".json")
+        val json = try {
+            val p = ProcessBuilder(File(Tools.dir, "ffprobe$exe").path, "-v", "error", "-show_entries",
+                "format=duration:stream=codec_type,width,height", "-of", "json", file.path)
+                .redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD).start()
+            try {
+                check(p.waitFor(15, TimeUnit.SECONDS)) { "ffprobe timed out" }
+                check(p.exitValue() == 0) { "ffprobe exited with ${p.exitValue()}" }
+                JSONObject(Files.readString(output))
+            } finally {
+                if (p.isAlive) p.destroyForcibly()
+            }
+        } finally {
+            Files.deleteIfExists(output)
+        }
         val streams = json.optJSONArray("streams")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty()
         val picture = streams.firstOrNull { it.optString("codec_type") == "video" && it.optInt("width") > 0 }
         Info(

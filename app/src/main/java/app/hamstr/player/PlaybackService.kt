@@ -7,6 +7,8 @@ import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
+import androidx.core.content.IntentCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -103,6 +105,20 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    // Headphones like Sony's XM5 send Play or Pause by what they think the player does, not
+    // a toggle; when they think it is paused, their tap sends Play into a song that already
+    // plays and nothing happens. A Play from outside while playing pauses instead.
+    private val buttons = object : MediaSession.Callback {
+        override fun onMediaButtonEvent(session: MediaSession, controllerInfo: MediaSession.ControllerInfo, intent: Intent): Boolean {
+            val key = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java) ?: return false
+            val player = session.player
+            val playing = player.playWhenReady && player.playbackState != Player.STATE_IDLE && player.playbackState != Player.STATE_ENDED
+            if (key.keyCode != KeyEvent.KEYCODE_MEDIA_PLAY || !playing || session.isMediaNotificationController(controllerInfo)) return false
+            if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0) player.pause()
+            return true
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         val player = newPlayer(main = true)
@@ -113,7 +129,7 @@ class PlaybackService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        session = MediaSession.Builder(this, player).setSessionActivity(open).build()
+        session = MediaSession.Builder(this, player).setSessionActivity(open).setCallback(buttons).build()
         getSystemService(AudioManager::class.java)?.registerAudioPlaybackCallback(others, handler)
         // The hamster, not Media3's play triangle, in the status bar and the system's media pill.
         setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_stat_hamstr) })

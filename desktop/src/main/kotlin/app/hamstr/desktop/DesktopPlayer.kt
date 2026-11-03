@@ -25,8 +25,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -66,6 +68,8 @@ import app.hamstr.ui.components.pressable
 import app.hamstr.ui.rememberImage
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
@@ -80,16 +84,20 @@ import java.io.File
 @Composable
 fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
     val c = Hamstr.colors
-    val file = remember(t.id) { t.filePath?.let(::File) }
-    val player = remember(t.id) { file?.let { FfPlayer(it, Positions.resumeAt(t.id) / 1000.0) } }
-    DisposableEffect(player) {
-        player?.play()
-        onDispose {
-            player?.let { p -> p.info?.let { Positions.save(t.id, (p.position.value * 1000).toLong(), (it.duration * 1000).toLong()) } }
-            player?.close()
+    val prepared by key(t.id, t.filePath) {
+        produceState<FfPlayer?>(null) {
+            val file = t.filePath?.let(::File) ?: return@produceState
+            value = runInterruptible(Dispatchers.IO) { FfPlayer(file, Positions.resumeAt(t.id) / 1000.0) }
         }
     }
-    if (player == null) return
+    val player = prepared ?: return
+    DisposableEffect(player) {
+        player.play()
+        onDispose {
+            player.info?.let { Positions.save(t.id, (player.position.value * 1000).toLong(), (it.duration * 1000).toLong()) }
+            player.close()
+        }
+    }
     val frame by player.frame.collectAsState()
     val position by player.position.collectAsState()
     val playing by player.playing.collectAsState()
