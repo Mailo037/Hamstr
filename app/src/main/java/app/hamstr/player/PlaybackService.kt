@@ -22,8 +22,9 @@ import app.hamstr.data.Prefs
 import app.hamstr.widget.PlayerWidgets
 
 /**
- * Owns the one ExoPlayer. Media3 turns its session into the media notification and keeps
- * playing in the background (audio, or a video's sound when the app is left).
+ * Owns the player. Media3 turns its session into the media notification and keeps playing in
+ * the background (audio, or a video's sound when the app is left). During a crossfade a
+ * second player starts the next song and the session moves over to it ([Crossfade]).
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackService : MediaSessionService() {
@@ -44,17 +45,67 @@ class PlaybackService : MediaSessionService() {
         if (player.duration > 0) Positions.save(id, player.currentPosition, player.duration)
     }
 
+    private val attributes = AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build()
+    private val crossfade = Crossfade(handler, active = { session?.player as? ExoPlayer }, spawn = { newPlayer(main = false) }, swap = ::swap)
+
+    /** A player with the equalizer. Only the one the session holds takes the audio focus and stops for unplugged headphones. */
+    private fun newPlayer(main: Boolean): ExoPlayer = ExoPlayer.Builder(this, EqRenderers(this))
+        .setAudioAttributes(attributes, /* handleAudioFocus = */ main)
+        .setHandleAudioBecomingNoisy(main)
+        .setSeekBackIncrementMs(10_000)
+        .setSeekForwardIncrementMs(10_000)
+        .build()
+
+    /** A crossfade began: the session, the focus and the listener go to [next]; [old] plays its last seconds out. */
+    private fun swap(old: ExoPlayer, next: ExoPlayer) {
+        old.removeListener(listener)
+        old.setAudioAttributes(attributes, false)
+        old.setHandleAudioBecomingNoisy(false)
+        next.setAudioAttributes(attributes, true)
+        next.setHandleAudioBecomingNoisy(true)
+        next.addListener(listener)
+        last = next.currentMediaItem?.mediaId
+        session?.player = next
+        PlayerWidgets.update(this, next)
+    }
+
+    private var last: String? = null
+    private val listener = object : Player.Listener {
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+            Prefs.edit { it.copy(playbackShuffle = shuffleModeEnabled) }
+        }
+        override fun onRepeatModeChanged(repeatMode: Int) {
+            Prefs.edit { it.copy(playbackRepeat = repeatMode) }
+        }
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            handler.removeCallbacks(keep)
+            if (isPlaying) handler.postDelayed(keep, 5_000) else session?.player?.let(::remember)
+            crossfade.watch(isPlaying)
+        }
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // Played to the end and on to the next one: the last one starts over next time.
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) last?.let(Positions::clear)
+            last = mediaItem?.mediaId
+        }
+        override fun onPlaybackStateChanged(state: Int) {
+            if (state == Player.STATE_ENDED) session?.player?.currentMediaItem?.mediaId?.let(Positions::clear)
+        }
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            handler.removeCallbacks(resume)
+            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS) {
+                yieldedAt = System.currentTimeMillis(); interruption.reset()
+            } else yieldedAt = 0
+        }
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.containsAny(Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED)) {
+                PlayerWidgets.update(this@PlaybackService, player)
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
-        val player = ExoPlayer.Builder(this)
-            .setAudioAttributes(
-                AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
-                /* handleAudioFocus = */ true,
-            )
-            .setHandleAudioBecomingNoisy(true)
-            .setSeekBackIncrementMs(10_000)
-            .setSeekForwardIncrementMs(10_000)
-            .build()
+        val player = newPlayer(main = true)
         player.shuffleModeEnabled = Prefs.settings.value.playbackShuffle
         player.repeatMode = Prefs.settings.value.playbackRepeat
         val open = PendingIntent.getActivity(
@@ -63,35 +114,10 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         session = MediaSession.Builder(this, player).setSessionActivity(open).build()
-        watchFocus(player)
+        getSystemService(AudioManager::class.java)?.registerAudioPlaybackCallback(others, handler)
         // The hamster, not Media3's play triangle, in the status bar and the system's media pill.
         setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_stat_hamstr) })
-        player.addListener(object : Player.Listener {
-            private var last: String? = null
-            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-                Prefs.edit { it.copy(playbackShuffle = shuffleModeEnabled) }
-            }
-            override fun onRepeatModeChanged(repeatMode: Int) {
-                Prefs.edit { it.copy(playbackRepeat = repeatMode) }
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                handler.removeCallbacks(keep)
-                if (isPlaying) handler.postDelayed(keep, 5_000) else remember(player)
-            }
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // Played to the end and on to the next one: the last one starts over next time.
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) last?.let(Positions::clear)
-                last = mediaItem?.mediaId
-            }
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) player.currentMediaItem?.mediaId?.let(Positions::clear)
-            }
-            override fun onEvents(player: Player, events: Player.Events) {
-                if (events.containsAny(Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED)) {
-                    PlayerWidgets.update(this@PlaybackService, player)
-                }
-            }
-        })
+        player.addListener(listener)
     }
 
     // ---- giving way to other apps ------------------------------------------------------
@@ -123,18 +149,6 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private fun watchFocus(player: Player) {
-        getSystemService(AudioManager::class.java)?.registerAudioPlaybackCallback(others, handler)
-        player.addListener(object : Player.Listener {
-            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                handler.removeCallbacks(resume)
-                if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS) {
-                    yieldedAt = System.currentTimeMillis(); interruption.reset()
-                } else yieldedAt = 0
-            }
-        })
-    }
-
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     /** Swiping the app away stops playback unless something is actually playing. */
@@ -144,6 +158,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        crossfade.release()
         handler.removeCallbacks(keep)
         handler.removeCallbacks(resume)
         runCatching { getSystemService(AudioManager::class.java)?.unregisterAudioPlaybackCallback(others) }

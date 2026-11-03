@@ -42,4 +42,13 @@ object Positions {
     }
 
     fun resumeAt(id: String): Long = _all.value[id]?.position ?: 0
+
+    /** Adds positions from a backup; ones already here stay as they are. */
+    fun restore(from: Map<String, Resume>) {
+        if (!::sp.isInitialized) return
+        val add = from.filterKeys { it !in _all.value }
+        if (add.isEmpty()) return
+        _all.update { it + add }
+        sp.edit().apply { add.forEach { (id, r) -> putString(id, "${r.position},${r.duration}") } }.apply()
+    }
 }

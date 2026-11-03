@@ -21,7 +21,7 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 APP = ROOT / "desktop/build/compose/binaries/main/app/Hamstr/Hamstr.exe"
 PHONE_DEMO = "/storage/emulated/0/Android/data/app.hamstr/files/demo"
-PAGES = [("stash", ""), ("library", "Library"), ("devices", "Devices"), ("appearance", "Appearance"), ("about", "About")]
+PAGES = [("stash", ""), ("library", "Library"), ("devices", "Devices"), ("appearance", "Appearance"), ("playback", "Playback"), ("data", "Data"), ("about", "About")]
 
 # PrintWindow with PW_RENDERFULLCONTENT also catches what Skia draws through Direct3D.
 CAPTURE = r"""
@@ -66,7 +66,7 @@ def demo_data(serial, work):
     data = work / "data"
     data.mkdir(parents=True, exist_ok=True)
     (data / "downloads.json").write_text(json.dumps([{k: local(v) for k, v in it.items()} for it in items]), encoding="utf8")
-    (data / "settings.properties").write_text("fx.intro=false\ntoured=true\nappUpdates=false\nnearby=true\nnearbyBluetooth=true\ndeviceName=Studio PC\n", encoding="utf8")
+    (data / "settings.properties").write_text("fx.intro=false\ntoured=true\nappUpdates=false\nnearby=true\nnearbyBluetooth=true\ndeviceName=Studio PC\neq.on=true\neq.preset=rock\n", encoding="utf8")
     return data
 
 
@@ -110,7 +110,7 @@ def seeded_data(seed, work):
     data = work / "data"
     data.mkdir(parents=True, exist_ok=True)
     (data / "downloads.json").write_text(json.dumps(items), encoding="utf8")
-    (data / "settings.properties").write_text("fx.intro=false\ntoured=true\nappUpdates=false\nnearby=true\nnearbyBluetooth=true\ndeviceName=Studio PC\n", encoding="utf8")
+    (data / "settings.properties").write_text("fx.intro=false\ntoured=true\nappUpdates=false\nnearby=true\nnearbyBluetooth=true\ndeviceName=Studio PC\neq.on=true\neq.preset=rock\n", encoding="utf8")
     return data
 
 

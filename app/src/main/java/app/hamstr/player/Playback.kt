@@ -20,6 +20,7 @@ import app.hamstr.data.Positions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,7 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.math.min
 
 private fun playable(t: DownloadTask) = t.filePath?.let(::File)?.isFile == true && kindOf(t).let { it == Kind.Video || it == Kind.Audio }
 
@@ -64,10 +66,14 @@ object Playback {
         // The queue moves on by itself; the UI follows whatever plays now.
         controller.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // A loop belongs to its file; repeating that file keeps it.
+                if (mediaItem?.mediaId != loopId) setLoop(null)
                 val id = mediaItem?.mediaId ?: return
                 _queue.value.firstOrNull { it.id == id }?.let { _current.value = it }
             }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { playing.value = isPlaying }
         })
+        playing.value = controller.isPlaying
         _controller.value = controller
         controller
     }
@@ -266,6 +272,41 @@ object Playback {
         _sleep.value = null
     }
 
+    // ---- A-B loop ---------------------------------------------------------------------------
+
+    private val _loop = MutableStateFlow<AbLoop?>(null)
+    /** The A-B loop on what plays now, marked on the seek bar. */
+    val loop: StateFlow<AbLoop?> = _loop.asStateFlow()
+    private var loopId: String? = null
+    private var looper: Job? = null
+    private val playing = MutableStateFlow(false)
+
+    /**
+     * Sets the loop on what plays now (null ends it). A full loop starts from A, and from
+     * then on playback that reaches B goes back to A, with the app in the background too.
+     */
+    fun setLoop(loop: AbLoop?) {
+        looper?.cancel()
+        looper = null
+        val c = _controller.value?.takeIf { it.isConnected }
+        _loop.value = loop?.takeIf { c != null }
+        loopId = c?.currentMediaItem?.mediaId?.takeIf { loop != null }
+        if (c == null || loop?.b == null) return
+        c.seekTo(loop.a)
+        looper = timerScope.launch {
+            while (true) {
+                val l = _loop.value ?: break
+                val b = l.b ?: break
+                if (!c.isConnected || c.currentMediaItem?.mediaId != loopId) break
+                if (!c.isPlaying) { playing.first { it }; delay(20); continue }
+                // Sleeps until just before B (at most a quarter second, so seeks are noticed).
+                val left = ((b - c.currentPosition) / c.playbackParameters.speed).toLong()
+                if (left <= 20) { c.seekTo(l.a); delay(50) }
+                else delay(min(left - 15, 250))
+            }
+        }
+    }
+
     fun expand() { _expanded.value = true }
     fun minimize() {
         val task = _current.value ?: return
@@ -275,6 +316,7 @@ object Playback {
 
     fun close() {
         cancelSleep()
+        setLoop(null)
         openGeneration++
         _current.value = null
         _expanded.value = false

@@ -199,7 +199,12 @@ internal fun TaskMenu(
         when {
             t.status.active -> MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_cancel)) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
             file != null -> MenuGroup {
-                MenuRow(Res.drawable.ic_visibility_off, stringResource(R.string.menu_hide), subtitle = stringResource(R.string.menu_hide_hint)) { onHide(listOf(t)) }
+                // Opened from Settings › Hidden, the file comes back instead.
+                if (t.hidden) MenuRow(Res.drawable.ic_restore, stringResource(R.string.hidden_restore)) {
+                    DownloadStore.setHidden(setOf(t.id), false)
+                    onCopied(resources.getString(R.string.hidden_restored))
+                    onClose()
+                } else MenuRow(Res.drawable.ic_visibility_off, stringResource(R.string.menu_hide), subtitle = stringResource(R.string.menu_hide_hint)) { onHide(listOf(t)) }
                 MenuRow(Res.drawable.ic_delete, stringResource(R.string.menu_delete), danger = true) { onDelete(t) }
             }
             else -> MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_remove)) { onHide(listOf(t)) }

@@ -6,6 +6,9 @@ import app.hamstr.ui.components.SwipeRow
 import org.jetbrains.compose.resources.DrawableResource
 import app.hamstr.res.*
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.Backup
+import app.hamstr.data.Playlists
+import app.hamstr.data.StorageUsage
 import app.hamstr.data.IconStyle
 import app.hamstr.data.MiniStyle
 import app.hamstr.data.UiSize
@@ -142,11 +145,20 @@ private enum class Page(val title: Int, val icon: DrawableResource) {
     Engine(R.string.page_engine, Res.drawable.ic_code),
     Devices(R.string.page_devices, Res.drawable.ic_devices),
     Hidden(R.string.page_hidden, Res.drawable.ic_visibility_off),
+    Data(R.string.page_data, Res.drawable.ic_pie_chart),
     About(R.string.page_about, Res.drawable.ic_info),
 }
 
 @Composable
-fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit, onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit, onTour: () -> Unit) {
+fun SettingsScreen(
+    contentPadding: PaddingValues,
+    onUpdate: () -> Unit,
+    onDelete: (List<DownloadTask>) -> Unit,
+    onHint: (String) -> Unit,
+    onTour: () -> Unit,
+    onDevice: (String) -> Unit,
+    onMenu: (DownloadTask) -> Unit,
+) {
     var page by rememberSaveable { mutableStateOf<Page?>(null) }
     var highlight by rememberSaveable { mutableStateOf<String?>(null) }
     BackHandler(enabled = page != null) { page = null; highlight = null }
@@ -165,7 +177,7 @@ fun SettingsScreen(contentPadding: PaddingValues, onUpdate: () -> Unit, onDelete
     ) { p ->
         if (p == null) Root(contentPadding) { target, setting -> page = target; highlight = setting }
         else CompositionLocalProvider(LocalSettingHighlight provides highlight) {
-            SubPage(p, contentPadding, onUpdate, onDelete, onHint, onTour, onBack = { page = null; highlight = null })
+            SubPage(p, contentPadding, onUpdate, onDelete, onHint, onTour, onDevice, onMenu, onBack = { page = null; highlight = null })
         }
     }
 }
@@ -205,7 +217,9 @@ private fun Root(contentPadding: PaddingValues, open: (Page, String?) -> Unit) {
 }
 
 private fun summary(context: android.content.Context, p: Page, s: Settings, engine: EngineState, hidden: List<DownloadTask>): String = when (p) {
-    Page.Playback -> context.getString(if (s.resumeAfterVideos) R.string.set_playback_resumes else R.string.set_playback_pauses)
+    Page.Playback -> if (s.eqOn) context.getString(R.string.set_playback_eq, app.hamstr.audio.Equalizer.Preset.of(s.eqPreset)?.let { context.getString(eqName(it)) } ?: context.getString(R.string.eq_custom))
+        else context.getString(if (s.resumeAfterVideos) R.string.set_playback_resumes else R.string.set_playback_pauses)
+    Page.Data -> context.getString(R.string.set_storage) + " · " + context.getString(R.string.set_backup)
     Page.Hidden -> if (hidden.isEmpty()) context.getString(R.string.hidden_summary_none)
         else context.resources.getQuantityString(R.plurals.hidden_summary, hidden.size, hidden.size, formatBytes(hidden.sumOf { it.sizeBytes }))
     Page.Appearance -> "${ACCENTS.firstOrNull { it.argb == s.accent }?.name ?: context.getString(R.string.set_custom)} · ${context.getString(baseName(s.base))}"
@@ -262,6 +276,8 @@ private fun SubPage(
     onDelete: (List<DownloadTask>) -> Unit,
     onHint: (String) -> Unit,
     onTour: () -> Unit,
+    onDevice: (String) -> Unit,
+    onMenu: (DownloadTask) -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -317,8 +333,9 @@ private fun SubPage(
             Page.Queue -> QueuePage()
             Page.Playback -> PlaybackPage()
             Page.Engine -> EnginePage()
-            Page.Devices -> DevicesPage()
-            Page.Hidden -> HiddenPage(onDelete, onHint)
+            Page.Devices -> DevicesPage(onDevice)
+            Page.Hidden -> HiddenPage(onDelete, onHint, onMenu)
+            Page.Data -> DataPage()
             Page.About -> AboutPage(onUpdate, onTour)
         }
         Spacer(Modifier.height(24.dp))
@@ -327,7 +344,7 @@ private fun SubPage(
 
 /** Nearby: the shared settings, plus Bluetooth, which needs Android's permission and the adapter on. */
 @Composable
-private fun DevicesPage() {
+private fun DevicesPage(onDevice: (String) -> Unit) {
     val s by Prefs.settings.collectAsState()
     val context = LocalContext.current
     val ble = app.hamstr.nearby.BleTransport
@@ -366,7 +383,7 @@ private fun DevicesPage() {
                 }
             }
         }
-    })
+    }, onDevice = onDevice)
 }
 
 @Composable
@@ -439,12 +456,74 @@ private fun PlaybackPage() {
     val s by Prefs.settings.collectAsState()
     Group {
         FxRow(stringResource(R.string.set_resume_videos), stringResource(R.string.set_resume_videos_hint), s.resumeAfterVideos) { v -> Prefs.edit { it.copy(resumeAfterVideos = v) } }
+        Divider()
+        CrossfadeBlock()
+    }
+    Spacer(Modifier.height(12.dp))
+    Group { EqualizerBlock() }
+}
+
+/** How long one song fades into the next; 0 keeps the cut. Only the phone plays a queue. */
+@Composable
+internal fun CrossfadeBlock() {
+    val s by Prefs.settings.collectAsState()
+    var secs by remember(s.crossfade) { mutableIntStateOf(s.crossfade) }
+    val resources = LocalResources.current
+    val off = stringResource(R.string.set_crossfade_off)
+    val label = stringResource(R.string.set_crossfade)
+    Column(Modifier.searchHighlight(label).padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Txt(label, modifier = Modifier.weight(1f))
+            Txt(if (secs == 0) off else stringResource(R.string.set_crossfade_secs, secs), style = Hamstr.type.mono, color = if (secs == 0) Hamstr.colors.ghost else Hamstr.colors.accent)
+        }
+        app.hamstr.ui.components.HSlider(
+            secs, 0..12, label,
+            describe = { if (it == 0) off else resources.getString(R.string.set_crossfade_secs, it) },
+            onDone = { v -> Prefs.edit { it.copy(crossfade = v) } },
+        ) { secs = it }
+        Txt(stringResource(R.string.set_crossfade_hint), style = Hamstr.type.small, color = Hamstr.colors.ghost)
     }
 }
 
-/** Files hidden from the library: show them again, or delete them for good. */
+/** Settings › Data & backup: the shared page, with Android's file pickers and folders. */
 @Composable
-private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit) {
+private fun DataPage() {
+    val context = LocalContext.current
+    val app = context.applicationContext
+    var waiting by remember { mutableStateOf<kotlinx.coroutines.CompletableDeferred<Uri?>?>(null) }
+    val create = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { waiting?.complete(it); waiting = null }
+    val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { waiting?.complete(it); waiting = null }
+    suspend fun pick(launch: () -> Unit): Uri? = kotlinx.coroutines.CompletableDeferred<Uri?>().also { waiting = it; launch() }.await()
+    DataSettings(
+        measure = { StorageUsage.measure(app) },
+        clearCache = { StorageUsage.clearCache(app) },
+        export = export@{
+            val uri = pick { create.launch(Backup.fileName()) } ?: return@export null
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val text = Backup.export(BuildConfig.VERSION_NAME, mapOf("playlists" to org.json.JSONArray(Playlists.encode())))
+                    app.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(text.toByteArray()) }
+                    BackupResult.Saved
+                }.getOrElse { BackupResult.Failed(it.message ?: it.javaClass.simpleName, reading = false) }
+            }
+        },
+        import = import@{
+            val uri = pick { open.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) } ?: return@import null
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val text = app.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) }
+                    val restored = Backup.restore(text)
+                    restored.extras.optJSONArray("playlists")?.let { Playlists.merge(it.toString()) }
+                    BackupResult.Restored(restored.downloads)
+                }.getOrElse { BackupResult.Failed(it.message ?: it.javaClass.simpleName, reading = true) }
+            }
+        },
+    )
+}
+
+/** Files hidden from the library: show them again, or delete them for good; a tap opens the file's menu. */
+@Composable
+private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit, onMenu: (DownloadTask) -> Unit) {
     val c = Hamstr.colors
     val tasks by DownloadStore.tasks.collectAsState()
     val hidden = remember(tasks) { tasks.filter { it.hidden && it.status == Status.Done } }
@@ -467,7 +546,15 @@ private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) 
                     end = SwipeAction(Res.drawable.ic_delete, stringResource(R.string.menu_delete), c.red, removes = true) { onDelete(listOf(t)) },
                     background = c.overlay,
                 ) {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(Radii.row))
+                            .pressable({ onMenu(t) })
+                            .heightIn(min = 64.dp)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
                             AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(52.dp))
                         }
@@ -534,18 +621,19 @@ private fun DownloadsPage() {
         Divider()
         FxRow(stringResource(R.string.set_playlists), stringResource(R.string.set_playlists_hint), s.playlists) { v -> Prefs.edit { it.copy(playlists = v) } }
         Divider()
-        OpenWhenDoneRow()
+        OpenWhenDoneRow(s.openWhenDone, hint = true) { v -> Prefs.edit { it.copy(openWhenDone = v) } }
     }
 }
 
 /**
  * Android only lets an app come forward on its own with "Display over other apps", so
  * turning this on asks for that; without it the finished notification stays the way in.
+ * Here as the default, and in the download sheet for one download ([hint] off: no line under it
+ * unless the permission is missing).
  */
 @Composable
-private fun OpenWhenDoneRow() {
+internal fun OpenWhenDoneRow(on: Boolean, hint: Boolean, set: (Boolean) -> Unit) {
     val context = LocalContext.current
-    val s by Prefs.settings.collectAsState()
     fun allowed() = android.provider.Settings.canDrawOverlays(context)
     var system by remember { mutableStateOf(allowed()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -562,13 +650,13 @@ private fun OpenWhenDoneRow() {
             )
         }
     }
-    val hint = stringResource(if (s.openWhenDone && !system) R.string.set_open_done_needs else R.string.set_open_done_hint)
+    val subtitle = if (on && !system) stringResource(R.string.set_open_done_needs) else if (hint) stringResource(R.string.set_open_done_hint) else null
     SettingRow(
-        stringResource(R.string.set_open_done), subtitle = hint,
-        onClick = { if (s.openWhenDone && !system) askSystem() else Prefs.edit { it.copy(openWhenDone = !s.openWhenDone) } },
+        stringResource(R.string.set_open_done), subtitle = subtitle,
+        onClick = { if (on && !system) askSystem() else set(!on) },
     ) {
-        HSwitch(s.openWhenDone, { v ->
-            Prefs.edit { it.copy(openWhenDone = v) }
+        HSwitch(on, { v ->
+            set(v)
             if (v && !system) askSystem()
         })
     }
@@ -871,6 +959,11 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry(R.string.set_language, Page.Appearance, "language sprache idioma langue lingua taal język dil язык 言語 언어 语言 english deutsch translate übersetzen"),
     SettingEntry(R.string.set_mini, Page.Appearance, "mini player docked floating slim compact miniplayer"),
     SettingEntry(R.string.set_resume_videos, Page.Playback, "youtube tiktok pause resume audio focus music fortsetzen wiedergabe"),
+    SettingEntry(R.string.eq_title, Page.Playback, "equalizer eq bass treble presets sound klang höhen tiefen rock pop"),
+    SettingEntry(R.string.set_crossfade, Page.Playback, "crossfade fade blend transition gapless überblenden übergang"),
+    SettingEntry(R.string.set_storage, Page.Data, "storage space memory size cache clear speicher platz belegt leeren"),
+    SettingEntry(R.string.backup_export, Page.Data, "backup export save file settings sichern exportieren datei einstellungen"),
+    SettingEntry(R.string.backup_import, Page.Data, "backup import restore move phone wiederherstellen importieren übertragen"),
     SettingEntry(R.string.page_hidden, Page.Hidden, "hidden unlisted restore delete versteckt wiederherstellen löschen"),
     SettingEntry(R.string.set_intro, Page.Motion, "intro splash start animation"),
     SettingEntry(R.string.set_moods, Page.Motion, "blink wink munch hamster mark"),
@@ -937,6 +1030,23 @@ private fun openFolder(context: android.content.Context) {
         }
     }
     android.widget.Toast.makeText(context, R.string.set_open_folder_failed, android.widget.Toast.LENGTH_SHORT).show()
+}
+
+/** A preset's name as an Android string, for the summaries built outside composition. */
+private fun eqName(p: app.hamstr.audio.Equalizer.Preset) = when (p) {
+    app.hamstr.audio.Equalizer.Preset.Flat -> R.string.eq_flat
+    app.hamstr.audio.Equalizer.Preset.Bass -> R.string.eq_bass
+    app.hamstr.audio.Equalizer.Preset.Treble -> R.string.eq_treble
+    app.hamstr.audio.Equalizer.Preset.Vocals -> R.string.eq_vocals
+    app.hamstr.audio.Equalizer.Preset.Rock -> R.string.eq_rock
+    app.hamstr.audio.Equalizer.Preset.Pop -> R.string.eq_pop
+    app.hamstr.audio.Equalizer.Preset.Electronic -> R.string.eq_electronic
+    app.hamstr.audio.Equalizer.Preset.HipHop -> R.string.eq_hiphop
+    app.hamstr.audio.Equalizer.Preset.Jazz -> R.string.eq_jazz
+    app.hamstr.audio.Equalizer.Preset.Classical -> R.string.eq_classical
+    app.hamstr.audio.Equalizer.Preset.Acoustic -> R.string.eq_acoustic
+    app.hamstr.audio.Equalizer.Preset.Speech -> R.string.eq_speech
+    app.hamstr.audio.Equalizer.Preset.Night -> R.string.eq_night
 }
 
 /** A background's name as an Android string, for the summaries built outside composition. */

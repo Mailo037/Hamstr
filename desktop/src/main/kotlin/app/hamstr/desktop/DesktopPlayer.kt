@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,9 +47,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Positions
+import app.hamstr.player.AbLoop
 import app.hamstr.res.*
 import app.hamstr.ui.components.AsciiImage
 import app.hamstr.ui.components.Icon
+import app.hamstr.ui.components.LoopBand
+import app.hamstr.ui.components.LoopPill
+import app.hamstr.ui.components.loopHold
+import app.hamstr.ui.components.rememberLoopHold
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.pressable
 import app.hamstr.ui.rememberImage
@@ -59,7 +65,8 @@ import java.io.File
 /**
  * The desktop's player for a stashed video or song ([FfPlayer]): the picture (or the cover),
  * a bar to seek on, play and ±10 s, the volume. Space, ← and → work too. It carries on where
- * the file was left and remembers where it stops, like the phone's.
+ * the file was left and remembers where it stops, like the phone's, and holding the bar marks
+ * an A-B loop the same way.
  */
 @Composable
 fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
@@ -84,6 +91,12 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     LaunchedEffect(ended) { if (ended) Positions.clear(t.id) }
+    var loop by remember(t.id) { mutableStateOf<AbLoop?>(null) }
+    val setLoop = { l: AbLoop? -> loop = l; if (l?.b != null) player.seek(l.a / 1000.0) }
+    LaunchedEffect(loop) {
+        val l = loop ?: return@LaunchedEffect
+        player.position.collect { at -> l.jumpFrom((at * 1000).toLong()).takeIf { it >= 0 }?.let { player.seek(it / 1000.0) } }
+    }
 
     Column(
         Modifier
@@ -126,10 +139,12 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
         Spacer(Modifier.height(8.dp))
-        SeekBar(if (duration > 0) (position / duration).toFloat() else 0f) { f -> player.seek(f * duration) }
+        SeekBar(if (duration > 0) (position / duration).toFloat() else 0f, loop, (duration * 1000).toLong(), setLoop) { f -> player.seek(f * duration) }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Txt("${clock(position)} / ${clock(duration)}", style = Hamstr.type.mono, color = c.muted)
+            Spacer(Modifier.width(10.dp))
+            LoopPill(loop, { setLoop(null) })
             Spacer(Modifier.weight(1f))
             PlayerButton(Res.drawable.ic_replay_10) { player.seek(position - 10) }
             PlayerButton(if (playing) Res.drawable.ic_pause else Res.drawable.ic_play_arrow, big = true) { player.toggle() }
@@ -142,11 +157,13 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
     }
 }
 
-/** A thin bar: click or drag anywhere on it to go there. */
+/** A thin bar: click or drag anywhere on it to go there. With [onLoop], holding it marks an A-B loop. */
 @Composable
-private fun SeekBar(fraction: Float, onSeek: (Float) -> Unit) {
+private fun SeekBar(fraction: Float, loop: AbLoop? = null, durationMs: Long = 0, onLoop: ((AbLoop?) -> Unit)? = null, onSeek: (Float) -> Unit) {
     val c = Hamstr.colors
     var dragging by remember { mutableStateOf<Float?>(null) }
+    val hold = rememberLoopHold()
+    val fractionNow by rememberUpdatedState(fraction)
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
@@ -160,9 +177,11 @@ private fun SeekBar(fraction: Float, onSeek: (Float) -> Unit) {
                     onDragEnd = { dragging?.let(onSeek); dragging = null },
                     onDragCancel = { dragging = null },
                 ) { change, _ -> dragging = (change.position.x / size.width).coerceIn(0f, 1f) }
-            },
+            }
+            .then(if (onLoop != null) Modifier.loopHold(hold, loop, { durationMs }, { (fractionNow * durationMs).toLong() }, onLoop) else Modifier),
         contentAlignment = Alignment.CenterStart,
     ) {
+        if (onLoop != null) LoopBand(hold.shown(loop, durationMs), durationMs, Modifier.matchParentSize())
         val shown = (dragging ?: fraction).coerceIn(0f, 1f)
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(c.line))
         Box(Modifier.width(maxWidth * shown).height(4.dp).clip(RoundedCornerShape(2.dp)).background(c.accent))

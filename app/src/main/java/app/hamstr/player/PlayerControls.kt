@@ -65,8 +65,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.media3.common.Player
 import app.hamstr.R
+import app.hamstr.data.Prefs
 import app.hamstr.data.DownloadTask
 import app.hamstr.ui.components.AsciiImage
+import app.hamstr.ui.components.LoopBand
+import app.hamstr.ui.components.LoopPill
+import app.hamstr.ui.components.loopHold
+import app.hamstr.ui.components.rememberLoopHold
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
@@ -244,12 +249,15 @@ fun PlayPause(playing: Boolean, size: Dp, onClick: () -> Unit) {
 
 /**
  * Seek bar: drag anywhere on it; the thumb grows while held, stretches with its speed,
- * and the time label follows the finger. Seeks on release.
+ * and the time label follows the finger. Seeks on release. A hold marks an A-B loop
+ * (hold for A and again for B, or hold and slide); the pill between the times ends it.
  */
 @Composable
 internal fun Scrubber(controller: Player, ui: PlayerUi) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
+    val loop by Playback.loop.collectAsState()
+    val hold = rememberLoopHold()
     var dragPos by remember { mutableStateOf<Float?>(null) }
     val fraction = dragPos ?: if (ui.duration > 0) ui.position / ui.duration.toFloat() else 0f
     val thumb by animateFloatAsState(if (dragPos != null) 20f else 12f, spring(dampingRatio = 0.5f, stiffness = 600f), label = "thumb")
@@ -267,8 +275,10 @@ internal fun Scrubber(controller: Player, ui: PlayerUi) {
                         onDragCancel = { dragPos = null },
                     )
                 }
-                .pointerInput(w) { detectTapGestures { controller.seekTo(((it.x / w).coerceIn(0f, 1f) * ui.duration).toLong()) } },
+                .pointerInput(w) { detectTapGestures { controller.seekTo(((it.x / w).coerceIn(0f, 1f) * ui.duration).toLong()) } }
+                .loopHold(hold, loop, { ui.duration }, { ui.position }, Playback::setLoop),
         ) {
+            LoopBand(hold.shown(loop, ui.duration), ui.duration, Modifier.matchParentSize())
             Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(4.dp).clip(CircleShape).background(c.line))
             Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(fraction.coerceIn(0f, 1f)).height(4.dp).clip(CircleShape).background(c.accent))
             Box(
@@ -282,9 +292,11 @@ internal fun Scrubber(controller: Player, ui: PlayerUi) {
             )
         }
     }
-    Row(Modifier.fillMaxWidth()) {
-        Txt(fmt(((dragPos ?: -1f).takeIf { it >= 0f }?.let { (it * ui.duration).toLong() }) ?: ui.position), style = Hamstr.type.mono, color = if (dragPos != null) c.accent else c.ghost, modifier = Modifier.weight(1f))
-        Txt(fmt(ui.duration), style = Hamstr.type.mono, color = c.ghost)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        val held = dragPos ?: hold.mark?.to
+        Txt(fmt(held?.let { (it * ui.duration).toLong() } ?: ui.position), style = Hamstr.type.mono, color = if (held != null) c.accent else c.ghost, modifier = Modifier.weight(1f))
+        LoopPill(loop, { Playback.setLoop(null) })
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { Txt(fmt(ui.duration), style = Hamstr.type.mono, color = c.ghost) }
     }
 }
 
@@ -509,6 +521,8 @@ internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, on
             haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             onLyrics()
         }
+        val eq by Prefs.settings.collectAsState()
+        ModeButton(Res.drawable.ic_equalizer, stringResource(R.string.eq_title), on = eq.eqOn) { EqSheet.open.value = true }
         ModeButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), on = false, onClick = onQueue)
     }
 }

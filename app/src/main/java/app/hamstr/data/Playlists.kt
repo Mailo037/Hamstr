@@ -53,16 +53,9 @@ object Playlists {
         scope.launch {
             for (ignored in saves) {
                 try {
-                    val arr = JSONArray()
-                    _lists.value.forEach { l ->
-                        arr.put(JSONObject().apply {
-                            put("id", l.id); put("name", l.name); put("createdAt", l.createdAt)
-                            put("ids", JSONArray(l.ids))
-                        })
-                    }
                     val output = atomic.startWrite()
                     try {
-                        output.write(arr.toString().toByteArray(Charsets.UTF_8))
+                        output.write(encode().toByteArray(Charsets.UTF_8))
                         atomic.finishWrite(output)
                     } catch (e: Exception) {
                         atomic.failWrite(output)
@@ -73,6 +66,27 @@ object Playlists {
                 }
             }
         }
+    }
+
+    /** The lists as playlists.json keeps them, for a backup. */
+    fun encode(lists: List<UserList> = _lists.value): String = JSONArray().apply {
+        lists.forEach { l ->
+            put(JSONObject().apply {
+                put("id", l.id); put("name", l.name); put("createdAt", l.createdAt)
+                put("ids", JSONArray(l.ids))
+            })
+        }
+    }.toString()
+
+    /** Lists from a backup: new ones are added, ones that are here already get the files they lack. */
+    fun merge(text: String) {
+        val incoming = runCatching { decode(text) }.getOrNull() ?: return
+        _lists.update { all ->
+            val byId = all.associateBy { it.id }
+            all.map { l -> incoming.firstOrNull { it.id == l.id }?.let { l.copy(ids = (l.ids + it.ids).distinct()) } ?: l } +
+                incoming.filter { it.id !in byId }
+        }
+        save()
     }
 
     internal fun decode(text: String): List<UserList> = JSONArray(text).let { a ->

@@ -68,10 +68,11 @@ object Files {
     }
 
     /** Copies picked files into the downloads folder and puts them on the list, like the phone's import. */
-    fun pickAndImport() {
-        val dialog = FileDialog(null as Frame?, "Hamstr", FileDialog.LOAD).apply { isMultipleMode = true; isVisible = true }
-        import(dialog.files.orEmpty().toList())
-    }
+    fun pickAndImport() = import(pick())
+
+    /** Asks for files; none when the dialog is cancelled. */
+    fun pick(): List<File> =
+        FileDialog(null as Frame?, "Hamstr", FileDialog.LOAD).apply { isMultipleMode = true; isVisible = true }.files.orEmpty().filter { it.isFile }
 
     /** Copies [files] (picked or dropped on the window) into the downloads folder and onto the list. */
     fun import(files: List<File>) {

@@ -98,6 +98,7 @@ import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.ShareContent
 import app.hamstr.ui.AndroidSharingSheet
+import app.hamstr.ui.DeviceSheet
 import app.hamstr.ui.RequestSheet
 import app.hamstr.ui.QualitySheet
 import app.hamstr.ui.RenameSheet
@@ -254,6 +255,8 @@ private fun App(inPip: Boolean) {
     // A link on its way to another Hamstr nearby, and the question from one that wants to send.
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
     val requests by app.hamstr.nearby.Nearby.requests.collectAsState()
+    // A remembered device's sheet, from Settings › Devices.
+    var deviceFor by remember { mutableStateOf<String?>(null) }
     var qualityFor by remember { mutableStateOf<DownloadTask?>(null) }
     var renameFor by remember { mutableStateOf<DownloadTask?>(null) }
     var infoFor by remember { mutableStateOf<DownloadTask?>(null) }
@@ -288,6 +291,12 @@ private fun App(inPip: Boolean) {
                 },
             )
         }
+    }
+    // Files picked in a device's sheet: the sheet waits for them.
+    var picked by remember { mutableStateOf<kotlinx.coroutines.CompletableDeferred<List<Uri>>?>(null) }
+    val pickToSend = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        picked?.complete(uris)
+        picked = null
     }
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifyAsk = false }
     fun clipboardLink(): String? {
@@ -473,7 +482,11 @@ private fun App(inPip: Boolean) {
                     onPlaylist = { playlistFor = it }, onPlaylistMenu = { playlistMenu = it }, onNewPlaylist = { newList = emptyList() }, onAddToPlaylist = { addToList = it },
                     onHide = hide, onDelete = delete, onShare = share,
                 )
-                Tab.Settings -> SettingsScreen(padding, onUpdate = { updateSheet = true }, onDelete = delete, onHint = { hint(it) }, onTour = { touring = true })
+                Tab.Settings -> SettingsScreen(
+                    padding, onUpdate = { updateSheet = true }, onDelete = delete, onHint = { hint(it) }, onTour = { touring = true },
+                    onDevice = { clipLink = clipboardLink(); deviceFor = it },
+                    onMenu = { menuFor = it },
+                )
             }
         }
         if (landscape) {
@@ -539,6 +552,10 @@ private fun App(inPip: Boolean) {
 
         Overlay(visible = queueSheet && playing != null, onDismiss = { queueSheet = false }) {
             QueueSheet(onClose = { queueSheet = false })
+        }
+        val eqSheet by app.hamstr.player.EqSheet.open.collectAsState()
+        Overlay(visible = eqSheet && playing != null, onDismiss = { app.hamstr.player.EqSheet.open.value = false }) {
+            app.hamstr.ui.EqualizerSheet()
         }
         Overlay(visible = sleepSheet, onDismiss = { sleepSheet = false }) {
             SleepSheet { label ->
@@ -692,6 +709,15 @@ private fun App(inPip: Boolean) {
                     onDelete = { v -> delete(listOf(v)) },
                     onDone = { msg -> qualityFor = null; hint(msg) },
                 )
+            }
+        }
+        Overlay(visible = deviceFor != null, onDismiss = { deviceFor = null }) {
+            deviceFor?.let { id ->
+                DeviceSheet(id, clipLink, onPickFiles = {
+                    val wait = kotlinx.coroutines.CompletableDeferred<List<Uri>>().also { picked = it }
+                    pickToSend.launch(arrayOf("*/*"))
+                    Importer.forSending(context, wait.await())
+                }, onClose = { deviceFor = null })
             }
         }
         Overlay(visible = sharing != null, onDismiss = { sharing = null }) {

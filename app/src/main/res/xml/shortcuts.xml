@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Known devices show in Android's share sheet (PhoneNearby publishes them); a link shared to one goes straight to it. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <share-target android:targetClass="app.hamstr.ShareActivity">
+        <data android:mimeType="text/plain" />
+        <category android:name="app.hamstr.category.SEND_TO_DEVICE" />
+    </share-target>
+</shortcuts>

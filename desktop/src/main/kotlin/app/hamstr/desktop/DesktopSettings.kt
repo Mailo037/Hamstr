@@ -35,7 +35,9 @@ import app.hamstr.engine.EngineState
 import app.hamstr.res.*
 import app.hamstr.ui.NearbySettings
 import app.hamstr.ui.AsciiEffects
+import app.hamstr.ui.DataSettings
 import app.hamstr.ui.EngineChoice
+import app.hamstr.ui.EqualizerBlock
 import app.hamstr.ui.FormatDefaults
 import app.hamstr.ui.FxRow
 import app.hamstr.ui.LookBlocks
@@ -66,14 +68,16 @@ internal enum class Page(val title: StringResource, val icon: DrawableResource) 
     Appearance(Res.string.page_appearance, Res.drawable.ic_palette),
     Motion(Res.string.page_motion, Res.drawable.ic_auto_awesome),
     Downloads(Res.string.page_downloads, Res.drawable.ic_download),
+    Playback(Res.string.page_playback, Res.drawable.ic_play_arrow),
     Engine(Res.string.page_engine, Res.drawable.ic_code),
     Devices(Res.string.page_devices, Res.drawable.ic_devices),
+    Data(Res.string.page_data, Res.drawable.ic_pie_chart),
     About(Res.string.page_about, Res.drawable.ic_info),
 }
 
 /** A settings page, the same categories as on the phone; the side bar lists them. */
 @Composable
-internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit, onTour: () -> Unit) {
+internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit, onTour: () -> Unit, onDevice: (String) -> Unit) {
     AnimatedContent(page, Modifier.fillMaxSize(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "page") { p ->
         val scroll = rememberScrollState()
         // A readable column in the middle of the window, its title over it, like the stash.
@@ -88,8 +92,11 @@ internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit
                     }
                     Page.Motion -> MotionPage()
                     Page.Downloads -> DownloadsPage()
+                    // The computer plays one file at a time: no queue to crossfade.
+                    Page.Playback -> Group { EqualizerBlock() }
                     Page.Engine -> EnginePage(engine)
-                    Page.Devices -> NearbySettings(bluetooth = { BluetoothRow() })
+                    Page.Devices -> NearbySettings(bluetooth = { BluetoothRow() }, onDevice = onDevice)
+                    Page.Data -> DataSettings(DesktopData::measure, DesktopData::clearCache, DesktopData::export, DesktopData::import)
                     Page.About -> AboutPage(onQuit, onTour)
                 }
                 Spacer(Modifier.height(24.dp))

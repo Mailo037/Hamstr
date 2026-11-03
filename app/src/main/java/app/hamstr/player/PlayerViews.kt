@@ -9,6 +9,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import app.hamstr.ui.components.Specs
+import app.hamstr.ui.components.rubberBand
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
@@ -89,33 +93,90 @@ internal fun VideoSurface(
     val context = LocalContext.current
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
-    var seekLabel by remember { mutableStateOf<String?>(null) }
+    // Double taps skip 10 s on the side they land on; more taps there add up (20 s, 30 s).
+    var seek by remember { mutableIntStateOf(0) }
+    var seekTap by remember { mutableIntStateOf(0) }
     var overlay by remember { mutableStateOf(true) }
-    LaunchedEffect(seekLabel) { if (seekLabel != null) { delay(650); seekLabel = null } }
+    LaunchedEffect(seekTap) { if (seek != 0) { delay(700); seek = 0 } }
     LaunchedEffect(overlay, immersive, ui.isPlaying) { if (immersive && overlay && ui.isPlaying) { delay(2600); overlay = false } }
+    // Fullscreen (or a sideways phone) follows a drag down and leaves past the threshold.
+    val scope = rememberCoroutineScope()
+    val pull = remember { Animatable(0f) }
     Box(
         Modifier
             .fillMaxSize()
             .pointerInput(expanded, immersive) {
+                fun skip(back: Boolean) {
+                    val player = controller ?: return
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    if (back) player.seekBack() else player.seekForward()
+                    seek = if (back) (if (seek < 0) seek - 10 else -10) else (if (seek > 0) seek + 10 else 10)
+                    seekTap++
+                }
                 detectTapGestures(
-                    onTap = { if (!expanded) onTapMini() else if (immersive) overlay = !overlay },
-                    onDoubleTap = { pos ->
-                        if (!expanded || controller == null) return@detectTapGestures
-                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        if (pos.x < size.width / 2) { controller.seekBack(); seekLabel = "« 10 s" } else { controller.seekForward(); seekLabel = "10 s »" }
+                    onTap = { pos ->
+                        val back = pos.x < size.width / 2
+                        when {
+                            !expanded -> onTapMini()
+                            // Right after a skip, a single tap on the same side skips again.
+                            seek != 0 && back == (seek < 0) -> skip(back)
+                            immersive -> overlay = !overlay
+                        }
                     },
+                    onDoubleTap = { pos -> if (expanded) skip(pos.x < size.width / 2) },
                 )
-            },
+            }
+            .then(if (immersive) Modifier.pointerInput(forced) {
+                val arm = 72.dp.toPx()
+                var armed = false
+                var travel = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { armed = false; travel = 0f },
+                    onVerticalDrag = { change, dy ->
+                        change.consume()
+                        travel += dy
+                        val next = rubberBand(travel.coerceAtLeast(0f), arm * 1.5f)
+                        if ((next > arm) != armed) {
+                            armed = !armed
+                            haptics.performHapticFeedback(if (armed) HapticFeedbackType.GestureThresholdActivate else HapticFeedbackType.SegmentTick)
+                        }
+                        scope.launch { pull.snapTo(next) }
+                    },
+                    onDragEnd = {
+                        if (armed) {
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            if (forced) onExitFullscreen() else onMinimize()
+                        }
+                        scope.launch { pull.animateTo(0f, Specs.settle()) }
+                    },
+                    onDragCancel = { scope.launch { pull.animateTo(0f, Specs.settle()) } },
+                )
+            } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         if (controller != null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    translationY = pull.value * 0.5f
+                    val s = 1f - pull.value / size.height * 0.4f
+                    scaleX = s; scaleY = s
+                },
+                contentAlignment = Alignment.Center,
+            ) {
                 PlayerSurface(controller, Modifier.aspectFit(ui.aspect), SURFACE_TYPE_TEXTURE_VIEW)
             }
         }
-        seekLabel?.let {
-            Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 14.dp, vertical = 8.dp)) {
-                Txt(it, style = Hamstr.type.mono, color = Color.White)
+        if (seek != 0) {
+            // Beside the middle, where the play button doesn't cover it.
+            Box(
+                Modifier
+                    .align(if (seek < 0) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = 40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Txt(if (seek < 0) "« ${-seek} s" else "$seek s »", style = Hamstr.type.mono, color = Color.White)
             }
         }
         if (immersive && controller != null) {

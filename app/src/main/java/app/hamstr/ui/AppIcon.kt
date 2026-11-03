@@ -80,8 +80,9 @@ object AppIcon {
                 .setIntent(Intent(action).setClassName(context, MainActivity::class.java.name))
                 .setRank(rank)
                 .build()
+        // Added, not set: the devices PhoneNearby offers in the share sheet are dynamic shortcuts too.
         runCatching {
-            ShortcutManagerCompat.setDynamicShortcuts(
+            ShortcutManagerCompat.addDynamicShortcuts(
                 context,
                 listOf(
                     shortcut("paste", MainActivity.ACTION_PASTE, R.string.sc_paste_short, R.string.sc_paste_long, R.drawable.ic_content_paste, 0),
@@ -93,7 +94,7 @@ object AppIcon {
     }
 
     /** An adaptive-icon bitmap: the glyph in the accent on the shortcut background, in the safe zone. */
-    private fun glyph(context: Context, icon: Int, accent: Int): Bitmap {
+    internal fun glyph(context: Context, icon: Int, accent: Int): Bitmap {
         val size = 432 // 108 dp at 4x
         val bmp = createBitmap(size, size)
         val canvas = Canvas(bmp)

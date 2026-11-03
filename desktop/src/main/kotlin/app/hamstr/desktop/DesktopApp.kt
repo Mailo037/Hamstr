@@ -55,6 +55,7 @@ import app.hamstr.engine.MediaLinks
 import app.hamstr.res.*
 import app.hamstr.nearby.Nearby
 import app.hamstr.ui.AddSheet
+import app.hamstr.ui.DeviceSheet
 import app.hamstr.ui.RequestSheet
 import app.hamstr.ui.ShareContent
 import app.hamstr.ui.SharingSheet
@@ -102,6 +103,8 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     var tab by remember { mutableStateOf(if (open != null) Tab.Settings else if (library) Tab.Library else Tab.Stash) }
     var page by remember { mutableStateOf(open ?: Page.Appearance) }
     var adding by remember { mutableStateOf(false) }
+    // A remembered device's sheet, from Settings › Devices.
+    var deviceFor by remember { mutableStateOf<String?>(null) }
     var clipLink by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
@@ -157,7 +160,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                             Tab.Library -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                                 Box(Modifier.widthIn(max = 880.dp)) { DesktopLibrary(visible, onPlay = ::play, onMenu = { menuFor = it }) }
                             }
-                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true })
+                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true }, onDevice = { clipLink = clipboardLink(); deviceFor = it })
                         }
                     }
                 }
@@ -175,6 +178,9 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                 }
                 Overlay(menuFor != null, onDismiss = { menuFor = null }) {
                     menuFor?.let { t -> DesktopSheet { FileMenu(t, onShare = { menuFor = null; sharing = ShareContent.from(listOf(t)) }, onPlay = { menuFor = null; play(it) }) { menuFor = null } } }
+                }
+                Overlay(deviceFor != null, onDismiss = { deviceFor = null }) {
+                    deviceFor?.let { id -> DesktopSheet { DeviceSheet(id, clipLink, onPickFiles = { Files.pick() }, onClose = { deviceFor = null }) } }
                 }
                 Overlay(sharing != null, onDismiss = { sharing = null }) {
                     sharing?.let { content ->

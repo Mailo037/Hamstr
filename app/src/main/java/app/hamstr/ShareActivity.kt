@@ -9,6 +9,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,11 +17,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import app.hamstr.data.Prefs
 import app.hamstr.engine.DownloadService
+import app.hamstr.nearby.PhoneNearby
 import app.hamstr.ui.NotifyAsk
 import app.hamstr.ui.NotifyPrompt
 import app.hamstr.ui.Overlay
 import app.hamstr.ui.AndroidSharingSheet
 import app.hamstr.ui.ShareContent
+import app.hamstr.ui.SendToDeviceSheet
 import app.hamstr.ui.ShareSheet
 import app.hamstr.ui.theme.HamstrTheme
 import kotlinx.coroutines.delay
@@ -29,6 +32,9 @@ import kotlinx.coroutines.delay
  * Target of "Share -> Hamstr". Transparent window: only the sheet shows, over whatever
  * app the link came from. With "Instant stash" on it queues and closes at once. After the
  * very first stash it asks, once, whether Hamstr may send notifications.
+ *
+ * "Send with Hamstr" (the SendShare alias) and a device picked in the share sheet itself send
+ * the link to another Hamstr instead: the list of devices, or straight to that one.
  */
 class ShareActivity : ComponentActivity() {
     override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
@@ -46,8 +52,11 @@ class ShareActivity : ComponentActivity() {
             finish()
             return
         }
-        askStorage(this, storagePermission::launch)
-        if (Prefs.settings.value.quickStash && !app.hamstr.engine.MediaLinks.needsEpisodeSelection(url)) {
+        val shortcut = intent.getStringExtra(ShortcutManagerCompat.EXTRA_SHORTCUT_ID)
+        val device = PhoneNearby.deviceOf(shortcut)
+        val sendOnly = shortcut != null || intent.component?.className == "$packageName.SendShare"
+        if (!sendOnly) askStorage(this, storagePermission::launch)
+        if (!sendOnly && Prefs.settings.value.quickStash && !app.hamstr.engine.MediaLinks.needsEpisodeSelection(url)) {
             DownloadService.stash(this, url, null, Prefs.settings.value.defaultChoice())
             Toast.makeText(this, getString(R.string.share_stashing), Toast.LENGTH_SHORT).show()
             finish()
@@ -58,7 +67,8 @@ class ShareActivity : ComponentActivity() {
                 var visible by remember { mutableStateOf(false) }
                 var closing by remember { mutableStateOf(false) }
                 var asking by remember { mutableStateOf(false) }
-                var sendLink by remember { mutableStateOf<Pair<String, String?>?>(null) }
+                // A device that was forgotten since Android offered it gets the whole list instead.
+                var sendLink by remember { mutableStateOf<Pair<String, String?>?>(if (sendOnly && device == null) url to null else null) }
                 LaunchedEffect(Unit) { visible = true }
                 LaunchedEffect(closing) {
                     if (closing) { delay(200); finish(); overridePendingTransition(0, 0) }
@@ -66,7 +76,7 @@ class ShareActivity : ComponentActivity() {
                 close = { closing = true }
                 // After the stash, the sheet either closes or turns into the one-time question.
                 val stashed = { if (NotifyAsk.due(this)) asking = true else closing = true }
-                Overlay(visible = visible && !closing && !asking && sendLink == null, onDismiss = { closing = true }) {
+                Overlay(visible = visible && !sendOnly && !closing && !asking && sendLink == null, onDismiss = { closing = true }) {
                     ShareSheet(
                         url,
                         onStash = { link, info, choice ->
@@ -89,8 +99,11 @@ class ShareActivity : ComponentActivity() {
                         onSend = { link, title -> sendLink = link to title },
                     )
                 }
-                Overlay(visible = sendLink != null && !closing, onDismiss = { closing = true }) {
+                Overlay(visible = visible && sendLink != null && !closing, onDismiss = { closing = true }) {
                     sendLink?.let { (link, title) -> AndroidSharingSheet(ShareContent(link, title), onDismiss = { closing = true }) }
+                }
+                if (device != null) Overlay(visible = visible && !closing, onDismiss = { closing = true }) {
+                    SendToDeviceSheet(device, url, null) { closing = true }
                 }
                 Overlay(visible = asking && !closing, onDismiss = { NotifyAsk.asked(); closing = true }) {
                     NotifyPrompt(

@@ -12,16 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.9.3"
+VERSION = "0.9.4"
 FEATURES = [
-    ("PRIVATE NEARBY", "Sealed links and files, signed receipts"),
-    ("BLUETOOTH EVERYWHERE", "Phones and computers, files too"),
-    ("LIBRARY AND PLAYER", "On the computer, with drag and drop"),
+    ("EQUALIZER", "Ten bands, presets, or your own curve"),
+    ("CROSSFADE", "Songs fade into each other"),
+    ("STORAGE AND BACKUP", "What takes how much, all in one file"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
-# 0.9.3: no emulator; the desktop shots come from tools/desktop_screens.py --seed.
-SHOTS = [("desktop_library.png", "Library"), ("desktop_devices.png", "Devices")]
+# 0.9.4: no emulator; the phone screens come from SettingsPanelsTest (shared/build/settings).
+SHOTS = [("phone_eq.png", "Equalizer"), ("phone_data.png", "Storage")]
 
 
 

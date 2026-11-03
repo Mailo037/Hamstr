@@ -482,14 +482,15 @@ class DownloadService : Service() {
 
 
     /**
-     * "Open when done": once the last download is in, Hamstr comes up playing it. From the
-     * background Android only allows that with "Display over other apps"; otherwise it
-     * quietly stays with the notification.
+     * "Open when done", picked per download in the sheet: once it is in, and no other download
+     * that wants the same is still on its way, Hamstr comes up playing it. From the background
+     * Android only allows that with "Display over other apps"; otherwise it quietly stays with
+     * the notification.
      */
     private fun openWhenDone(id: String) {
-        if (!Prefs.settings.value.openWhenDone) return
+        if (DownloadStore.get(id)?.choice?.open != true) return
         if (!getSystemService(android.os.PowerManager::class.java).isInteractive) return
-        if (DownloadStore.tasks.value.any { it.status.active && it.id != id }) return
+        if (DownloadStore.tasks.value.any { it.status.active && it.id != id && it.choice.open }) return
         runCatching {
             startActivity(
                 Intent(this, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN).putExtra(EXTRA_ID, id)

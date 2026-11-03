@@ -152,7 +152,7 @@ internal fun PlaylistPickSheet(
                 if (selected.isEmpty()) stringResource(R.string.share_list_pick)
                 else pluralStringResource(R.plurals.share_list_stash, selected.size, selected.size),
                 {
-                    val choice = Choice(mode, height, defaults.container, audio, subtitles = mode == Mode.Video && defaults.subtitles)
+                    val choice = Choice(mode, height, defaults.container, audio, subtitles = mode == Mode.Video && defaults.subtitles, open = defaults.openWhenDone)
                     Prefs.edit { it.copy(mode = mode, height = height, audioFormat = audio) }
                     onStash(selected.sorted().map { entries[it] }, choice)
                 },

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import app.hamstr.data.Lyrics
 import app.hamstr.data.MiniStyle
@@ -286,25 +287,51 @@ fun PlayerHost(
         Playback.close()
     }
 
-    // Vertical drags on the big player shrink it (either direction); release decides.
+    // Vertical drags on the big player shrink it (either direction); release decides. On the
+    // video itself a drag up pulls it into fullscreen instead, as in video apps: the picture
+    // grows with the finger and goes fullscreen if let go past the threshold.
+    val lift = remember { Animatable(0f) }
+    var videoArea by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     val shrinkDrag = Modifier.pointerInput(Unit) {
         var travel = 0f
+        var start = Offset.Zero
+        var up: Boolean? = null
+        var armed = false
+        val arm = 72.dp.toPx()
         detectVerticalDragGestures(
-            onDragStart = { dragging = true; travel = 0f },
+            onDragStart = { at -> dragging = true; travel = 0f; start = at; up = null; armed = false },
             onVerticalDrag = { change, dy ->
                 change.consume()
                 travel += dy
-                scope.launch { e.snapTo((1f - abs(travel) / (size.height * 0.55f)).coerceIn(0.02f, 1f)) }
+                val toFullscreen = up ?: (dy < 0f && videoArea.contains(start)).also { up = it }
+                if (toFullscreen) {
+                    val pulled = rubberBand((-travel).coerceAtLeast(0f), arm * 1.5f)
+                    if ((pulled > arm) != armed) {
+                        armed = !armed
+                        haptics.performHapticFeedback(if (armed) HapticFeedbackType.GestureThresholdActivate else HapticFeedbackType.SegmentTick)
+                    }
+                    scope.launch { lift.snapTo(pulled) }
+                } else scope.launch { e.snapTo((1f - abs(travel) / (size.height * 0.55f)).coerceIn(0.02f, 1f)) }
             },
             onDragEnd = {
                 dragging = false
-                if (e.value < 0.75f) {
-                    haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                    Playback.minimize()
-                    scope.launch { e.animateTo(0f, settle) }
-                } else scope.launch { e.animateTo(1f, settle) }
+                when {
+                    up == true -> {
+                        if (armed) {
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            fullscreen = true
+                        }
+                        scope.launch { lift.animateTo(0f, settle) }
+                    }
+                    e.value < 0.75f -> {
+                        haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                        Playback.minimize()
+                        scope.launch { e.animateTo(0f, settle) }
+                    }
+                    else -> scope.launch { e.animateTo(1f, settle) }
+                }
             },
-            onDragCancel = { dragging = false; scope.launch { e.animateTo(1f, settle) } },
+            onDragCancel = { dragging = false; scope.launch { lift.animateTo(0f, settle); e.animateTo(1f, settle) } },
         )
     }
 
@@ -349,6 +376,10 @@ fun PlayerHost(
         }
         val ev = e.value.coerceIn(0f, 1f)
         val media = miniMedia.towards(fullMedia, ev)
+        SideEffect {
+            videoArea = if (kind == Kind.Video && !immersive) androidx.compose.ui.geometry.Rect(fullMedia.x, fullMedia.y, fullMedia.x + fullMedia.w, fullMedia.y + fullMedia.h)
+                else androidx.compose.ui.geometry.Rect.Zero
+        }
         // A song's page takes the colour of its cover, fading into the canvas (as music apps do).
         val tint = rememberCoverColor(if (kind == Kind.Audio) t.thumbnail else null)
         val stretch by rememberVelocityStretch({ e.value * H }, sensitivity = 0.00002f, max = 0.05f)
@@ -599,7 +630,11 @@ fun PlayerHost(
                         ev < 0.5f -> (1f - dropY.value / (mini.h * 1.6f)).coerceIn(0f, 1f)
                         else -> 1f
                     }
-                    scaleY = 1f + abs(stretch)
+                    // Pulled up towards fullscreen, the picture grows a little with the finger.
+                    val grow = 1f + lift.value / H * 0.6f
+                    scaleX = grow
+                    scaleY = (1f + abs(stretch)) * grow
+                    translationY = -lift.value * 0.3f
                 }
                 .clip(RoundedCornerShape(if (immersive) 0.dp else lerp(14f, if (kind == Kind.Video || kind == Kind.Image) 0f else 16f, ev).dp))
                 .background(if (kind == Kind.Video) Color.Black else c.black),

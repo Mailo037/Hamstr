@@ -32,11 +32,31 @@ object Importer {
         uris.withIndex().count { (i, uri) -> runCatching { importOne(context, uri, group, start + i) }.isSuccess }
     }
 
-    private suspend fun importOne(context: Context, uri: Uri, group: Pair<String, String>?, createdAt: Long) {
-        val resolver = context.contentResolver
-        val (name, size) = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
+    /**
+     * Copies picked files into the cache under their own names, for another device: Nearby sends
+     * plain files. Each batch gets its own folder; ones older than a day are cleared.
+     */
+    suspend fun forSending(context: Context, uris: List<Uri>): List<File> = withContext(Dispatchers.IO) {
+        val root = File(context.cacheDir, "nearby-out")
+        root.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 24 * 3600_000L }?.forEach { it.deleteRecursively() }
+        val dir = File(root, System.currentTimeMillis().toString()).apply { mkdirs() }
+        uris.mapNotNull { uri ->
+            runCatching {
+                freeName(dir, nameAndSize(context, uri).first.replace(Regex("""[\\/:*?"<>|]"""), "_")).also { out ->
+                    context.contentResolver.openInputStream(uri)!!.use { input -> out.outputStream().use { input.copyTo(it, 256 * 1024) } }
+                }
+            }.getOrNull()
+        }
+    }
+
+    private fun nameAndSize(context: Context, uri: Uri): Pair<String, Long> =
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
             if (c.moveToFirst()) c.getString(0) to (if (c.isNull(1)) -1L else c.getLong(1)) else null
         } ?: ((uri.lastPathSegment?.substringAfterLast('/') ?: "file") to -1L)
+
+    private suspend fun importOne(context: Context, uri: Uri, group: Pair<String, String>?, createdAt: Long) {
+        val resolver = context.contentResolver
+        val (name, size) = nameAndSize(context, uri)
         Engine.outputDir.mkdirs()
         val clean = name.replace(Regex("""[\\/:*?"<>|]"""), "_")
         // A file that already sits in Download/Hamstr is listed as it is instead of copied again.

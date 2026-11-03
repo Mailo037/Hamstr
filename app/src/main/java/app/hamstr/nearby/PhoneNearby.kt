@@ -13,6 +13,9 @@ import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import app.hamstr.MainActivity
 import app.hamstr.R
 import app.hamstr.ShareActivity
@@ -22,10 +25,14 @@ import app.hamstr.data.keyValues
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 import app.hamstr.engine.DownloadService
 import app.hamstr.engine.MediaLinks
+import app.hamstr.ui.AppIcon
 
 /**
  * Nearby on the phone: Wi-Fi (holding the multicast lock while it listens) and Bluetooth.
@@ -35,6 +42,9 @@ import app.hamstr.engine.MediaLinks
  */
 object PhoneNearby {
     private const val CHANNEL = "nearby"
+    /** Remembered devices are share targets with this shortcut id prefix and category (res/xml/shortcuts.xml). */
+    private const val DEVICE = "device:"
+    private const val SEND_TO_DEVICE = "app.hamstr.category.SEND_TO_DEVICE"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun start(context: Context) {
@@ -72,6 +82,39 @@ object PhoneNearby {
         }
         Nearby.onRequest = { r ->
             notify(app, r.id.hashCode(), app.getString(R.string.nearby_ask_title, r.from.name), app.getString(R.string.nearby_ask_notify), open(app))
+        }
+        // The remembered devices show in Android's share sheet, drawn in the accent like the other shortcuts.
+        scope.launch {
+            combine(Nearby.known, Prefs.settings.map { it.accent }) { known, accent -> known.map { Triple(it.id, it.name, it.kind) } to accent }
+                .distinctUntilChanged()
+                .collect { (devices, accent) -> shareTargets(app, devices, accent) }
+        }
+    }
+
+    /** The device a link was shared to in Android's share sheet; null for another shortcut or a device forgotten since. */
+    fun deviceOf(shortcut: String?): String? =
+        shortcut?.takeIf { it.startsWith(DEVICE) }?.removePrefix(DEVICE)?.takeIf { id -> Nearby.known.value.any { it.id == id } }
+
+    /** Offers up to eight [devices] as share targets (not in the launcher) and takes back the forgotten ones. */
+    private fun shareTargets(context: Context, devices: List<Triple<String, String, DeviceKind>>, accent: Int) = runCatching {
+        val keep = devices.take(8)
+        val ids = keep.map { DEVICE + it.first }.toSet()
+        val gone = ShortcutManagerCompat.getDynamicShortcuts(context).map { it.id }.filter { it.startsWith(DEVICE) && it !in ids }
+        if (gone.isNotEmpty()) ShortcutManagerCompat.removeLongLivedShortcuts(context, gone)
+        keep.forEachIndexed { i, (id, name, kind) ->
+            val icon = if (kind == DeviceKind.Desktop) R.drawable.ic_computer else R.drawable.ic_smartphone
+            ShortcutManagerCompat.pushDynamicShortcut(
+                context,
+                ShortcutInfoCompat.Builder(context, DEVICE + id)
+                    .setShortLabel(name)
+                    .setIcon(IconCompat.createWithAdaptiveBitmap(AppIcon.glyph(context, icon, accent)))
+                    .setIntent(Intent(Intent.ACTION_VIEW).setClassName(context, MainActivity::class.java.name))
+                    .setCategories(setOf(SEND_TO_DEVICE))
+                    .setLongLived(true)
+                    .setExcludedFromSurfaces(ShortcutInfoCompat.SURFACE_LAUNCHER)
+                    .setRank(i)
+                    .build(),
+            )
         }
     }
 

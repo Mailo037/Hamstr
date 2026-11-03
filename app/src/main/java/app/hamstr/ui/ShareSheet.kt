@@ -185,6 +185,7 @@ private fun MediaSheet(
     var container by remember { mutableStateOf(defaults.container) }
     var audio by remember { mutableStateOf(defaults.audioFormat) }
     var subs by remember { mutableStateOf(defaults.subtitles) }
+    var openDone by remember { mutableStateOf(defaults.openWhenDone) }
     var custom by remember { mutableStateOf(TextFieldValue("bv*+ba/b")) }
     var open by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
@@ -248,7 +249,7 @@ private fun MediaSheet(
     val here = same.filter { it.status == Status.Done && it.id !in missing && it.filePath?.let { p -> File(p).isFile } == true }
     val coming = same.filter { it.status.active || it.status == Status.Paused }
     val head = here.firstOrNull { it.versionOf == null } ?: here.firstOrNull()
-    val choice = Choice(mode, height, container, audio, subs, custom.text)
+    val choice = Choice(mode, height, container, audio, subs, custom.text, open = openDone)
     val exact = here.firstOrNull { sameChoice(it, choice) }
 
     val bytes = when (mode) {
@@ -400,8 +401,17 @@ private fun MediaSheet(
                 }
             }
         }
+        Divider()
+        OpenWhenDoneRow(openDone, hint = false) { openDone = it }
         Spacer(Modifier.height(12.dp))
-        val keepChoice = { Prefs.edit { it.copy(mode = if (mode == Mode.Custom) it.mode else mode, height = height, container = container, audioFormat = audio, subtitles = subs) } }
+        // Or hand the link to another Hamstr nearby, like AirDrop; the main buttons stay at the bottom.
+        if (onSend != null) {
+            HButton(stringResource(R.string.menu_tile_share), { onSend(url, stashInfo?.title) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_share)
+            Spacer(Modifier.height(8.dp))
+        }
+        val keepChoice = {
+            Prefs.edit { it.copy(mode = if (mode == Mode.Custom) it.mode else mode, height = height, container = container, audioFormat = audio, subtitles = subs, openWhenDone = openDone) }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HButton(stringResource(R.string.share_cancel), onDismiss, Modifier.weight(1f))
             val primary = Modifier.weight(2f)
@@ -445,11 +455,6 @@ private fun MediaSheet(
                     primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_download,
                 )
             }
-        }
-        // Or hand the link to another Hamstr nearby, like AirDrop.
-        if (onSend != null) {
-            Spacer(Modifier.height(8.dp))
-            HButton(stringResource(R.string.menu_tile_share), { onSend(url, stashInfo?.title) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_share)
         }
     }
 }

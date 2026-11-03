@@ -25,8 +25,9 @@ import kotlin.math.max
 /**
  * Plays a file with the FFmpeg Hamstr already brings, so every format it downloads plays, the
  * same on every system: one FFmpeg decodes the sound into the system's audio line, another the
- * pictures into frames for Compose, scaled to at most 1280×720 and 30 a second. The sound is
- * the clock; pictures wait for it or are dropped when late. A seek starts both again there.
+ * pictures into frames for Compose, scaled to at most 1280×720 and 30 a second. The sound passes
+ * the equalizer on its way to the line. It is the clock; pictures wait for it or are dropped
+ * when late. A seek starts both again there.
  */
 class FfPlayer(private val file: File, start: Double = 0.0) {
     data class Info(val duration: Double, val width: Int, val height: Int, val audio: Boolean, val video: Boolean)
@@ -170,12 +171,14 @@ class FfPlayer(private val file: File, start: Double = 0.0) {
             applyVolume()
             if (!paused) l.start()
             val buf = ByteArray(8192)
+            val eq = app.hamstr.audio.EqFilter(RATE, 2)
             p.inputStream.use { input ->
                 while (!stopped) {
                     waitWhilePaused()
                     if (stopped) break
                     val n = input.read(buf)
                     if (n < 0) break
+                    eq.process16(buf, 0, n - n % 4)
                     l.write(buf, 0, n - n % 4)
                     _position.value = clock()
                 }

@@ -49,6 +49,8 @@ data class Choice(
     val audioFormat: String, // opus / m4a / mp3
     val subtitles: Boolean,
     val customFormat: String = "",
+    /** Hamstr comes up playing it once it is in ("Open when done"). */
+    val open: Boolean = false,
 )
 
 data class DownloadTask(
@@ -217,6 +219,25 @@ object DownloadStore {
         save()
     }
 
+    /** [tasks] the way downloads.json keeps them, for a backup; [decode] reads it back. */
+    fun encode(tasks: List<DownloadTask> = _tasks.value): String = JSONArray().apply { tasks.forEach { put(toJson(it)) } }.toString()
+
+    /**
+     * Adds entries from a backup that aren't on the list yet, after the ones that are. Nothing
+     * starts downloading by itself: what was waiting or running there waits here, paused.
+     */
+    fun merge(incoming: List<DownloadTask>): Int {
+        var added = 0
+        _tasks.update { list ->
+            val known = list.mapTo(HashSet()) { it.id }
+            val fresh = incoming.filter { known.add(it.id) }.map { if (it.status.active) it.copy(status = Status.Paused) else it }
+            added = fresh.size
+            list + fresh
+        }
+        if (added > 0) save()
+        return added
+    }
+
     /** The saved list, as read from downloads.json or a copy of it; entries it can't read are left out. */
     fun decode(text: String): List<DownloadTask> = read(text).tasks
 
@@ -238,7 +259,7 @@ object DownloadStore {
         put("id", t.id); put("url", t.url); put("title", t.title)
         put("thumbnail", t.thumbnail); put("source", t.source); put("duration", t.durationSec)
         put("mode", t.choice.mode.name); put("height", t.choice.height ?: 0); put("container", t.choice.container)
-        put("audioFormat", t.choice.audioFormat); put("subtitles", t.choice.subtitles); put("customFormat", t.choice.customFormat)
+        put("audioFormat", t.choice.audioFormat); put("subtitles", t.choice.subtitles); put("customFormat", t.choice.customFormat); put("open", t.choice.open)
         put("status", t.status.name); put("progress", t.progress.toDouble())
         put("filePath", t.filePath); put("contentUri", t.contentUri); put("size", t.sizeBytes)
         put("error", t.error); put("createdAt", t.createdAt); put("finishedAt", t.finishedAt)
@@ -261,6 +282,7 @@ object DownloadStore {
             audioFormat = o.optString("audioFormat", "opus"),
             subtitles = o.optBoolean("subtitles"),
             customFormat = o.optString("customFormat"),
+            open = o.optBoolean("open"),
         ),
         // A state this version doesn't know (from a newer Hamstr) waits to be tried again.
         status = runCatching { Status.valueOf(o.optString("status", "Queued")) }.getOrDefault(Status.Paused),

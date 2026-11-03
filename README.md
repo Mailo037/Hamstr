@@ -49,6 +49,9 @@
 - Favorites and your own playlists; drag a file in a playlist by its handle to a new place.
 - Music pauses when another app plays and, after a video (YouTube, TikTok), carries on by itself.
 - Background audio with media controls, picture-in-picture, fullscreen, and double-tap to skip 10 s.
+- A ten-band equalizer with presets (bass, vocals, rock, podcast, late night and more) or your own curve, the same on the phone and the computer. It's in Settings › Playback and on the song page.
+- Crossfade: songs fade into each other over up to 12 seconds instead of stopping and starting (Settings › Playback). Videos keep a clean cut.
+- An A–B loop for practising a part: hold the timeline once for A and again for B, or hold and slide over the part. It keeps looping in the background; tap the loop under the timeline to end it.
 - *Open with…* hands a file to any other app: a video player, a music app, a PDF reader or Word. *Share file* sends the file itself, not the link.
 - Keep a video in several qualities: tap the quality in the player to switch between them at the same spot, fetch another one next to it, or replace the current one once the new file is in.
 - *Save audio* pulls the sound out of a stashed video on the phone, without downloading it again.
@@ -63,6 +66,7 @@
 - Three widgets: downloads at a glance, what plays with its controls, and the hamster alone to stash a copied link.
 - Speaks English, German, Spanish, French, Italian, Portuguese, Dutch, Polish, Turkish, Russian, Japanese, Korean and Chinese, following the system language (on Android 13 and later also per app).
 - Files you hide from the library wait in Settings › Hidden, to show again or delete for good.
+- Settings › Data & backup shows in a ring what takes how much: your downloads, the app, yt-dlp and FFmpeg, its data and the cache, which you can clear there. Export everything (settings, the download list, playlists, where you left off) into one file and import it on another phone or computer.
 
 **Updates**
 - Hamstr checks this repository's releases and installs new versions in place, without a browser detour (Settings › About).

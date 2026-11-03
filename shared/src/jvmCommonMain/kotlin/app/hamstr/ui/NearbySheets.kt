@@ -25,11 +25,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.hamstr.Platform
 import app.hamstr.data.Prefs
+import app.hamstr.engine.MediaLinks
 import app.hamstr.nearby.DeviceKind
 import app.hamstr.nearby.Nearby
 import app.hamstr.nearby.Peer
@@ -55,6 +58,7 @@ import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.HamstrMark
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.LocalReduceMotion
+import app.hamstr.ui.components.Segmented
 import app.hamstr.ui.components.SettingRow
 import app.hamstr.ui.components.Sheet
 import app.hamstr.ui.components.SheetField
@@ -64,7 +68,10 @@ import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.pressable
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CoroutineScope
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.pluralStringResource
@@ -151,12 +158,7 @@ private fun NearbyTargets(
                         state[p.id] = Sending.Busy
                         targets.progress.remove(p.id)
                         scope.launch {
-                            state[p.id] = when (runCatching { send(p) { f -> targets.progress[p.id] = f } }.getOrDefault(SendResult.Failed)) {
-                                SendResult.Sent -> Sending.Sent
-                                SendResult.Queued -> Sending.Queued
-                                SendResult.Failed -> Sending.Failed
-                                SendResult.Declined -> Sending.Declined
-                            }
+                            state[p.id] = sendingOf(runCatching { send(p) { f -> targets.progress[p.id] = f } }.getOrDefault(SendResult.Failed))
                         }
                     }
                 }
@@ -214,14 +216,9 @@ private fun PeerRow(p: Peer, sending: Sending?, left: Boolean, progress: Float? 
             Txt(sub, style = Hamstr.type.small, color = c.ghost, maxLines = 1)
         }
         Spacer(Modifier.width(10.dp))
-        when (sending) {
-            Sending.Busy -> Badge(progress?.let { stringResource(Res.string.nearby_sending_percent, (it * 100).toInt()) } ?: stringResource(Res.string.nearby_sending))
-            Sending.Sent -> Badge(stringResource(Res.string.nearby_sent), accent = true)
-            Sending.Queued -> Badge(stringResource(Res.string.nearby_queued))
-            Sending.Failed -> Badge(stringResource(Res.string.nearby_failed))
-            Sending.Declined -> Badge(stringResource(Res.string.nearby_declined))
-            null -> Icon(Res.drawable.ic_send, tint = if (p.online && !unreachable) c.accent else c.ghost, size = 20.dp)
-        }
+        val label = sendLabel(sending, progress)
+        if (label != null) Badge(label, accent = sending == Sending.Sent)
+        else Icon(Res.drawable.ic_send, tint = if (p.online && !unreachable) c.accent else c.ghost, size = 20.dp)
     }
 }
 
@@ -271,10 +268,11 @@ fun RequestSheet(r: Request, onDone: () -> Unit) {
 
 /**
  * Settings › Devices on both apps: whether others can find this one, its name, and the
- * remembered devices with their trust. [bluetooth] is the phone's Bluetooth row.
+ * remembered devices with their trust. [bluetooth] is the phone's Bluetooth row; a tap on a
+ * device hands its id to [onDevice], which shows [DeviceSheet].
  */
 @Composable
-fun NearbySettings(bluetooth: (@Composable () -> Unit)? = null) {
+fun NearbySettings(bluetooth: (@Composable () -> Unit)? = null, onDevice: (String) -> Unit = {}) {
     val c = Hamstr.colors
     val s by Prefs.settings.collectAsState()
     val known by Nearby.known.collectAsState()
@@ -304,28 +302,172 @@ fun NearbySettings(bluetooth: (@Composable () -> Unit)? = null) {
         known.forEachIndexed { i, k ->
             if (i > 0) Divider()
             val live = peers[k.id]
+            val online = live?.online == true
             val waiting = outbox.count { it.to == k.id }
-            val sub = buildList {
-                add(stringResource(if (k.trusted) Res.string.set_device_trusted else Res.string.set_device_asks))
-                if (waiting > 0) add(stringResource(Res.string.nearby_waiting, waiting))
-            }.joinToString(" · ")
-            // Swipe it away to forget it, like a row in the stash; an icon on the desktop.
+            val sub = listOfNotNull(
+                stringResource(if (online) Res.string.device_connected else Res.string.device_offline),
+                stringResource(if (k.trusted) Res.string.nearby_trusted else Res.string.set_device_asks),
+                if (waiting > 0) stringResource(Res.string.nearby_waiting, waiting) else null,
+            ).joinToString(" · ")
+            // Right switches whether it asks first, left forgets it, like a row in the stash; icons on the desktop.
             key(k.id) {
                 SwipeRow(
-                    start = null,
+                    start = SwipeAction(
+                        if (k.trusted) Res.drawable.ic_help else Res.drawable.ic_check_circle,
+                        stringResource(if (k.trusted) Res.string.device_always_ask else Res.string.nearby_always),
+                        c.accent,
+                    ) { Nearby.trust(live ?: k, !k.trusted) },
                     end = SwipeAction(Res.drawable.ic_close, stringResource(Res.string.set_forget), c.red, removes = true) { Nearby.forget(k.id) },
                     background = c.overlay,
                 ) {
-                    SettingRow(k.name, subtitle = sub, leading = {
-                        Icon(kindIcon(k.kind), tint = c.muted, size = 22.dp)
+                    SettingRow(k.name, subtitle = sub, onClick = { onDevice(k.id) }, leading = {
+                        Icon(kindIcon(k.kind), tint = if (online) c.accent else c.muted, size = 22.dp)
                     }) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (live?.online == true) Icon(if (Via.Wifi in live.via) Res.drawable.ic_wifi else Res.drawable.ic_bluetooth, tint = c.accent, size = 16.dp)
-                            if (!k.trusted) HButton(stringResource(Res.string.set_trust), { Nearby.trust(live ?: k, true) })
-                        }
+                        if (live != null && online) Icon(if (Via.Wifi in live.via) Res.drawable.ic_wifi else Res.drawable.ic_bluetooth, tint = c.accent, size = 16.dp)
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * One remembered device: whether it is connected and how, a link or files to send it, whether
+ * it may send without asking, and forgetting it. [onPickFiles] lets the user choose files
+ * (null where that can't be done); it returns none when they cancel.
+ */
+@Composable
+fun DeviceSheet(id: String, clipboardLink: String?, onPickFiles: (suspend () -> List<java.io.File>)?, onClose: () -> Unit) {
+    val known by Nearby.known.collectAsState()
+    val peers by Nearby.peers.collectAsState()
+    val outbox by Nearby.outbox.collectAsState()
+    val scope = rememberCoroutineScope()
+    var link by remember { mutableStateOf(TextFieldValue(clipboardLink.orEmpty(), TextRange(clipboardLink.orEmpty().length))) }
+    var linkSent by remember { mutableStateOf<Sending?>(null) }
+    var filesSent by remember { mutableStateOf<Sending?>(null) }
+    var progress by remember { mutableStateOf<Float?>(null) }
+    // Looks harder while the sheet is open, so the status is current.
+    DisposableEffect(Unit) {
+        Nearby.discover(true)
+        onDispose { Nearby.discover(false) }
+    }
+    val k = known.firstOrNull { it.id == id } ?: return
+    val live = peers[id]
+    val peer = live ?: k
+    val online = live?.online == true
+    val waiting = outbox.count { it.to == id }
+    val status = buildList {
+        if (live != null && online) {
+            add(stringResource(Res.string.device_connected))
+            if (Via.Wifi in live.via) add(stringResource(Res.string.nearby_via_wifi))
+            if (Via.Bluetooth in live.via) add(stringResource(Res.string.nearby_via_bluetooth))
+        } else {
+            add(stringResource(Res.string.device_offline))
+            val seen = live?.seen?.takeIf { it > 0 } ?: k.seen
+            if (seen > 0) add(stringResource(Res.string.device_seen, ago(seen)))
+        }
+        if (waiting > 0) add(stringResource(Res.string.nearby_waiting, waiting))
+    }.joinToString(" · ")
+    val url = MediaLinks.find(link.text)
+    val takesFiles = online && Nearby.takesFiles(peer)
+
+    Sheet {
+        SheetHeader(k.name, subtitle = status, leading = { DeviceIcon(k.kind, lit = online) })
+        Spacer(Modifier.height(18.dp))
+        SheetField(link, { link = it; linkSent = null }, stringResource(Res.string.add_hint), Res.drawable.ic_link, mono = true)
+        Spacer(Modifier.height(8.dp))
+        HButton(
+            sendLabel(linkSent, null) ?: stringResource(Res.string.device_send_link),
+            {
+                val u = url ?: return@HButton
+                linkSent = Sending.Busy
+                scope.launch { linkSent = sendingOf(runCatching { Nearby.send(peer, u, null) }.getOrDefault(SendResult.Failed)) }
+            },
+            Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_send,
+            enabled = url != null && linkSent != Sending.Busy,
+        )
+        if (onPickFiles != null) {
+            Spacer(Modifier.height(8.dp))
+            HButton(
+                sendLabel(filesSent, progress) ?: stringResource(if (takesFiles) Res.string.device_send_files else Res.string.nearby_files_here),
+                {
+                    scope.launch {
+                        val files = onPickFiles()
+                        if (files.isEmpty()) return@launch
+                        filesSent = Sending.Busy
+                        progress = null
+                        filesSent = sendingOf(runCatching { Nearby.sendFiles(peer, files) { progress = it } }.getOrDefault(SendResult.Failed))
+                    }
+                },
+                Modifier.fillMaxWidth(), icon = Res.drawable.ic_description,
+                enabled = takesFiles && filesSent != Sending.Busy,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        val allow = stringResource(Res.string.nearby_always)
+        val ask = stringResource(Res.string.device_always_ask)
+        Segmented(listOf(true, false), k.trusted, { if (it) allow else ask }, { Nearby.trust(peer, it) })
+        Spacer(Modifier.height(10.dp))
+        HButton(stringResource(Res.string.device_forget), { onClose(); Nearby.forget(id) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete)
+    }
+}
+
+/**
+ * A link shared straight to one device (a device in Android's share sheet): it gives the device
+ * a moment to be heard, since the radios only just came up, sends, and closes once it's there.
+ * One that is away waits in the outbox, and the sheet says so.
+ */
+@Composable
+fun SendToDeviceSheet(id: String, url: String, title: String?, onDone: () -> Unit) {
+    val known by Nearby.known.collectAsState()
+    val peers by Nearby.peers.collectAsState()
+    var sending by remember { mutableStateOf(Sending.Busy) }
+    LaunchedEffect(id, url) {
+        val k = Nearby.known.value.firstOrNull { it.id == id }
+        if (k == null) {
+            sending = Sending.Failed
+            return@LaunchedEffect
+        }
+        Nearby.discover(true)
+        try {
+            withTimeoutOrNull(6_000) { Nearby.peers.first { it[id]?.online == true } }
+            sending = sendingOf(runCatching { Nearby.send(Nearby.peers.value[id] ?: k, url, title) }.getOrDefault(SendResult.Failed))
+        } finally {
+            Nearby.discover(false)
+        }
+        if (sending == Sending.Sent) {
+            delay(900)
+            onDone()
+        }
+    }
+    val k = known.firstOrNull { it.id == id }
+    Sheet {
+        SheetHeader(
+            k?.name ?: stringResource(Res.string.nearby_send_title),
+            subtitle = if (sending == Sending.Queued) stringResource(Res.string.nearby_away) else title ?: url,
+            badge = sendLabel(sending, null),
+            subtitleLines = 1,
+            leading = { DeviceIcon(k?.kind ?: DeviceKind.Desktop, lit = peers[id]?.online == true) },
+        )
+        Spacer(Modifier.height(16.dp))
+        HButton(stringResource(Res.string.nearby_done), onDone, Modifier.fillMaxWidth(), kind = if (sending == Sending.Busy) ButtonKind.Neutral else ButtonKind.Primary)
+    }
+}
+
+private fun sendingOf(r: SendResult) = when (r) {
+    SendResult.Sent -> Sending.Sent
+    SendResult.Queued -> Sending.Queued
+    SendResult.Failed -> Sending.Failed
+    SendResult.Declined -> Sending.Declined
+}
+
+/** What a send button says while and after it sends; null before. */
+@Composable
+private fun sendLabel(s: Sending?, progress: Float?): String? = when (s) {
+    Sending.Busy -> progress?.let { stringResource(Res.string.nearby_sending_percent, (it * 100).toInt()) } ?: stringResource(Res.string.nearby_sending)
+    Sending.Sent -> stringResource(Res.string.nearby_sent)
+    Sending.Queued -> stringResource(Res.string.nearby_queued)
+    Sending.Failed -> stringResource(Res.string.nearby_failed)
+    Sending.Declined -> stringResource(Res.string.nearby_declined)
+    null -> null
 }
