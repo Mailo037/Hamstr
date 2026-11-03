@@ -1,18 +1,17 @@
 package app.hamstr.desktop
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,28 +44,38 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Positions
 import app.hamstr.player.AbLoop
 import app.hamstr.res.*
 import app.hamstr.ui.components.AsciiImage
+import app.hamstr.ui.components.Badge
 import app.hamstr.ui.components.Icon
+import app.hamstr.ui.components.IconButton
 import app.hamstr.ui.components.LoopBand
 import app.hamstr.ui.components.LoopPill
+import app.hamstr.ui.components.Tip
+import app.hamstr.ui.components.hoverTip
+import app.hamstr.ui.components.iconSwap
 import app.hamstr.ui.components.loopHold
 import app.hamstr.ui.components.rememberLoopHold
+import app.hamstr.ui.components.rememberTip
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.pressable
 import app.hamstr.ui.rememberImage
 import app.hamstr.ui.theme.Hamstr
+import app.hamstr.ui.theme.Radii
 import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.stringResource
 import java.io.File
 
 /**
- * The desktop's player for a stashed video or song ([FfPlayer]): the picture (or the cover),
- * a bar to seek on, play and ±10 s, the volume. Space, ← and → work too. It carries on where
- * the file was left and remembers where it stops, like the phone's, and holding the bar marks
- * an A-B loop the same way.
+ * The desktop's player for a stashed video or song ([FfPlayer]), as a modal. A video takes as
+ * much of the window as fits while it keeps its shape, with the bar and the buttons under it;
+ * a song is a card, the cover beside its title, the bar and the buttons. Space, ← and → work,
+ * Esc closes. It carries on where the file was left and remembers where it stops, like the
+ * phone's, and holding the bar marks an A-B loop the same way.
  */
 @Composable
 fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
@@ -97,63 +106,117 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
         val l = loop ?: return@LaunchedEffect
         player.position.collect { at -> l.jumpFrom((at * 1000).toLong()).takeIf { it >= 0 }?.let { player.seek(it / 1000.0) } }
     }
-
-    Column(
-        Modifier
-            .widthIn(max = 980.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(c.overlay)
-            .focusRequester(focus)
-            .focusable()
-            .onPreviewKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (e.key) {
-                    Key.Spacebar, Key.K -> { player.toggle(); true }
-                    Key.DirectionLeft, Key.J -> { player.seek(position - 10); true }
-                    Key.DirectionRight, Key.L -> { player.seek(position + 10); true }
-                    Key.Escape -> { onClose(); true }
-                    else -> false
-                }
+    val keys = Modifier
+        .focusRequester(focus)
+        .focusable()
+        .onPreviewKeyEvent { e ->
+            if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            when (e.key) {
+                Key.Spacebar, Key.K -> { player.toggle(); true }
+                Key.DirectionLeft, Key.J -> { player.seek(position - 10); true }
+                Key.DirectionRight, Key.L -> { player.seek(position + 10); true }
+                Key.Escape -> { onClose(); true }
+                else -> false
             }
-            .padding(14.dp),
-    ) {
-        val info = player.info
-        val ratio = if (info != null && info.video && info.width > 0 && info.height > 0) info.width.toFloat() / info.height else 16f / 9f
-        Box(
-            Modifier.fillMaxWidth().aspectRatio(ratio.coerceIn(0.5f, 3f)).clip(RoundedCornerShape(12.dp)).background(Color.Black)
-                .pointerInput(Unit) { detectTapGestures(onTap = { player.toggle() }, onDoubleTap = { offset -> player.seek(position + if (offset.x < size.width / 2) -10 else 10) }) },
-            contentAlignment = Alignment.Center,
-        ) {
-            val shown = frame
-            if (info?.video == true && shown != null) {
-                Image(shown, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-            } else if (info?.video != true) {
-                // A song: its cover in the middle, drawn the way the stash draws it.
-                val cover = rememberImage(t.thumbnail, 480)
-                if (cover != null) AsciiImage(cover, reveal = 1f, cell = 6.dp, modifier = Modifier.fillMaxHeight().aspectRatio(1f))
-                else Icon(Res.drawable.ic_music_note, tint = c.accent, size = 64.dp)
-            }
-            error?.let { Txt(it, style = Hamstr.type.small, color = Color.White, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) }
         }
-        Spacer(Modifier.height(12.dp))
-        Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
-        Spacer(Modifier.height(8.dp))
+    val bar = @Composable {
         SeekBar(if (duration > 0) (position / duration).toFloat() else 0f, loop, (duration * 1000).toLong(), setLoop) { f -> player.seek(f * duration) }
-        Spacer(Modifier.height(6.dp))
+    }
+    val times = @Composable {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Txt("${clock(position)} / ${clock(duration)}", style = Hamstr.type.mono, color = c.muted)
             Spacer(Modifier.width(10.dp))
             LoopPill(loop, { setLoop(null) })
-            Spacer(Modifier.weight(1f))
-            PlayerButton(Res.drawable.ic_replay_10) { player.seek(position - 10) }
-            PlayerButton(if (playing) Res.drawable.ic_pause else Res.drawable.ic_play_arrow, big = true) { player.toggle() }
-            PlayerButton(Res.drawable.ic_forward_10) { player.seek(position + 10) }
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.width(120.dp)) { SeekBar(volume) { v -> volume = v; player.setVolume(v) } }
-            Spacer(Modifier.width(8.dp))
-            PlayerButton(Res.drawable.ic_close, onClick = onClose)
         }
+    }
+    val buttons = @Composable {
+        PlayerButton(Res.drawable.ic_replay_10, stringResource(Res.string.player_back_10)) { player.seek(position - 10) }
+        PlayerButton(if (playing) Res.drawable.ic_pause else Res.drawable.ic_play_arrow, stringResource(if (playing) Res.string.player_pause else Res.string.player_play), big = true) { player.toggle() }
+        PlayerButton(Res.drawable.ic_forward_10, stringResource(Res.string.player_forward_10)) { player.seek(position + 10) }
+    }
+    val sound = @Composable { Volume(volume) { v -> volume = v; player.setVolume(v) } }
+    val close = @Composable {
+        IconButton(Res.drawable.ic_close, stringResource(Res.string.player_close), onClose, tint = c.muted, background = Color.Transparent, size = 34.dp)
+    }
+
+    val info = player.info
+    if (info?.video == true) {
+        // As big as the window allows, in the video's own shape, with room for the controls.
+        BoxWithConstraints {
+            val ratio = (if (info.width > 0 && info.height > 0) info.width.toFloat() / info.height else 16f / 9f).coerceIn(0.5f, 3f)
+            val width = min(maxWidth - 24.dp, (maxHeight - VIDEO_CHROME) * ratio).coerceAtLeast(280.dp)
+            Column(Modifier.width(width + 24.dp).clip(RoundedCornerShape(Radii.sheet)).background(c.overlay).then(keys).padding(12.dp)) {
+                Box(
+                    Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(Radii.row)).background(Color.Black)
+                        .pointerInput(Unit) { detectTapGestures(onTap = { player.toggle() }, onDoubleTap = { offset -> player.seek(position + if (offset.x < size.width / 2) -10 else 10) }) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    frame?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+                    error?.let { Txt(it, style = Hamstr.type.small, color = Color.White, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) }
+                }
+                Row(Modifier.padding(start = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1, modifier = Modifier.weight(1f))
+                    close()
+                }
+                Box(Modifier.padding(horizontal = 4.dp)) { bar() }
+                Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { times() }
+                    buttons()
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { sound() }
+                }
+            }
+        }
+    } else {
+        // A song: the cover beside what plays and how to steer it.
+        Row(
+            Modifier.widthIn(max = 660.dp).fillMaxWidth().clip(RoundedCornerShape(Radii.sheet)).background(c.overlay).then(keys).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val cover = rememberImage(t.thumbnail, 480)
+            Box(Modifier.size(COVER).clip(RoundedCornerShape(Radii.row)).background(c.black), contentAlignment = Alignment.Center) {
+                if (cover != null) AsciiImage(cover, reveal = 1f, cell = 4.dp, modifier = Modifier.fillMaxSize())
+                else Icon(Res.drawable.ic_music_note, tint = c.accent, size = 56.dp)
+            }
+            Spacer(Modifier.width(20.dp))
+            Column(Modifier.weight(1f).height(COVER)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(Modifier.weight(1f).padding(top = 6.dp)) {
+                        t.source?.let { Badge(it) }
+                        Spacer(Modifier.height(6.dp))
+                        Txt(t.title, style = Hamstr.type.section, maxLines = 2)
+                        (t.uploader ?: t.source)?.let {
+                            Spacer(Modifier.height(2.dp))
+                            Txt(it, style = Hamstr.type.small, color = c.muted, maxLines = 1)
+                        }
+                    }
+                    close()
+                }
+                Spacer(Modifier.weight(1f))
+                error?.let { Txt(it, style = Hamstr.type.small, color = c.red, maxLines = 2, modifier = Modifier.padding(bottom = 6.dp)) }
+                bar()
+                times()
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    buttons()
+                    Spacer(Modifier.weight(1f))
+                    sound()
+                }
+            }
+        }
+    }
+}
+
+// What a video's modal needs besides the picture: padding, the title row, the bar and the buttons.
+private val VIDEO_CHROME = 150.dp
+private val COVER = 220.dp
+
+/** How loud, on a short bar; its tooltip says what it is. */
+@Composable
+private fun Volume(volume: Float, onChange: (Float) -> Unit) {
+    val tip = rememberTip()
+    Box(Modifier.width(96.dp).hoverTip(tip)) {
+        SeekBar(volume, onSeek = onChange)
+        Tip(tip, stringResource(Res.string.desktop_volume))
     }
 }
 
@@ -190,13 +253,18 @@ private fun SeekBar(fraction: Float, loop: AbLoop? = null, durationMs: Long = 0,
 }
 
 @Composable
-private fun PlayerButton(icon: DrawableResource, big: Boolean = false, onClick: () -> Unit) {
+private fun PlayerButton(icon: DrawableResource, label: String, big: Boolean = false, onClick: () -> Unit) {
     val c = Hamstr.colors
+    val tip = rememberTip()
     Box(
-        Modifier.padding(horizontal = 4.dp).size(if (big) 48.dp else 38.dp).clip(RoundedCornerShape(50)).background(if (big) c.accent else c.surface).pressable(onClick),
+        Modifier.padding(horizontal = 4.dp).size(if (big) 48.dp else 38.dp).clip(RoundedCornerShape(50)).background(if (big) c.accent else c.surface)
+            .hoverTip(tip).pressable(onClick, label = label, pressedScale = if (big) 0.9f else 0.92f),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, tint = if (big) c.canvas else c.ink, size = if (big) 26.dp else 20.dp)
+        AnimatedContent(icon, transitionSpec = { iconSwap() }, label = "playerIcon") { i ->
+            Icon(i, tint = if (big) c.onAccent else c.ink, size = if (big) 26.dp else 20.dp)
+        }
+        Tip(tip, label)
     }
 }
 

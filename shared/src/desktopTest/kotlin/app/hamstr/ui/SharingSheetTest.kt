@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -54,7 +55,7 @@ class SharingSheetTest {
                 onNodeWithText("Send to a device").assertExists()
                 onNodeWithText("Copy link").performClick()
                 assertEquals(content.url, copied)
-                onNodeWithText("Share through other apps").performClick()
+                onNodeWithContentDescription("Share through other apps").performClick()
                 assertEquals(content.url, shared)
                 assertEquals(1, filesShared)
                 save("share_link")

@@ -39,6 +39,7 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.runtime.key
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import app.hamstr.ui.components.LocalAmbient
 import java.awt.Dimension
@@ -55,6 +56,11 @@ fun main(args: Array<String>) {
     // Already running: that one comes to the front (a start at sign-in leaves it be).
     if (!Instance.claim(quiet = Autostart.TRAY_FLAG in args)) return
     Prefs.init(PropertiesFile(File(Paths.data, "settings.properties")))
+    // Not every Linux desktop has a tray; there closing the window quits as before.
+    val tray = SystemTray.isSupported()
+    val startHidden = Autostart.TRAY_FLAG in args && tray
+    // Something on screen right away while Compose loads; a start into the tray stays quiet.
+    if (!startHidden) Splash.show()
     Language.start()
     Positions.init(PropertiesFile(File(Paths.data, "positions.properties")))
     DownloadStore.init(Paths.data)
@@ -71,9 +77,6 @@ fun main(args: Array<String>) {
         transports = listOf(LanTransport(), DesktopBluetooth),
     )
     val icon = Thread.currentThread().contextClassLoader.getResourceAsStream("hamstr_window.png")?.use { BitmapPainter(loadImageBitmap(it)) }
-    // Not every Linux desktop has a tray; there closing the window quits as before.
-    val tray = SystemTray.isSupported()
-    val startHidden = Autostart.TRAY_FLAG in args && tray
     CoroutineScope(Dispatchers.IO).launch {
         Prefs.settings.map { it.startWithSystem }.distinctUntilChanged().collect(Autostart::set)
     }
@@ -122,6 +125,8 @@ fun main(args: Array<String>) {
             transparent = !Paths.mac && !Paths.windows,
         ) {
             val frame = remember { WindowFrame(window) }
+            // The first frame is drawn: the start window has done its job.
+            LaunchedEffect(Unit) { withFrameNanos {}; Splash.close() }
             // A device asking to send a link brings the window up, where the question waits.
             LaunchedEffect(Unit) { Nearby.requests.collect { if (it.isNotEmpty()) { visible = true; window.isMinimized = false; window.toFront() } } }
             // Opened again from the tray: in front, not behind whatever was there.
@@ -153,6 +158,9 @@ fun main(args: Array<String>) {
                     putClientProperty("apple.awt.windowTitleVisible", false)
                 }
             }
+            // Back in front: files changed or deleted meanwhile show, as on the phone.
+            val focused = LocalWindowInfo.current.isWindowFocused
+            LaunchedEffect(focused) { if (focused) FileChecks.refresh() }
             // Ambient motion only while the window is in front: in the background Hamstr draws nothing.
             CompositionLocalProvider(LocalAmbient provides (visible && LocalWindowInfo.current.isWindowFocused)) {
                 key(language) { HamstrTheme { DesktopApp(frame, onClose = close, onQuit = ::exitApplication) } }

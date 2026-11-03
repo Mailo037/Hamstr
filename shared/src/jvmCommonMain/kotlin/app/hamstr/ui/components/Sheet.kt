@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.SolidColor
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import app.hamstr.Platform
 import app.hamstr.res.*
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
@@ -39,26 +40,31 @@ import app.hamstr.ui.theme.Radii
  * does. With [scroll] the whole body scrolls when it doesn't fit (see [sheetScroll]); a sheet
  * with a list of its own passes false and gives that list `Modifier.weight(1f, fill = false)`,
  * so the list takes the room that is left and the buttons stay put.
+ *
+ * On the desktop it is a modal: rounded all round, without the handle nothing can drag.
  */
 @Composable
 fun Sheet(scroll: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val c = Hamstr.colors
+    val modal = Platform.desktop
     val body = if (scroll) Modifier.sheetScroll() else Modifier.heightIn(max = windowHeight() * SHEET_MAX)
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
+            .clip(if (modal) RoundedCornerShape(Radii.sheet) else RoundedCornerShape(topStart = Radii.sheet, topEnd = Radii.sheet))
             .background(c.overlay)
             // Taps on the sheet stay on it instead of reaching the backdrop behind.
             .clickable(enabled = false) {}
             .then(body)
             .navigationBarsPadding()
             .imePadding()
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = if (modal) 20.dp else 12.dp, bottom = 16.dp)
             .animateContentSize(Specs.blend()),
     ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
-        Spacer(Modifier.height(16.dp))
+        if (!modal) {
+            Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(4.dp)).background(c.line))
+            Spacer(Modifier.height(16.dp))
+        }
         content()
     }
 }

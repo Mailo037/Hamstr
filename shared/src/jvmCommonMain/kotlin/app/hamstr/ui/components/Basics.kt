@@ -194,10 +194,13 @@ fun IconButton(
     background: Color = Hamstr.colors.surface,
     size: Dp = 38.dp,
 ) {
-    // The visible button can be small; the finger always gets at least 48 dp.
+    // The visible button can be small; the finger always gets at least 48 dp. A pointer
+    // resting on it gets the label as a tooltip.
+    val tip = rememberTip()
     Box(
         modifier
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .hoverTip(tip)
             .pressable(onClick, label = label, pressedScale = 0.92f),
         contentAlignment = Alignment.Center,
     ) {
@@ -208,6 +211,29 @@ fun IconButton(
                 .background(background),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, tint = tint, size = 20.dp) }
+        Tip(tip, label)
+    }
+}
+
+/**
+ * A square neutral button with only an icon, as tall as an [HButton] beside it: the lesser
+ * action in a row of buttons (share, more options). The label is for screen readers and the
+ * tooltip.
+ */
+@Composable
+fun SquareButton(icon: DrawableResource, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, tint: Color = Hamstr.colors.ink) {
+    val tip = rememberTip()
+    Box(
+        modifier
+            .size(46.dp)
+            .clip(RoundedCornerShape(Radii.control))
+            .background(Hamstr.colors.surface)
+            .hoverTip(tip)
+            .pressable(onClick, label = label),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, tint = tint, size = 20.dp)
+        Tip(tip, label)
     }
 }
 

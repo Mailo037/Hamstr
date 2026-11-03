@@ -5,6 +5,9 @@ import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -236,6 +239,7 @@ fun PlayerHost(
     var dragging by remember { mutableStateOf(false) }
     var fullscreen by remember { mutableStateOf(false) }
     var lyricsOn by remember { mutableStateOf(false) }
+    var lyricsFull by remember { mutableStateOf(false) }
     val queue by Playback.queue.collectAsState()
     val previous = queue.getOrNull(ui.previousIndex)?.takeIf { queue.size > 1 && it.id != t.id }
     val next = queue.getOrNull(ui.nextIndex)?.takeIf { queue.size > 1 && it.id != t.id }
@@ -267,11 +271,13 @@ fun PlayerHost(
     // laid over it. Either way the system bars step aside until it ends.
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val immersive = fullscreen || (landscape && kind == Kind.Video && expandedTarget)
-    DisposableEffect(immersive) {
+    // Fullscreen lyrics belong to the song on the big player; they go when either does.
+    val lyricsOver = lyricsFull && kind == Kind.Audio && expandedTarget && controller != null
+    DisposableEffect(immersive || lyricsOver) {
         val window = activity?.window
         if (window != null) {
             val ctl = WindowCompat.getInsetsController(window, window.decorView)
-            if (immersive) {
+            if (immersive || lyricsOver) {
                 ctl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 ctl.hide(WindowInsetsCompat.Type.systemBars())
             } else ctl.show(WindowInsetsCompat.Type.systemBars())
@@ -281,6 +287,8 @@ fun PlayerHost(
     BackHandler(enabled = fullscreen || expandedTarget) {
         if (fullscreen) fullscreen = false else Playback.minimize()
     }
+    BackHandler(enabled = lyricsOver) { lyricsFull = false }
+    LaunchedEffect(lyricsOver) { if (!lyricsOver) lyricsFull = false }
 
     fun close() = scope.launch {
         fullscreen = false
@@ -336,7 +344,7 @@ fun PlayerHost(
     }
 
     // Only the expanded player claims the whole screen; the mini player leaves the list usable.
-    val expandedNow = e.value > 0.001f && !immersive
+    val expandedNow = e.value > 0.001f && !immersive && !lyricsOver
     BoxWithConstraints(Modifier.fillMaxSize().then(if (expandedNow) shrinkDrag else Modifier)) {
         val W = constraints.maxWidth.toFloat()
         val H = constraints.maxHeight.toFloat()
@@ -649,8 +657,15 @@ fun PlayerHost(
                     onShare = { fullscreen = false; onShare(t) },
                     onQuality = if (canHaveVersions(t)) ({ fullscreen = false; onQuality(t) }) else null,
                 )
-                Kind.Audio -> AnimatedContent(lyricsOn && ev > 0.98f, transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "lyrics") { on ->
-                    if (on && controller != null) LyricsPanel(t, controller!!, ui, onEdit = { onEditLyrics(t) })
+                // The crossfade keeps to the morphing box: one that eased its own size would lag
+                // behind it while the player is pulled down, and show at the bottom and the side.
+                Kind.Audio -> AnimatedContent(
+                    lyricsOn && ev > 0.98f,
+                    Modifier.fillMaxSize(),
+                    transitionSpec = { (fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear())).using(null) },
+                    label = "lyrics",
+                ) { on ->
+                    if (on && controller != null) LyricsPanel(t, controller!!, ui, onEdit = { onEditLyrics(t) }, onFullscreen = { lyricsFull = true })
                     else Cover(t, ev)
                 }
                 Kind.Image -> ImageView(file, zoomable = ev > 0.98f)
@@ -661,6 +676,15 @@ fun PlayerHost(
                     }
                 }
             }
+        }
+
+        // ---- lyrics over the whole screen -------------------------------------------
+        AnimatedVisibility(
+            lyricsOver,
+            enter = fadeIn(Specs.appear()) + scaleIn(Specs.enter(), initialScale = 0.96f),
+            exit = fadeOut(Specs.disappear()) + scaleOut(Specs.leave(), targetScale = 0.98f),
+        ) {
+            controller?.let { LyricsFullscreen(t, it, ui, tint, onEdit = { onEditLyrics(t) }, onClose = { lyricsFull = false }) }
         }
     }
 }

@@ -201,6 +201,12 @@
     <string name="info_tag_genre">장르</string>
     <string name="info_tracks">트랙</string>
     <string name="info_open_link">링크 열기</string>
+    <string name="file_changed">저장한 뒤 바뀌었어요</string>
+    <string name="info_sha256">SHA-256</string>
+    <string name="info_check">저장한 뒤로</string>
+    <string name="info_check_running">확인 중…</string>
+    <string name="info_check_same">바뀌지 않음</string>
+    <string name="info_check_changed">Hamstr 밖에서 바뀌었어요</string>
     <string name="rename_title">파일 이름 바꾸기</string>
     <string name="rename_hint">파일 이름</string>
     <string name="rename_done">이름이 바뀌었어요</string>
@@ -282,6 +288,7 @@
     <!-- Library -->
     <string name="lib_all">전체</string>
     <string name="lib_sort">정렬</string>
+    <string name="lib_filter">필터</string>
     <string name="lib_sort_newest">최신순</string>
     <string name="lib_sort_oldest">오래된순</string>
     <string name="lib_sort_name">이름순</string>
@@ -673,7 +680,6 @@
     <string name="device_send_files">파일 보내기</string>
     <string name="device_forget">이 기기 잊기</string>
     <string name="nearby_done">완료</string>
-    <string name="share_target_send">Hamstr로 보내기</string>
     <string name="set_devices_summary_off">꺼짐</string>
     <string name="set_devices_summary">%1$s(으)로 보임</string>
     <string name="nearby_channel">근처 기기</string>
@@ -731,9 +737,12 @@
     <string name="set_autostart_hint">로그인하면 Hamstr가 트레이에서 시작돼요</string>
     <string name="desktop_open">열기</string>
     <string name="desktop_show_in_folder">폴더에서 보기</string>
+    <string name="desktop_maximize">최대화</string>
+    <string name="desktop_restore">이전 크기로</string>
+    <string name="desktop_close">닫기</string>
+    <string name="desktop_volume">볼륨</string>
     <string name="desktop_open_folder">클릭해서 폴더 열기</string>
     <string name="desktop_about_local">모든 작업은 이 컴퓨터에서 이뤄져요. yt-dlp, Cheek, FFmpeg가 앱에 포함되어 있고 서버는 없어요.</string>
-    <string name="desktop_ytdlp_update">yt-dlp 업데이트</string>
     <string name="desktop_cheek_missing">이 빌드에는 Cheek가 없어요. yt-dlp가 자체적으로 다운로드해요.</string>
     <string name="desktop_update_restarts">Hamstr가 잠시 닫혔다가 새 버전으로 다시 열려요.</string>
     <string name="desktop_update_password">비밀번호로 확인하세요. 그러면 Hamstr가 새 버전으로 다시 열려요.</string>
@@ -758,7 +767,6 @@
     <string name="desktop_folder_change">폴더 선택</string>
     <string name="desktop_folder_reset">Hamstr 폴더로 되돌리기</string>
     <string name="desktop_folder_hint">새 다운로드는 여기에 들어가요. 이미 보관함에 있는 건 그대로예요.</string>
-    <string name="desktop_cheek_update">Cheek 업데이트</string>
     <string name="set_transfer_jobs">하루 제한 없는 긴 다운로드</string>
     <string name="set_transfer_jobs_hint">Hamstr에서 시작한 다운로드는 Android의 다운로드 작업으로 실행돼서, 하루 6시간이 지나도 Android가 멈추지 않아요.</string>
     <string name="eq_title">이퀄라이저</string>

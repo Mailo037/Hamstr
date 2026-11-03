@@ -1,6 +1,9 @@
 package app.hamstr.desktop
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -32,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.Prefs
 import app.hamstr.engine.EngineState
+import app.hamstr.engine.EngineVersionCheck
 import app.hamstr.res.*
 import app.hamstr.ui.NearbySettings
 import app.hamstr.ui.AsciiEffects
@@ -163,6 +167,8 @@ private fun EnginePage(engine: EngineState) {
     val cheekUpdating by ToolUpdates.cheekUpdating.collectAsState()
     val cheekFailed by ToolUpdates.cheekError.collectAsState()
     val cheekVersion by ToolUpdates.cheekVersion.collectAsState()
+    val ytDlpCheck by ToolUpdates.ytDlpCheck.collectAsState()
+    val cheekCheck by ToolUpdates.cheekCheck.collectAsState()
     Group { EngineChoice() }
     Spacer(Modifier.height(12.dp))
     Group {
@@ -173,13 +179,7 @@ private fun EnginePage(engine: EngineState) {
         })
         Divider()
         FxRow(stringResource(Res.string.set_ytdlp_auto), stringResource(Res.string.set_ytdlp_auto_hint), s.autoUpdate) { v -> Prefs.edit { it.copy(autoUpdate = v) } }
-        Column(Modifier.padding(8.dp)) {
-            HButton(
-                stringResource(if (updating) Res.string.set_updating else Res.string.desktop_ytdlp_update),
-                Queue::updateYtDlp,
-                Modifier.fillMaxWidth(), kind = ButtonKind.Neutral, icon = Res.drawable.ic_refresh, enabled = !updating && engine is EngineState.Ready,
-            )
-        }
+        CheckThenUpdate(ytDlpCheck, updating, engine is EngineState.Ready, onCheck = ToolUpdates::checkYtDlpSoon, onUpdate = Queue::updateYtDlp)
     }
     failed?.let {
         Spacer(Modifier.height(8.dp))
@@ -192,17 +192,45 @@ private fun EnginePage(engine: EngineState) {
             else "$cheekVersion · " + stringResource(Res.string.set_cheek_updated))
         Divider()
         FxRow(stringResource(Res.string.set_cheek_auto), stringResource(Res.string.set_cheek_auto_hint), s.cheekAutoUpdate) { v -> Prefs.edit { it.copy(cheekAutoUpdate = v) } }
-        Column(Modifier.padding(8.dp)) {
-            HButton(
-                stringResource(if (cheekUpdating) Res.string.set_updating else Res.string.desktop_cheek_update),
-                ToolUpdates::updateCheekSoon,
-                Modifier.fillMaxWidth(), kind = ButtonKind.Neutral, icon = Res.drawable.ic_refresh, enabled = !cheekUpdating && Tools.hasCheek,
-            )
-        }
+        CheckThenUpdate(cheekCheck, cheekUpdating, Tools.hasCheek, onCheck = ToolUpdates::checkCheekSoon, onUpdate = ToolUpdates::updateCheekSoon)
     }
     cheekFailed?.let {
         Spacer(Modifier.height(8.dp))
         Txt(stringResource(Res.string.set_update_failed_why, it), style = Hamstr.type.small, color = Hamstr.colors.ghost, modifier = Modifier.padding(horizontal = 6.dp))
+    }
+}
+
+/**
+ * A tool's button: it looks for a newer version first, and only once one is out does it offer
+ * to update to it. What the look found shows under the button.
+ */
+@Composable
+private fun CheckThenUpdate(check: EngineVersionCheck, updating: Boolean, ready: Boolean, onCheck: () -> Unit, onUpdate: () -> Unit) {
+    val available = check as? EngineVersionCheck.Available
+    val checking = check == EngineVersionCheck.Checking
+    Column(Modifier.padding(8.dp)) {
+        HButton(
+            when {
+                updating -> stringResource(Res.string.set_updating)
+                checking -> stringResource(Res.string.set_checking_version)
+                available != null -> stringResource(Res.string.set_update_to, available.version)
+                else -> stringResource(Res.string.set_check_version)
+            },
+            { if (available != null) onUpdate() else onCheck() },
+            Modifier.fillMaxWidth(),
+            kind = if (available != null && !updating) ButtonKind.Primary else ButtonKind.Neutral,
+            icon = if (available != null) Res.drawable.ic_download else Res.drawable.ic_refresh,
+            enabled = !updating && !checking && ready,
+        )
+        val message = when (check) {
+            is EngineVersionCheck.Available -> stringResource(Res.string.set_version_available, check.version)
+            EngineVersionCheck.Current -> stringResource(Res.string.set_up_to_date)
+            is EngineVersionCheck.Failed -> check.message
+            else -> null
+        }
+        AnimatedVisibility(message != null && !updating, enter = expandVertically(Specs.blend()) + fadeIn(Specs.appear()), exit = shrinkVertically(Specs.blend()) + fadeOut(Specs.disappear())) {
+            Txt(message.orEmpty(), style = Hamstr.type.small, color = Hamstr.colors.muted, modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp))
+        }
     }
 }
 

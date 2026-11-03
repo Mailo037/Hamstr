@@ -364,8 +364,11 @@ fun LibraryScreen(
                     Column(Modifier.weight(1f)) {
                         Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2, modifier = Modifier.padding(horizontal = 2.dp))
                         val size = all.sumOf { it.sizeBytes }.takeIf { it > 0 }?.let(::formatBytes)
-                        listOfNotNull(t.uploader ?: versions[t.family]?.firstNotNullOfOrNull { it.uploader }, size).joinToString(" · ").takeIf { it.isNotEmpty() }
-                            ?.let { Txt(it, style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!gone) ChangedMark(t.id, Modifier.padding(start = 2.dp))
+                            listOfNotNull(t.uploader ?: versions[t.family]?.firstNotNullOfOrNull { it.uploader }, size).joinToString(" · ").takeIf { it.isNotEmpty() }
+                                ?.let { Txt(it, style = Hamstr.type.small, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp, vertical = 1.dp)) }
+                        }
                     }
                     if (!selecting) {
                         // The file menu, also reachable with a long press on the player. The 48 dp target

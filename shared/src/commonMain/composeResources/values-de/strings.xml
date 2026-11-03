@@ -205,6 +205,12 @@
     <string name="info_tag_genre">Genre</string>
     <string name="info_tracks">Spuren</string>
     <string name="info_open_link">Link öffnen</string>
+    <string name="file_changed">Seit dem Speichern verändert</string>
+    <string name="info_sha256">SHA-256</string>
+    <string name="info_check">Seit dem Speichern</string>
+    <string name="info_check_running">Wird geprüft …</string>
+    <string name="info_check_same">Unverändert</string>
+    <string name="info_check_changed">Außerhalb von Hamstr verändert</string>
     <string name="rename_title">Datei umbenennen</string>
     <string name="rename_hint">Dateiname</string>
     <string name="rename_done">Umbenannt</string>
@@ -288,6 +294,7 @@
     <!-- Library -->
     <string name="lib_all">Alle</string>
     <string name="lib_sort">Sortieren</string>
+    <string name="lib_filter">Filter</string>
     <string name="lib_sort_newest">Neueste</string>
     <string name="lib_sort_oldest">Älteste</string>
     <string name="lib_sort_name">Name</string>
@@ -683,7 +690,6 @@
     <string name="device_send_files">Dateien senden</string>
     <string name="device_forget">Dieses Gerät vergessen</string>
     <string name="nearby_done">Fertig</string>
-    <string name="share_target_send">Mit Hamstr senden</string>
     <string name="set_devices_summary_off">Aus</string>
     <string name="set_devices_summary">Sichtbar als %1$s</string>
     <string name="nearby_channel">Geräte in der Nähe</string>
@@ -741,9 +747,12 @@
     <string name="set_autostart_hint">Hamstr startet beim Anmelden im Tray</string>
     <string name="desktop_open">Öffnen</string>
     <string name="desktop_show_in_folder">Im Ordner anzeigen</string>
+    <string name="desktop_maximize">Maximieren</string>
+    <string name="desktop_restore">Wiederherstellen</string>
+    <string name="desktop_close">Schließen</string>
+    <string name="desktop_volume">Lautstärke</string>
     <string name="desktop_open_folder">Klick, um den Ordner zu öffnen</string>
     <string name="desktop_about_local">Alles läuft auf diesem Computer: yt-dlp, Cheek und FFmpeg kommen mit der App, kein Server.</string>
-    <string name="desktop_ytdlp_update">yt-dlp aktualisieren</string>
     <string name="desktop_cheek_missing">Cheek ist in diesem Build nicht enthalten; yt-dlp lädt selbstständig herunter.</string>
     <string name="desktop_update_restarts">Hamstr schließt sich kurz und öffnet sich wieder als neue Version.</string>
     <string name="desktop_update_password">Bestätige mit deinem Passwort; danach öffnet sich Hamstr wieder als neue Version.</string>
@@ -769,7 +778,6 @@
     <string name="desktop_folder_change">Ordner wählen</string>
     <string name="desktop_folder_reset">Zurück zu Hamstrs Ordner</string>
     <string name="desktop_folder_hint">Neue Downloads landen hier; was schon im Vorrat ist, bleibt, wo es ist.</string>
-    <string name="desktop_cheek_update">Cheek aktualisieren</string>
     <string name="set_transfer_jobs">Lange Downloads ohne Tageslimit</string>
     <string name="set_transfer_jobs_hint">Was du in Hamstr startest, läuft als einer von Androids Download-Jobs, die Android nicht nach sechs Stunden am Tag stoppt.</string>
     <string name="eq_title">Equalizer</string>

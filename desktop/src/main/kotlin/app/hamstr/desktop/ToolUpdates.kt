@@ -3,8 +3,12 @@ package app.hamstr.desktop
 import app.hamstr.Log
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.Prefs
+import app.hamstr.engine.EngineState
+import app.hamstr.engine.EngineVersionCheck
 import app.hamstr.engine.ReleaseKeys
 import app.hamstr.engine.Versions
+import app.hamstr.engine.newerYtDlpVersion
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,6 +28,7 @@ import java.net.URI
  * Keeps yt-dlp and Cheek fresh while Hamstr sits in the tray for days, like the phone does:
  * once a day, when nothing is downloading, if Settings › Engine allows it. Cheek comes from
  * its own releases, only signed ones that keep the command line this Hamstr speaks.
+ * Settings › Engine looks first ([checkYtDlpSoon], [checkCheekSoon]) and updates on a second click.
  */
 object ToolUpdates {
     private const val TAG = "HamstrTools"
@@ -38,6 +43,12 @@ object ToolUpdates {
     val cheekError: StateFlow<String?> = _cheekError.asStateFlow()
     private val _cheekVersion = MutableStateFlow(Tools.cheekVersion)
     val cheekVersion: StateFlow<String> = _cheekVersion.asStateFlow()
+    private val _cheekCheck = MutableStateFlow<EngineVersionCheck>(EngineVersionCheck.Idle)
+    /** What the last look for a newer Cheek found. */
+    val cheekCheck: StateFlow<EngineVersionCheck> = _cheekCheck.asStateFlow()
+    private val _ytDlpCheck = MutableStateFlow<EngineVersionCheck>(EngineVersionCheck.Idle)
+    /** What the last look for a newer yt-dlp found. */
+    val ytDlpCheck: StateFlow<EngineVersionCheck> = _ytDlpCheck.asStateFlow()
 
     /** The Cheek this computer runs: x86_64 or Apple silicon, as cheek's release names them. */
     private val asset: String? = run {
@@ -87,6 +98,7 @@ object ToolUpdates {
             }
             Prefs.edit { it.copy(lastCheekCheck = System.currentTimeMillis()) }
             _cheekVersion.value = Tools.cheekVersion
+            _cheekCheck.value = EngineVersionCheck.Current
             Result.success(Tools.cheekVersion)
         } catch (e: Exception) {
             Log.w(TAG, "Cheek update failed", e)
@@ -100,6 +112,47 @@ object ToolUpdates {
     /** Starts [updateCheek] from a button, in this object's own scope. */
     fun updateCheekSoon() {
         if (!_cheekUpdating.value) scope.launch { updateCheek() }
+    }
+
+    /** Only looks whether a newer signed-off Cheek is out for this Hamstr; nothing is downloaded. */
+    fun checkCheekSoon() {
+        if (_cheekCheck.value == EngineVersionCheck.Checking) return
+        _cheekCheck.value = EngineVersionCheck.Checking
+        scope.launch {
+            _cheekCheck.value = look {
+                asset ?: error("Cheek has no build for this computer")
+                val version = JSONObject(String(fetch("https://api.github.com/repos/Mailo037/cheek/releases/latest", json = true))).getString("tag_name").trim().removePrefix("v")
+                if (Versions.sameCheekLine(version, Tools.bundledCheekVersion) && Versions.newer(version, Tools.cheekVersion)) EngineVersionCheck.Available(version)
+                else EngineVersionCheck.Current
+            }
+        }
+    }
+
+    /** Only looks whether a newer stable yt-dlp is out; [Queue.updateYtDlp] fetches it. */
+    fun checkYtDlpSoon() {
+        if (_ytDlpCheck.value == EngineVersionCheck.Checking) return
+        _ytDlpCheck.value = EngineVersionCheck.Checking
+        scope.launch {
+            _ytDlpCheck.value = look {
+                val installed = (Queue.engine.value as? EngineState.Ready)?.version ?: error("yt-dlp isn't running")
+                val latest = JSONObject(String(fetch("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", json = true))).getString("tag_name")
+                if (newerYtDlpVersion(latest, installed)) EngineVersionCheck.Available(latest.trim().removePrefix("v")) else EngineVersionCheck.Current
+            }
+        }
+    }
+
+    /** yt-dlp updated itself (from the button or the daily round): what was found is in now. */
+    internal fun ytDlpUpdated() {
+        if (_ytDlpCheck.value is EngineVersionCheck.Available) _ytDlpCheck.value = EngineVersionCheck.Current
+    }
+
+    private suspend fun look(check: suspend () -> EngineVersionCheck): EngineVersionCheck = try {
+        check()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "Version check failed", e)
+        EngineVersionCheck.Failed(e.message ?: e.toString())
     }
 
     private suspend fun fetch(url: String, json: Boolean = false): ByteArray = runInterruptible {

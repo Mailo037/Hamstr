@@ -12,16 +12,33 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.9.5"
+VERSION = "0.9.6"
 FEATURES = [
-    ("ROUNDER ICONS", "Every icon redrawn, soft like the app"),
-    ("SAME EVERYWHERE", "On the phone, the computer and the shortcuts"),
+    ("DESKTOP REFINEMENTS", "Menus, tooltips and a player that fits"),
+    ("SMOOTHER SHEETS", "Connected edges and simpler sharing"),
+    ("CLEARER FILE DETAILS", "SHA-256 and a quiet mark for changed files"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.9.5: the icon panel, the app's own vectors drawn as tiles by headless Chrome.
-SHOTS = [("panel_icons.png", "Icons")]
+# 0.9.6: current Compose test captures; no phone or emulator is needed.
+SHOTS = [("panel_sharing.png", "Sharing")]
+
+
+def sharing_panel(shots):
+    """Compose the real SharingSheetTest captures, without their empty black canvas."""
+    panel = Image.new("RGBA", (1120, 800), (0, 0, 0, 0))
+    d = ImageDraw.Draw(panel)
+    for x, name, label in [(0, "share_link.png", "LINK"), (580, "share_file.png", "FILE")]:
+        source = Image.open(shots / name).convert("RGB")
+        source = source.crop(source.getbbox()).convert("RGBA")
+        source.thumbnail((520, 620), Image.Resampling.LANCZOS)
+        # The screenshot includes the sheet's actual rounded shape.
+        mask = source.convert("RGB").point(lambda value: 255 if value else 0).convert("L")
+        source.putalpha(mask.point(lambda value: 255 if value else 0))
+        panel.alpha_composite(source, (x, 130))
+        d.text((x + 8, 58), label, font=font("jetbrains_mono_600.ttf", 28), fill=ACCENT)
+    panel.save(shots / "panel_sharing.png")
 
 
 
@@ -75,5 +92,8 @@ def release(shots):
 if __name__ == "__main__":
     out = OUT / "releases"
     out.mkdir(parents=True, exist_ok=True)
-    release(pathlib.Path(sys.argv[1])).save(out / f"v{VERSION}.png", optimize=True)
+    shots = pathlib.Path(sys.argv[1])
+    if SHOTS[0][0] == "panel_sharing.png":
+        sharing_panel(shots)
+    release(shots).save(out / f"v{VERSION}.png", optimize=True)
     print("ok")

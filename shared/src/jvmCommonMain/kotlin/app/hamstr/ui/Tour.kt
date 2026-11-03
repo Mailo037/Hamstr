@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import app.hamstr.ui.components.edgeFade
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -138,11 +139,12 @@ internal val pasteKeys = if (System.getProperty("os.name").orEmpty().startsWith(
  * What Hamstr is and how it works, in a few pages: each shows the part of the app it talks
  * about, drawn from the app's own pieces and moving the way the app does, over a sentence or
  * two. Swipe or use the buttons (arrow keys, Enter and Esc on a computer); [onDone] runs after
- * the last page or on Skip. [desktop] picks the computer's pages and words.
+ * the last page or on Skip. [desktop] picks the computer's pages and words. [top] leaves room
+ * for what lies over the tour's top edge (the desktop's title bar).
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun Tour(onDone: () -> Unit, modifier: Modifier = Modifier, desktop: Boolean = Platform.desktop, startAt: Int = 0) {
+fun Tour(onDone: () -> Unit, modifier: Modifier = Modifier, desktop: Boolean = Platform.desktop, startAt: Int = 0, top: Dp = 0.dp) {
     val c = Hamstr.colors
     val steps = remember(desktop) { TourStep.on(desktop) }
     val pager = rememberPagerState(startAt.coerceIn(0, steps.lastIndex)) { steps.size }
@@ -187,7 +189,7 @@ fun Tour(onDone: () -> Unit, modifier: Modifier = Modifier, desktop: Boolean = P
         // Sideways (a computer, a phone held sideways) the picture sits beside the words.
         val wide = maxWidth > maxHeight * 1.15f && maxWidth >= 560.dp
         RasterBackground(Modifier.fillMaxWidth().height(maxHeight * 0.5f))
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(top = top)) {
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 24.dp, end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -256,12 +258,12 @@ fun Tour(onDone: () -> Unit, modifier: Modifier = Modifier, desktop: Boolean = P
  * little, as if the app came forward through it.
  */
 @Composable
-fun TourOverlay(visible: Boolean, onDone: () -> Unit, startAt: Int = 0) {
+fun TourOverlay(visible: Boolean, onDone: () -> Unit, startAt: Int = 0, top: Dp = 0.dp) {
     AnimatedVisibility(
         visible,
         enter = fadeIn(Specs.appear()),
         exit = fadeOut(Specs.leave(260)) + scaleOut(Specs.leave(260), targetScale = 1.03f),
-    ) { Tour(onDone, startAt = startAt) }
+    ) { Tour(onDone, startAt = startAt, top = top) }
 }
 
 /** One page: the picture, then (or beside it) the badge, the title and a sentence or two. */

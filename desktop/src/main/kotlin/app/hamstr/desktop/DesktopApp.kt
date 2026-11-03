@@ -1,5 +1,9 @@
 package app.hamstr.desktop
 
+import java.util.Date
+import java.text.DateFormat
+import app.hamstr.ui.InfoAction
+import app.hamstr.ui.InfoSheet
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -38,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -46,7 +51,10 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
@@ -63,21 +71,20 @@ import app.hamstr.ui.Overlay
 import app.hamstr.ui.StashScreen
 import app.hamstr.ui.TourOverlay
 import app.hamstr.ui.TourGate
-import app.hamstr.ui.components.Group
+import app.hamstr.ui.components.DropMenu
 import app.hamstr.ui.components.Icon
+import app.hamstr.ui.components.MenuDivider
+import app.hamstr.ui.components.MenuItem
 import app.hamstr.ui.components.RasterBackground
-import app.hamstr.ui.components.Sheet
-import app.hamstr.ui.components.SheetHeader
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.animateSelection
-import app.hamstr.ui.statusLine
 import app.hamstr.ui.theme.Hamstr
-import app.hamstr.ui.theme.Radii
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import java.io.File
+import kotlin.math.roundToInt
 
 private enum class Tab(val label: StringResource, val icon: DrawableResource) {
     Stash(Res.string.tab_stash, Res.drawable.ic_download),
@@ -107,18 +114,26 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     var deviceFor by remember { mutableStateOf<String?>(null) }
     var clipLink by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<DownloadTask?>(null) }
+    // Where the pointer last was in the window: a download's menu opens there.
+    var pointer by remember { mutableStateOf(Offset.Zero) }
+    var menuAt by remember { mutableStateOf(IntOffset.Zero) }
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
     var playing by remember { mutableStateOf<DownloadTask?>(null) }
+    var infoFor by remember { mutableStateOf<DownloadTask?>(null) }
     val requests by Nearby.requests.collectAsState()
     // The tour on a first start; HAMSTR_TOUR=<page> opens it on that page, for screenshots.
     val tourAt = remember { System.getenv("HAMSTR_TOUR")?.toIntOrNull() }
     var touring by remember { mutableStateOf(tourAt != null || TourGate.due()) }
-    val sheetOpen = touring || adding || menuFor != null || sharing != null || playing != null || requests.isNotEmpty()
+    val sheetOpen = touring || adding || menuFor != null || sharing != null || playing != null || infoFor != null || requests.isNotEmpty()
 
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
     // Videos and songs play in Hamstr; documents and the like open in the system's app.
     fun play(t: DownloadTask) {
         if (playable(t)) playing = t else t.filePath?.let { Files.open(File(it)) }
+    }
+    fun openMenu(t: DownloadTask) {
+        menuAt = IntOffset(pointer.x.roundToInt(), pointer.y.roundToInt())
+        menuFor = t
     }
 
     Box(
@@ -126,6 +141,11 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
             .fillMaxSize()
             .then(if (Paths.windows || Paths.mac || frame.maximized) Modifier else Modifier.clip(RoundedCornerShape(10.dp)))
             .background(c.canvas)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull()?.let { pointer = it.position }
+                }
+            }
             // Ctrl+V (⌘V) anywhere stashes the copied link, the desktop's share button.
             .onKeyEvent { e ->
                 val paste = e.type == KeyEventType.KeyDown && e.key == Key.V && (e.isCtrlPressed || e.isMetaPressed)
@@ -134,9 +154,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     ) {
         RasterBackground(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
-            TitleBar(frame, onClose)
-            // The sheets cover what is under the title bar, not the bar itself: with one open,
-            // the window still moves, minimizes and closes, and that leaves the sheet open.
+            Spacer(Modifier.height(TITLE_BAR))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Row(Modifier.fillMaxSize().padding(start = 10.dp, end = 12.dp, bottom = 12.dp)) {
                     SideBar(tab, page, onTab = { tab = it }, onPage = { page = it; tab = Tab.Settings })
@@ -149,7 +167,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                                         visible, engine, PaddingValues(top = 8.dp, bottom = 24.dp),
                                         onAdd = { clipboardLink()?.let(Queue::stash) ?: run { clipLink = null; adding = true } },
                                         onOpenAdd = { clipLink = clipboardLink(); adding = true },
-                                        onMenu = { menuFor = it },
+                                        onMenu = ::openMenu,
                                         onPlay = { t, _ -> play(t) },
                                         onHide = { list -> DownloadStore.setHidden(list.map { it.id }.toSet(), true) },
                                         onRetryEngine = Queue::retryStart,
@@ -158,59 +176,81 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                                 }
                             }
                             Tab.Library -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                                Box(Modifier.widthIn(max = 880.dp)) { DesktopLibrary(visible, onPlay = ::play, onMenu = { menuFor = it }) }
+                                Box(Modifier.widthIn(max = 880.dp)) { DesktopLibrary(visible, onPlay = ::play, onMenu = ::openMenu) }
                             }
                             Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true }, onDevice = { clipLink = clipboardLink(); deviceFor = it })
                         }
                     }
                 }
-
-                Overlay(adding, onDismiss = { adding = false }) {
-                    DesktopSheet {
-                        AddSheet(
-                            clipLink,
-                            onLink = { Queue.stash(it); adding = false; tab = Tab.Stash },
-                            onFiles = { adding = false; Files.pickAndImport() },
-                            onSend = { adding = false; sharing = ShareContent(it) },
-                            onStash = { link, choice -> Queue.stash(link, choice); adding = false; tab = Tab.Stash },
-                        )
-                    }
-                }
-                Overlay(menuFor != null, onDismiss = { menuFor = null }) {
-                    menuFor?.let { t -> DesktopSheet { FileMenu(t, onShare = { menuFor = null; sharing = ShareContent.from(listOf(t)) }, onPlay = { menuFor = null; play(it) }) { menuFor = null } } }
-                }
-                Overlay(deviceFor != null, onDismiss = { deviceFor = null }) {
-                    deviceFor?.let { id -> DesktopSheet { DeviceSheet(id, clipLink, onPickFiles = { Files.pick() }, onClose = { deviceFor = null }) } }
-                }
-                Overlay(sharing != null, onDismiss = { sharing = null }) {
-                    sharing?.let { content ->
-                        DesktopSheet {
-                            SharingSheet(
-                                content,
-                                onCopyLink = { Files.copy(it); sharing = null },
-                                onCopyFiles = { Files.copyFiles(content.files.mapNotNull { it.filePath?.let(::File) }); sharing = null },
-                                onShareFiles = { content.files.firstOrNull()?.filePath?.let { Files.reveal(File(it)) }; sharing = null },
-                                fileActionLabel = Res.string.desktop_show_in_folder,
-                            )
-                        }
-                    }
-                }
-                Overlay(playing != null, onDismiss = { playing = null }) {
-                    playing?.let { t -> DesktopPlayer(t) { playing = null } }
-                }
-                val request = requests.firstOrNull()
-                Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {
-                    request?.let { r -> DesktopSheet { RequestSheet(r) { tab = Tab.Stash } } }
-                }
-                // Over the side bar and the page, under the title bar: the window still moves and closes.
-                TourOverlay(touring, onDone = { TourGate.done(); touring = false; tab = Tab.Stash }, startAt = (tourAt ?: 1) - 1)
             }
         }
+
+        // Modals and the tour dim the whole window, the title bar's strip included, so nothing up
+        // there keeps a colour of its own; the bar itself is drawn last, on top and usable, so the
+        // window still moves, minimizes and closes with one open.
+        Overlay(adding, onDismiss = { adding = false }) {
+            DesktopSheet {
+                AddSheet(
+                    clipLink,
+                    onLink = { Queue.stash(it); adding = false; tab = Tab.Stash },
+                    onFiles = { adding = false; Files.pickAndImport() },
+                    onSend = { adding = false; sharing = ShareContent(it) },
+                    onStash = { link, choice -> Queue.stash(link, choice); adding = false; tab = Tab.Stash },
+                )
+            }
+        }
+        Overlay(deviceFor != null, onDismiss = { deviceFor = null }) {
+            deviceFor?.let { id -> DesktopSheet { DeviceSheet(id, clipLink, onPickFiles = { Files.pick() }, onClose = { deviceFor = null }) } }
+        }
+        Overlay(sharing != null, onDismiss = { sharing = null }) {
+            sharing?.let { content ->
+                DesktopSheet {
+                    SharingSheet(
+                        content,
+                        onCopyLink = { Files.copy(it); sharing = null },
+                        onCopyFiles = { Files.copyFiles(content.files.mapNotNull { it.filePath?.let(::File) }); sharing = null },
+                        onShareFiles = { content.files.firstOrNull()?.filePath?.let { Files.reveal(File(it)) }; sharing = null },
+                        fileActionLabel = Res.string.desktop_show_in_folder,
+                        fileActionIcon = Res.drawable.ic_folder_open,
+                    )
+                }
+            }
+        }
+        Overlay(infoFor != null, onDismiss = { infoFor = null }) {
+            infoFor?.let { t ->
+                val file = t.filePath?.let(::File)?.takeIf { it.isFile }
+                DesktopSheet {
+                    InfoSheet(
+                        t,
+                        onCopy = Files::copy,
+                        formatDate = { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)) },
+                        actions = buildMap {
+                            if (t.url.startsWith("http")) put(Res.string.info_link, InfoAction(Res.drawable.ic_open_in_new, Res.string.info_open_link) { Files.browse(t.url) })
+                            if (file != null) put(Res.string.info_file, InfoAction(Res.drawable.ic_folder_open, Res.string.desktop_show_in_folder) { Files.reveal(file) })
+                        },
+                    )
+                }
+            }
+        }
+        Overlay(playing != null, onDismiss = { playing = null }) {
+            playing?.let { t -> DesktopPlayer(t) { playing = null } }
+        }
+        val request = requests.firstOrNull()
+        Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {
+            request?.let { r -> DesktopSheet { RequestSheet(r) { tab = Tab.Stash } } }
+        }
+        // A download's menu, where it was right-clicked (or clicked, for a running one).
+        FileMenu(
+            menuFor, menuAt, onShare = { t -> menuFor = null; sharing = ShareContent.from(listOf(t)) }, onPlay = { t -> menuFor = null; play(t) },
+            onInfo = { t -> menuFor = null; infoFor = t },
+        ) { menuFor = null }
+        TourOverlay(touring, onDone = { TourGate.done(); touring = false; tab = Tab.Stash }, startAt = (tourAt ?: 1) - 1, top = TITLE_BAR)
+        TitleBar(frame, onClose)
         ResizeEdges(frame)
     }
 }
 
-/** Sheets keep a readable width on a wide window and sit in its middle. */
+/** Modals keep a readable width on a wide window. */
 @Composable
 private fun DesktopSheet(content: @Composable BoxScope.() -> Unit) =
     Box(Modifier.widthIn(max = 600.dp), content = content)
@@ -294,45 +334,29 @@ private fun PageItem(p: Page, on: Boolean, dot: Boolean, onClick: () -> Unit) {
 // A pointer needs less room than a finger: the phone's tab bar items are 54 dp.
 private val ITEM = 40.dp
 
-/** A download's menu: open it, find it, copy its link or take it off the list. */
+/**
+ * A download's menu at the pointer: play or open it, find it, share it, see its info or take it off the list.
+ * A pointer gets there with one right-click, so it is a small menu rather than a sheet.
+ */
 @Composable
-private fun FileMenu(t: DownloadTask, onShare: () -> Unit, onPlay: (DownloadTask) -> Unit, onClose: () -> Unit) {
-    val file = t.filePath?.let(::File)?.takeIf { it.exists() }
-    Sheet {
-        SheetHeader(t.title, subtitle = statusLine(t))
-        Spacer(Modifier.height(16.dp))
-        Group {
-            if (file != null && t.status == Status.Done) {
-                if (playable(t)) MenuRow(Res.drawable.ic_play_arrow, stringResource(Res.string.player_play)) { onPlay(t) }
-                MenuRow(Res.drawable.ic_open_in_new, stringResource(Res.string.desktop_open)) { Files.open(file); onClose() }
-                MenuRow(Res.drawable.ic_folder_open, stringResource(Res.string.desktop_show_in_folder)) { Files.reveal(file); onClose() }
+private fun FileMenu(t: DownloadTask?, at: IntOffset, onShare: (DownloadTask) -> Unit, onPlay: (DownloadTask) -> Unit, onInfo: (DownloadTask) -> Unit, onClose: () -> Unit) {
+    // The last download stays in the menu while it fades out.
+    var last by remember { mutableStateOf(t) }
+    if (t != null) last = t
+    val shown = last ?: return
+    val file = shown.filePath?.let(::File)?.takeIf { it.exists() }
+    Box(Modifier.fillMaxSize()) {
+        DropMenu(t != null, onClose, at = at) {
+            if (file != null && shown.status == Status.Done) {
+                if (playable(shown)) MenuItem(stringResource(Res.string.player_play), { onPlay(shown) }, Res.drawable.ic_play_arrow)
+                MenuItem(stringResource(Res.string.desktop_open), { Files.open(file); onClose() }, Res.drawable.ic_open_in_new)
+                MenuItem(stringResource(Res.string.desktop_show_in_folder), { Files.reveal(file); onClose() }, Res.drawable.ic_folder_open)
             }
-            if (t.url.startsWith("http") || (file != null && t.status == Status.Done))
-                MenuRow(Res.drawable.ic_share, stringResource(Res.string.menu_tile_share), onShare)
-            MenuRow(Res.drawable.ic_visibility_off, stringResource(Res.string.menu_hide)) {
-                DownloadStore.setHidden(setOf(t.id), true)
-                onClose()
-            }
+            if (shown.url.startsWith("http") || (file != null && shown.status == Status.Done))
+                MenuItem(stringResource(Res.string.menu_tile_share), { onShare(shown) }, Res.drawable.ic_share)
+            if (shown.status == Status.Done) MenuItem(stringResource(Res.string.menu_info), { onInfo(shown) }, Res.drawable.ic_info)
+            MenuDivider()
+            MenuItem(stringResource(Res.string.menu_hide), { DownloadStore.setHidden(setOf(shown.id), true); onClose() }, Res.drawable.ic_visibility_off)
         }
-    }
-}
-
-@Composable
-private fun MenuRow(icon: DrawableResource, label: String, onClick: () -> Unit) {
-    val c = Hamstr.colors
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .clip(RoundedCornerShape(Radii.row))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(34.dp).clip(RoundedCornerShape(12.dp)).background(c.surface), contentAlignment = Alignment.Center) {
-            Icon(icon, tint = c.accent, size = 18.dp)
-        }
-        Spacer(Modifier.width(12.dp))
-        Txt(label, style = Hamstr.type.body)
     }
 }

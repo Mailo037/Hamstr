@@ -117,6 +117,7 @@ object Queue : DownloadControl {
         }
         _ytDlpUpdateError.value = null
         runCatching { output(listOf(Tools.ytDlp.path, "-U", "--update-to", "stable")) }
+            .onSuccess { ToolUpdates.ytDlpUpdated() }
             .onFailure { Log.w(TAG, "yt-dlp update failed", it); _ytDlpUpdateError.value = it.message ?: it.toString() }
         runCatching { _engine.value = EngineState.Ready(output(listOf(Tools.ytDlp.path, "--version")).trim()) }
         _updatingYtDlp.value = false

@@ -1,5 +1,14 @@
 package app.hamstr.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.lerp
+import app.hamstr.ui.components.animateSelection
+import kotlinx.coroutines.delay
 import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -144,6 +153,30 @@ fun PlaylistSheet(
                 }
             }
             IconButton(Res.drawable.ic_edit, stringResource(R.string.pl_rename), onRename)
+            // The first tap on the bin asks, the second deletes the list; it turns red meanwhile.
+            val asking = animateSelection(confirm)
+            IconButton(
+                Res.drawable.ic_delete, stringResource(if (confirm) R.string.pl_delete_confirm else R.string.pl_delete),
+                {
+                    if (!confirm) confirm = true else {
+                        Playlists.delete(id)
+                        onHint(resources.getString(R.string.pl_deleted))
+                        onClose()
+                    }
+                },
+                tint = lerp(c.muted, c.red, asking),
+                background = lerp(c.surface, c.red.copy(alpha = 0.16f).compositeOver(c.surface), asking),
+            )
+        }
+        // While it asks: what a second tap does, and for a downloaded list the way to take its files along.
+        LaunchedEffect(confirm) { if (confirm) { delay(4000); confirm = false } }
+        AnimatedVisibility(confirm, enter = expandVertically(Specs.blend()) + fadeIn(Specs.appear()), exit = shrinkVertically(Specs.blend()) + fadeOut(Specs.disappear())) {
+            Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Txt(stringResource(R.string.pl_delete_confirm), style = Hamstr.type.small, color = c.red, modifier = Modifier.weight(1f))
+                if (p.downloaded && items.isNotEmpty()) {
+                    HButton(stringResource(R.string.pl_delete_files), { onDeleteFiles(items); onClose() }, kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete)
+                }
+            }
         }
         Spacer(Modifier.height(12.dp))
         if (items.isEmpty()) {
@@ -232,23 +265,6 @@ fun PlaylistSheet(
                         }
                     }
                 }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HButton(
-                stringResource(if (confirm) R.string.pl_delete_confirm else R.string.pl_delete),
-                {
-                    if (!confirm) confirm = true else {
-                        Playlists.delete(id)
-                        onHint(resources.getString(R.string.pl_deleted))
-                        onClose()
-                    }
-                },
-                Modifier.weight(1f), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete,
-            )
-            if (p.downloaded && items.isNotEmpty()) {
-                HButton(stringResource(R.string.pl_delete_files), { onDeleteFiles(items); onClose() }, Modifier.weight(1f), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete)
             }
         }
     }
@@ -402,13 +418,16 @@ fun SongRow(
         Column(Modifier.weight(1f)) {
             Txt(t.title, style = Hamstr.type.bodyMedium, color = if (now) c.accent else if (gone) c.ghost else c.ink, maxLines = 1)
             Spacer(Modifier.height(2.dp))
-            Txt(
-                listOfNotNull(
-                    if (gone) stringResource(R.string.lib_gone) else t.uploader ?: t.source,
-                    formatDuration(t.durationSec).takeIf { t.durationSec > 0 },
-                ).joinToString(" · "),
-                style = Hamstr.type.small, color = c.ghost, maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (!gone) ChangedMark(t.id)
+                Txt(
+                    listOfNotNull(
+                        if (gone) stringResource(R.string.lib_gone) else t.uploader ?: t.source,
+                        formatDuration(t.durationSec).takeIf { t.durationSec > 0 },
+                    ).joinToString(" · "),
+                    style = Hamstr.type.small, color = c.ghost, maxLines = 1,
+                )
+            }
         }
         trailing()
     }

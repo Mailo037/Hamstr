@@ -205,6 +205,12 @@
     <string name="info_tag_genre">Genre</string>
     <string name="info_tracks">Tracks</string>
     <string name="info_open_link">Link openen</string>
+    <string name="file_changed">Gewijzigd sinds het opslaan</string>
+    <string name="info_sha256">SHA-256</string>
+    <string name="info_check">Sinds het opslaan</string>
+    <string name="info_check_running">Controleren…</string>
+    <string name="info_check_same">Ongewijzigd</string>
+    <string name="info_check_changed">Buiten Hamstr gewijzigd</string>
     <string name="rename_title">Bestand hernoemen</string>
     <string name="rename_hint">Bestandsnaam</string>
     <string name="rename_done">Hernoemd</string>
@@ -288,6 +294,7 @@
     <!-- Library -->
     <string name="lib_all">Alles</string>
     <string name="lib_sort">Sorteren</string>
+    <string name="lib_filter">Filteren</string>
     <string name="lib_sort_newest">Nieuwste</string>
     <string name="lib_sort_oldest">Oudste</string>
     <string name="lib_sort_name">Naam</string>
@@ -683,7 +690,6 @@
     <string name="device_send_files">Bestanden sturen</string>
     <string name="device_forget">Dit apparaat vergeten</string>
     <string name="nearby_done">Klaar</string>
-    <string name="share_target_send">Sturen met Hamstr</string>
     <string name="set_devices_summary_off">Uit</string>
     <string name="set_devices_summary">Zichtbaar als %1$s</string>
     <string name="nearby_channel">Apparaten in de buurt</string>
@@ -741,9 +747,12 @@
     <string name="set_autostart_hint">Hamstr start in het systeemvak als je inlogt</string>
     <string name="desktop_open">Openen</string>
     <string name="desktop_show_in_folder">Tonen in map</string>
+    <string name="desktop_maximize">Maximaliseren</string>
+    <string name="desktop_restore">Vorig formaat</string>
+    <string name="desktop_close">Sluiten</string>
+    <string name="desktop_volume">Volume</string>
     <string name="desktop_open_folder">Klik om de map te openen</string>
     <string name="desktop_about_local">Alles draait op deze computer: yt-dlp, Cheek en FFmpeg komen met de app, geen server.</string>
-    <string name="desktop_ytdlp_update">yt-dlp bijwerken</string>
     <string name="desktop_cheek_missing">Cheek zit niet in deze build; yt-dlp downloadt zelfstandig.</string>
     <string name="desktop_update_restarts">Hamstr sluit even af en opent weer als de nieuwe versie.</string>
     <string name="desktop_update_password">Bevestig met je wachtwoord; Hamstr opent daarna weer als de nieuwe versie.</string>
@@ -769,7 +778,6 @@
     <string name="desktop_folder_change">Map kiezen</string>
     <string name="desktop_folder_reset">Terug naar die van Hamstr</string>
     <string name="desktop_folder_hint">Nieuwe downloads gaan hierheen; wat al in je voorraad zit, blijft waar het is.</string>
-    <string name="desktop_cheek_update">Cheek bijwerken</string>
     <string name="set_transfer_jobs">Lange downloads zonder daglimiet</string>
     <string name="set_transfer_jobs_hint">Wat je in Hamstr start, draait als een van Androids downloadtaken, die Android niet na zes uur per dag stopt.</string>
     <string name="eq_title">Equalizer</string>

@@ -1,6 +1,7 @@
 package app.hamstr.desktop
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,7 +34,11 @@ import app.hamstr.player.Kind
 import app.hamstr.player.kindOf
 import app.hamstr.res.*
 import app.hamstr.ui.TaskRow
-import app.hamstr.ui.components.Chips
+import app.hamstr.ui.components.DropMenu
+import app.hamstr.ui.components.IconButton
+import app.hamstr.ui.components.MenuDivider
+import app.hamstr.ui.components.MenuItem
+import app.hamstr.ui.components.MenuLabel
 import app.hamstr.ui.components.SearchField
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.edgeFade
@@ -43,9 +48,11 @@ import org.jetbrains.compose.resources.stringResource
 private enum class Shelf { All, Video, Audio, Other }
 
 /**
- * Everything that finished, to find and play: search over titles, channels and sites, a shelf
- * for videos, songs or the rest, and the sort the phone's library uses. A tap plays it in
- * Hamstr's own player when it can; the menu has the rest.
+ * Everything that finished, to find and play: search over titles, channels and sites, and
+ * behind the filter button beside it a shelf for videos, songs or the rest and the sort the
+ * phone's library uses, so the list starts right under the search. The button lights up while
+ * either is off its default. A click plays a file in Hamstr's own player when it can; a
+ * right-click has the rest.
  */
 @Composable
 internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask) -> Unit, onMenu: (DownloadTask) -> Unit) {
@@ -55,6 +62,7 @@ internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask) ->
     val resume by Positions.all.collectAsState()
     var query by remember { mutableStateOf("") }
     var shelf by remember { mutableStateOf(Shelf.All) }
+    var filtering by remember { mutableStateOf(false) }
     val done = remember(tasks) { collapseVersions(tasks.filter { it.status == Status.Done && !it.hidden }) }
     val shown = remember(done, query, shelf, s.librarySort) {
         val q = query.trim().lowercase()
@@ -91,13 +99,25 @@ internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask) ->
 
     Column(Modifier.fillMaxSize().padding(top = 8.dp)) {
         Txt(stringResource(Res.string.tab_library), style = Hamstr.type.title, modifier = Modifier.padding(start = 6.dp, bottom = 12.dp))
-        SearchField(query, { query = it }, stringResource(Res.string.lib_search_hint), Modifier.fillMaxWidth())
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Chips(Shelf.entries, shelf, { labels.getValue(it) }) { shelf = it }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SearchField(query, { query = it }, stringResource(Res.string.lib_search_hint), Modifier.weight(1f))
+            val changed = shelf != Shelf.All || s.librarySort != LibrarySort.Newest
+            Box {
+                IconButton(
+                    Res.drawable.ic_sort, stringResource(Res.string.lib_filter), { filtering = !filtering },
+                    tint = if (filtering || changed) c.accent else c.ink, background = c.overlay, size = 44.dp,
+                )
+                DropMenu(filtering, { filtering = false }, end = true) {
+                    MenuLabel(stringResource(Res.string.lib_filter))
+                    Shelf.entries.forEach { o -> MenuItem(labels.getValue(o), { shelf = o; filtering = false }, checked = o == shelf) }
+                    MenuDivider()
+                    MenuLabel(stringResource(Res.string.lib_sort))
+                    LibrarySort.entries.forEach { o ->
+                        MenuItem(sorts.getValue(o), { Prefs.edit { it.copy(librarySort = o) }; filtering = false }, checked = o == s.librarySort)
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Chips(LibrarySort.entries, s.librarySort, { sorts.getValue(it) }) { v -> Prefs.edit { it.copy(librarySort = v) } }
         Spacer(Modifier.height(10.dp))
         if (shown.isEmpty()) {
             Txt(

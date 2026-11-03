@@ -870,6 +870,7 @@ private fun EnginePage() {
             )
             val message = updateMsg ?: when (val check = versionCheck) {
                 is EngineVersionCheck.Available -> stringResource(R.string.set_version_available, check.version)
+                EngineVersionCheck.Current -> stringResource(R.string.set_up_to_date)
                 is EngineVersionCheck.Failed -> check.message
                 else -> null
             }

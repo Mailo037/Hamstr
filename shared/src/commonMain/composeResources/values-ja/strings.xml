@@ -201,6 +201,12 @@
     <string name="info_tag_genre">ジャンル</string>
     <string name="info_tracks">トラック</string>
     <string name="info_open_link">リンクを開く</string>
+    <string name="file_changed">保存後に変更されています</string>
+    <string name="info_sha256">SHA-256</string>
+    <string name="info_check">保存時から</string>
+    <string name="info_check_running">確認中…</string>
+    <string name="info_check_same">変更なし</string>
+    <string name="info_check_changed">Hamstr の外で変更されました</string>
     <string name="rename_title">ファイル名を変更</string>
     <string name="rename_hint">ファイル名</string>
     <string name="rename_done">名前を変更しました</string>
@@ -282,6 +288,7 @@
     <!-- Library -->
     <string name="lib_all">すべて</string>
     <string name="lib_sort">並べ替え</string>
+    <string name="lib_filter">絞り込み</string>
     <string name="lib_sort_newest">新しい順</string>
     <string name="lib_sort_oldest">古い順</string>
     <string name="lib_sort_name">名前</string>
@@ -673,7 +680,6 @@
     <string name="device_send_files">ファイルを送る</string>
     <string name="device_forget">この端末を削除</string>
     <string name="nearby_done">完了</string>
-    <string name="share_target_send">Hamstrで送る</string>
     <string name="set_devices_summary_off">オフ</string>
     <string name="set_devices_summary">%1$s として表示</string>
     <string name="nearby_channel">近くの端末</string>
@@ -731,9 +737,12 @@
     <string name="set_autostart_hint">サインイン時に Hamstr がトレイで起動します</string>
     <string name="desktop_open">開く</string>
     <string name="desktop_show_in_folder">フォルダで表示</string>
+    <string name="desktop_maximize">最大化</string>
+    <string name="desktop_restore">元のサイズに戻す</string>
+    <string name="desktop_close">閉じる</string>
+    <string name="desktop_volume">音量</string>
     <string name="desktop_open_folder">クリックしてフォルダを開く</string>
     <string name="desktop_about_local">すべてこのコンピューターで動作します。yt-dlp、Cheek、FFmpeg はアプリに同梱され、サーバーは不要です。</string>
-    <string name="desktop_ytdlp_update">yt-dlp を更新</string>
     <string name="desktop_cheek_missing">このビルドに Cheek は含まれていません。yt-dlp が単独でダウンロードします。</string>
     <string name="desktop_update_restarts">Hamstr は一度閉じて、新しいバージョンとして再び開きます。</string>
     <string name="desktop_update_password">パスワードで確認してください。その後、Hamstr は新しいバージョンとして再び開きます。</string>
@@ -758,7 +767,6 @@
     <string name="desktop_folder_change">フォルダを選ぶ</string>
     <string name="desktop_folder_reset">Hamstr のフォルダに戻す</string>
     <string name="desktop_folder_hint">新しいダウンロードはここに入ります。ストック済みのものはそのままです。</string>
-    <string name="desktop_cheek_update">Cheek を更新</string>
     <string name="set_transfer_jobs">1 日の上限なしで長いダウンロード</string>
     <string name="set_transfer_jobs_hint">Hamstr で始めたダウンロードは Android のダウンロードジョブとして動くので、1 日 6 時間を過ぎても止められません。</string>
     <string name="eq_title">イコライザー</string>

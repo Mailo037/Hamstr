@@ -201,6 +201,12 @@
     <string name="info_tag_genre">流派</string>
     <string name="info_tracks">轨道</string>
     <string name="info_open_link">打开链接</string>
+    <string name="file_changed">保存后已被修改</string>
+    <string name="info_sha256">SHA-256</string>
+    <string name="info_check">自保存以来</string>
+    <string name="info_check_running">正在检查…</string>
+    <string name="info_check_same">未更改</string>
+    <string name="info_check_changed">已在 Hamstr 之外被修改</string>
     <string name="rename_title">重命名文件</string>
     <string name="rename_hint">文件名</string>
     <string name="rename_done">已重命名</string>
@@ -282,6 +288,7 @@
     <!-- Library -->
     <string name="lib_all">全部</string>
     <string name="lib_sort">排序</string>
+    <string name="lib_filter">筛选</string>
     <string name="lib_sort_newest">最新</string>
     <string name="lib_sort_oldest">最早</string>
     <string name="lib_sort_name">名称</string>
@@ -673,7 +680,6 @@
     <string name="device_send_files">发送文件</string>
     <string name="device_forget">忘记此设备</string>
     <string name="nearby_done">完成</string>
-    <string name="share_target_send">用 Hamstr 发送</string>
     <string name="set_devices_summary_off">已关闭</string>
     <string name="set_devices_summary">显示为 %1$s</string>
     <string name="nearby_channel">附近的设备</string>
@@ -731,9 +737,12 @@
     <string name="set_autostart_hint">登录时，Hamstr 会在托盘中启动</string>
     <string name="desktop_open">打开</string>
     <string name="desktop_show_in_folder">在文件夹中显示</string>
+    <string name="desktop_maximize">最大化</string>
+    <string name="desktop_restore">还原</string>
+    <string name="desktop_close">关闭</string>
+    <string name="desktop_volume">音量</string>
     <string name="desktop_open_folder">点击打开文件夹</string>
     <string name="desktop_about_local">一切都在这台电脑上运行：yt-dlp、Cheek 和 FFmpeg 随应用一同提供，没有服务器。</string>
-    <string name="desktop_ytdlp_update">更新 yt-dlp</string>
     <string name="desktop_cheek_missing">此版本不包含 Cheek；yt-dlp 会自行下载。</string>
     <string name="desktop_update_restarts">Hamstr 会暂时关闭，然后以新版本重新打开。</string>
     <string name="desktop_update_password">请输入密码确认；之后 Hamstr 会以新版本重新打开。</string>
@@ -758,7 +767,6 @@
     <string name="desktop_folder_change">选择文件夹</string>
     <string name="desktop_folder_reset">恢复为 Hamstr 的文件夹</string>
     <string name="desktop_folder_hint">新下载会放到这里；已囤的内容保持原位。</string>
-    <string name="desktop_cheek_update">更新 Cheek</string>
     <string name="set_transfer_jobs">长时间下载，不受每日限制</string>
     <string name="set_transfer_jobs_hint">你在 Hamstr 中开始的下载会作为 Android 的下载任务运行，Android 不会在每天六小时后停止它们。</string>
     <string name="eq_title">均衡器</string>

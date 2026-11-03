@@ -6,6 +6,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -51,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -76,6 +80,7 @@ import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.IconButton
+import app.hamstr.ui.components.ProgressLine
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.pressable
 import app.hamstr.ui.components.rememberVelocityStretch
@@ -354,10 +359,11 @@ internal enum class LyricsLoad { Loading, Searching, Ready, Missing }
 /**
  * A song's lyrics where its cover was. Saved ones show at once; otherwise LRCLIB is asked
  * and what it finds is kept. Timed lyrics follow the song (the line that is sung lights up
- * and stays in view) and a tap on a line jumps there.
+ * and stays in view) and a tap on a line jumps there. Its corner buttons edit them and open
+ * them [full], over the whole screen ([LyricsFullscreen]), where it draws no panel of its own.
  */
 @Composable
-internal fun LyricsPanel(t: DownloadTask, controller: Player, ui: PlayerUi, onEdit: () -> Unit) {
+internal fun LyricsPanel(t: DownloadTask, controller: Player, ui: PlayerUi, onEdit: () -> Unit, full: Boolean = false, onFullscreen: () -> Unit = {}) {
     val c = Hamstr.colors
     val saved by Lyrics.saved.collectAsState()
     var load by remember(t.id) { mutableStateOf(LyricsLoad.Loading) }
@@ -369,9 +375,9 @@ internal fun LyricsPanel(t: DownloadTask, controller: Player, ui: PlayerUi, onEd
     }
     val text = saved[t.id]
     val lines = remember(text) { text?.let(Lyrics::parse).orEmpty() }
-    Box(Modifier.fillMaxSize().background(c.overlay)) {
+    Box(Modifier.fillMaxSize().background(if (full) Color.Transparent else c.overlay)) {
         when {
-            lines.isNotEmpty() -> LyricLines(lines, controller, ui)
+            lines.isNotEmpty() -> LyricLines(lines, controller, ui, big = full)
             load == LyricsLoad.Missing -> Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -392,15 +398,53 @@ internal fun LyricsPanel(t: DownloadTask, controller: Player, ui: PlayerUi, onEd
                 style = Hamstr.type.mono, color = c.ghost, modifier = Modifier.align(Alignment.Center),
             )
         }
-        if (lines.isNotEmpty()) IconButton(
-            Res.drawable.ic_edit, stringResource(R.string.lyrics_edit), onEdit,
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp), tint = c.muted, background = c.overlay,
-        )
+        if (lines.isNotEmpty() && !full) Row(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+            IconButton(Res.drawable.ic_edit, stringResource(R.string.lyrics_edit), onEdit, tint = c.muted, background = c.overlay)
+            IconButton(Res.drawable.ic_fullscreen, stringResource(R.string.player_fullscreen), onFullscreen, tint = c.muted, background = c.overlay)
+        }
+    }
+}
+
+/**
+ * The lyrics over the whole screen, on the colour of the song's cover: bigger lines, the song
+ * and the way out above them, the timeline and play under them. Back leaves too.
+ */
+@Composable
+internal fun LyricsFullscreen(t: DownloadTask, controller: Player, ui: PlayerUi, tint: Color, onEdit: () -> Unit, onClose: () -> Unit) {
+    val c = Hamstr.colors
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(c.canvas)
+            .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.9f), 0.55f to tint.copy(alpha = 0.4f), 1f to Color.Transparent))
+            .pointerInput(Unit) { detectTapGestures { } } // keep taps off the player below
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
+                (t.uploader?.let(Lyrics::cleanArtist) ?: t.source)?.let { Txt(it, style = Hamstr.type.small, color = c.muted, maxLines = 1) }
+            }
+            IconButton(Res.drawable.ic_edit, stringResource(R.string.lyrics_edit), onEdit, tint = c.muted, background = Color.Transparent)
+            IconButton(Res.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onClose, tint = c.ink, background = Color.Transparent)
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) { LyricsPanel(t, controller, ui, onEdit, full = true) }
+        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 12.dp)) {
+            ProgressLine(if (ui.duration > 0) ui.position / ui.duration.toFloat() else 0f)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
+                Spacer(Modifier.width(16.dp))
+                PlayPause(ui.isPlaying, size = 60.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
+                Spacer(Modifier.width(16.dp))
+                IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 48.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
+            }
+        }
     }
 }
 
 @Composable
-internal fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: PlayerUi) {
+internal fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: PlayerUi, big: Boolean = false) {
     val c = Hamstr.colors
     val timed = lines.first().at >= 0
     val list = rememberLazyListState()
@@ -412,14 +456,19 @@ internal fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: Player
     LazyColumn(
         Modifier.fillMaxSize().edgeFade(list, Orientation.Vertical, length = 22.dp),
         state = list,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = if (big) PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 160.dp) else PaddingValues(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(if (big) 12.dp else 8.dp),
     ) {
         itemsIndexed(lines) { i, l ->
             val p = animateSelection(i == now)
             Txt(
                 l.text.ifEmpty { "♪" },
-                style = if (timed) Hamstr.type.section.copy(fontSize = 20.sp, lineHeight = 26.sp) else Hamstr.type.body.copy(fontSize = 16.sp, lineHeight = 23.sp),
+                style = when {
+                    timed && big -> Hamstr.type.title.copy(fontSize = 28.sp, lineHeight = 36.sp)
+                    timed -> Hamstr.type.section.copy(fontSize = 20.sp, lineHeight = 26.sp)
+                    big -> Hamstr.type.body.copy(fontSize = 19.sp, lineHeight = 28.sp)
+                    else -> Hamstr.type.body.copy(fontSize = 16.sp, lineHeight = 23.sp)
+                },
                 color = if (timed) lerp(c.ghost, c.ink, p) else c.ink,
                 modifier = Modifier
                     .fillMaxWidth()

@@ -5,8 +5,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,10 +33,12 @@ import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.Segmented
 import app.hamstr.ui.components.Sheet
 import app.hamstr.ui.components.SheetHeader
+import app.hamstr.ui.components.SquareButton
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -72,6 +76,7 @@ fun SharingSheet(
     onShareFiles: (() -> Unit)? = null,
     onCopyFiles: (() -> Unit)? = null,
     fileActionLabel: StringResource = Res.string.share_other_apps,
+    fileActionIcon: DrawableResource = Res.drawable.ic_more_vert,
 ) {
     val c = Hamstr.colors
     val kinds = buildList {
@@ -119,10 +124,10 @@ fun SharingSheet(
                     Spacer(Modifier.height(10.dp))
                     NearbyTargets(content.url, content.title, targets, scope)
                     Spacer(Modifier.height(16.dp))
-                    HButton(stringResource(Res.string.menu_copy_link), { onCopyLink(content.url) }, Modifier.fillMaxWidth(), icon = Res.drawable.ic_link)
-                    if (onShareLink != null) {
-                        Spacer(Modifier.height(8.dp))
-                        HButton(stringResource(Res.string.share_other_apps), { onShareLink(content.url) }, Modifier.fillMaxWidth(), icon = Res.drawable.ic_share)
+                    // Other apps sit in the small square before Copy, the one most taps want.
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (onShareLink != null) SquareButton(Res.drawable.ic_more_vert, stringResource(Res.string.share_other_apps), { onShareLink(content.url) })
+                        HButton(stringResource(Res.string.menu_copy_link), { onCopyLink(content.url) }, Modifier.weight(1f), icon = Res.drawable.ic_link)
                     }
                 } else if (kind == ShareKind.File && content.files.isNotEmpty()) {
                     Txt(stringResource(Res.string.nearby_send_title), style = Hamstr.type.bodyMedium)
@@ -132,10 +137,13 @@ fun SharingSheet(
                     NearbyFileTargets(content.files.mapNotNull { it.filePath?.let(::File) }, targets, scope)
                     Spacer(Modifier.height(16.dp))
                     if (onCopyFiles != null) {
-                        HButton(stringResource(if (content.files.size > 1) Res.string.share_copy_files else Res.string.share_copy_file), onCopyFiles, Modifier.fillMaxWidth(), icon = Res.drawable.ic_content_paste)
-                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (onShareFiles != null) SquareButton(fileActionIcon, stringResource(fileActionLabel), onShareFiles)
+                            HButton(stringResource(if (content.files.size > 1) Res.string.share_copy_files else Res.string.share_copy_file), onCopyFiles, Modifier.weight(1f), icon = Res.drawable.ic_content_paste)
+                        }
+                    } else if (onShareFiles != null) {
+                        HButton(stringResource(fileActionLabel), onShareFiles, Modifier.fillMaxWidth(), icon = Res.drawable.ic_share)
                     }
-                    if (onShareFiles != null) HButton(stringResource(fileActionLabel), onShareFiles, Modifier.fillMaxWidth(), icon = Res.drawable.ic_share)
                 } else {
                     Txt(stringResource(Res.string.share_unavailable), style = Hamstr.type.small, color = c.muted)
                 }

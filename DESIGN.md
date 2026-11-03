@@ -170,11 +170,14 @@ padding between them, where the padding is small (up to about 8 dp).
 
 ### Sheets
 
-Everything modal is a bottom sheet inside `Overlay`; there are no centred dialogs.
+Everything modal is a bottom sheet inside `Overlay`; on the phone there are no centred
+dialogs (the desktop turns the same sheets into modals, see [Desktop](#desktop)).
 
 - `Overlay` dims the screen with black at 55 %, springs the sheet in, closes on back,
   on a tap on the backdrop, and on a drag down past 28 % of its height or a fling. Pulled
   up, the sheet stretches against heavy resistance. The backdrop lightens with the drag.
+  Where the entry spring overshoots, the sheet stretches up from the bottom edge instead of
+  lifting off it, so it never floats.
 - Every sheet is a `Sheet { }` (`ui/components/Sheet.kt`). It brings the `overlay`
   background, `Radii.sheet` corners, the 36 × 4 dp handle, the padding, room for the
   system bars and the keyboard, swallows taps so they don't reach the backdrop, and
@@ -186,7 +189,8 @@ Everything modal is a bottom sheet inside `Overlay`; there are no centred dialog
   once the input is good, a clear button, an optional fixed suffix (`.mp4`).
 - Inside a sheet, rows and cards are `surface`; groups of rows are `surface` panels.
 - Buttons go at the bottom: Cancel (neutral, weight 1) before the primary (weight 2);
-  a lone primary fills the width.
+  a lone primary fills the width. A lesser action (share, other apps) is a 46 dp square
+  `SquareButton` in front of them, never a full-width button of its own.
 
 ### Groups and rows
 
@@ -380,7 +384,17 @@ above holds; these differ, because a mouse is precise and a window is wide:
 - The side bar is always there: a 216 dp `overlay` panel (16 radius, 4 padding, 12 pill) with
   40 dp tabs. Settings opens its category pages as 36 dp rows right under the tab; the open one
   lifts to `surface`. The page itself fills the rest, at most 640 dp wide.
-- Sheets stay sheets, at most 600 dp wide and centred; the stash is at most 880 dp wide.
+- Sheets become modals: `Overlay` dims the whole window (the title bar's strip too, so the bar
+  never keeps a colour of its own) and grows the content in, centred, from 94 %; `Sheet` drops the
+  handle and rounds all four corners. At most 600 dp wide; the stash is at most 880 dp wide.
+- What a long press opens on the phone is a right-click menu here (`DropMenu`, `MenuItem` in
+  `ui/components/Menu.kt`): `raised`, 14 dp corners, 4 dp padding, 36 dp items with 10 dp corners
+  that lift to `hover` under the pointer, at the pointer and kept inside the window. A button's
+  menu (the library's filter) hangs under the button.
+- Everything without words gets a tooltip: `IconButton` and `SquareButton` bring one, anything
+  else uses `hoverTip` and `Tip` (`ui/components/Tooltip.kt`). Hamstr draws it, the system
+  doesn't: `small` text on a `raised` pill with 8 dp corners, half a second after the pointer
+  comes to rest, under the thing or above it at the window's edge; a press hides it.
 - Ctrl+V (⌘V) anywhere stashes the copied link, the desktop's share button; Esc closes sheets.
 - Touch targets may be smaller than 48 dp where only a pointer reaches them (window buttons,
   side bar rows); shared components keep their sizes.

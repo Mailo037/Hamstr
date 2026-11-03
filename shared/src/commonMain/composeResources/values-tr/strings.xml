@@ -205,6 +205,12 @@
     <string name="info_tag_genre">Tür</string>
     <string name="info_tracks">Parçalar</string>
     <string name="info_open_link">Bağlantıyı aç</string>
+    <string name="file_changed">Kaydedildikten sonra değişti</string>
+    <string name="info_sha256">SHA-256</string>
+    <string name="info_check">Kaydedildiğinden beri</string>
+    <string name="info_check_running">Denetleniyor…</string>
+    <string name="info_check_same">Değişmedi</string>
+    <string name="info_check_changed">Hamstr dışında değiştirildi</string>
     <string name="rename_title">Dosyayı yeniden adlandır</string>
     <string name="rename_hint">Dosya adı</string>
     <string name="rename_done">Yeniden adlandırıldı</string>
@@ -288,6 +294,7 @@
     <!-- Library -->
     <string name="lib_all">Tümü</string>
     <string name="lib_sort">Sırala</string>
+    <string name="lib_filter">Filtrele</string>
     <string name="lib_sort_newest">En yeni</string>
     <string name="lib_sort_oldest">En eski</string>
     <string name="lib_sort_name">Ad</string>
@@ -683,7 +690,6 @@
     <string name="device_send_files">Dosya gönder</string>
     <string name="device_forget">Bu cihazı unut</string>
     <string name="nearby_done">Tamam</string>
-    <string name="share_target_send">Hamstr ile gönder</string>
     <string name="set_devices_summary_off">Kapalı</string>
     <string name="set_devices_summary">%1$s olarak görünür</string>
     <string name="nearby_channel">Yakındaki cihazlar</string>
@@ -741,9 +747,12 @@
     <string name="set_autostart_hint">Oturum açtığında Hamstr tepside başlar</string>
     <string name="desktop_open">Aç</string>
     <string name="desktop_show_in_folder">Klasörde göster</string>
+    <string name="desktop_maximize">Ekranı kapla</string>
+    <string name="desktop_restore">Önceki boyut</string>
+    <string name="desktop_close">Kapat</string>
+    <string name="desktop_volume">Ses düzeyi</string>
     <string name="desktop_open_folder">Klasörü açmak için tıkla</string>
     <string name="desktop_about_local">Her şey bu bilgisayarda çalışır: yt-dlp, Cheek ve FFmpeg uygulamayla birlikte gelir, sunucu yok.</string>
-    <string name="desktop_ytdlp_update">yt-dlp’yi güncelle</string>
     <string name="desktop_cheek_missing">Cheek bu derlemede yok; yt-dlp kendi başına indirir.</string>
     <string name="desktop_update_restarts">Hamstr bir an kapanır ve yeni sürüm olarak tekrar açılır.</string>
     <string name="desktop_update_password">Parolanla onayla; Hamstr sonra yeni sürüm olarak tekrar açılır.</string>
@@ -769,7 +778,6 @@
     <string name="desktop_folder_change">Klasör seç</string>
     <string name="desktop_folder_reset">Hamstr’ınkine dön</string>
     <string name="desktop_folder_hint">Yeni indirmeler buraya gider; Zula’ndakiler olduğu yerde kalır.</string>
-    <string name="desktop_cheek_update">Cheek’i güncelle</string>
     <string name="set_transfer_jobs">Günlük sınır olmadan uzun indirmeler</string>
     <string name="set_transfer_jobs_hint">Hamstr’da başlattıkların Android’in indirme işlerinden biri olarak çalışır; Android bunları günde altı saatten sonra durdurmaz.</string>
     <string name="eq_title">Ekolayzır</string>

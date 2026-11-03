@@ -73,6 +73,8 @@ import app.hamstr.data.Downloads
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.FileChecks
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Positions
 import app.hamstr.data.collapseVersions
@@ -558,6 +560,18 @@ private fun rememberStageText(t: DownloadTask): String? {
     return stageText(t, now)
 }
 
+/**
+ * A small pencil when the file is no longer what was saved (FileChecks compares its SHA-256);
+ * nothing otherwise. The file info says more.
+ */
+@Composable
+fun ChangedMark(id: String, modifier: Modifier = Modifier) {
+    val changed by FileChecks.changed.collectAsState()
+    if (id !in changed) return
+    val label = stringResource(Res.string.file_changed)
+    Icon(Res.drawable.ic_edit, tint = Hamstr.colors.muted, size = 14.dp, modifier = modifier.semantics { contentDescription = label })
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskRow(
@@ -601,6 +615,7 @@ fun TaskRow(
             Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Badge(versionsBadge(versions))
+                if (!gone && t.status == Status.Done) ChangedMark(t.id)
                 Txt(
                     if (gone) stringResource(Res.string.file_gone) else stage ?: statusLine(t, versions),
                     style = Hamstr.type.small,

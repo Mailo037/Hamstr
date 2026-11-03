@@ -103,7 +103,9 @@ import app.hamstr.ui.RequestSheet
 import app.hamstr.ui.QualitySheet
 import app.hamstr.ui.RenameSheet
 import app.hamstr.ui.InfoSheet
+import android.text.format.DateUtils
 import app.hamstr.ui.InfoAction
+import app.hamstr.ui.readMediaInfo
 import app.hamstr.ui.canHaveVersions
 import app.hamstr.engine.AudioOut
 import app.hamstr.ui.StashScreen
@@ -688,14 +690,16 @@ private fun App(inPip: Boolean) {
                 InfoSheet(
                     t,
                     onCopy = { copy(context, it); hint(resources.getString(R.string.info_copied)) },
+                    formatDate = { DateUtils.formatDateTime(context, it, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_YEAR) },
+                    readFile = ::readMediaInfo,
                     // The same changes the file menu offers, right where the value is shown.
                     actions = buildMap {
-                        if (present) put(R.string.info_name, InfoAction(Res.drawable.ic_edit, R.string.menu_rename) { infoFor = null; renameFor = t })
-                        if (present && canHaveVersions(t)) put(R.string.info_quality, InfoAction(Res.drawable.ic_movie, R.string.menu_quality) { infoFor = null; qualityFor = t })
-                        if (t.url.startsWith("http")) put(R.string.info_link, InfoAction(Res.drawable.ic_open_in_new, R.string.info_open_link) {
+                        if (present) put(Res.string.info_name, InfoAction(Res.drawable.ic_edit, Res.string.menu_rename) { infoFor = null; renameFor = t })
+                        if (present && canHaveVersions(t)) put(Res.string.info_quality, InfoAction(Res.drawable.ic_movie, Res.string.menu_quality) { infoFor = null; qualityFor = t })
+                        if (t.url.startsWith("http")) put(Res.string.info_link, InfoAction(Res.drawable.ic_open_in_new, Res.string.info_open_link) {
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(t.url))) }
                         })
-                        if (present) put(R.string.info_file, InfoAction(Res.drawable.ic_open_in_new, R.string.menu_open_with) { Playback.openWith(context, t) })
+                        if (present) put(Res.string.info_file, InfoAction(Res.drawable.ic_open_in_new, Res.string.menu_open_with) { Playback.openWith(context, t) })
                     },
                 )
             }

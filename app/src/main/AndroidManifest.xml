@@ -154,19 +154,6 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
-        <!-- A second entry in the share sheet: the link goes to another Hamstr instead of the stash. -->
-        <activity-alias
-            android:name=".SendShare"
-            android:exported="true"
-            android:label="@string/share_target_send"
-            android:targetActivity=".ShareActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-        </activity-alias>
-
         <activity-alias
             android:name=".LauncherLight"
             android:enabled="false"

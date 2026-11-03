@@ -33,8 +33,9 @@ import kotlinx.coroutines.delay
  * app the link came from. With "Instant stash" on it queues and closes at once. After the
  * very first stash it asks, once, whether Hamstr may send notifications.
  *
- * "Send with Hamstr" (the SendShare alias) and a device picked in the share sheet itself send
- * the link to another Hamstr instead: the list of devices, or straight to that one.
+ * Hamstr is one entry in Android's share sheet, so a tap stashes; sending to another Hamstr is
+ * the sheet's share button. A remembered device picked in Android's share sheet itself gets the
+ * link straight away.
  */
 class ShareActivity : ComponentActivity() {
     override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
@@ -54,7 +55,7 @@ class ShareActivity : ComponentActivity() {
         }
         val shortcut = intent.getStringExtra(ShortcutManagerCompat.EXTRA_SHORTCUT_ID)
         val device = PhoneNearby.deviceOf(shortcut)
-        val sendOnly = shortcut != null || intent.component?.className == "$packageName.SendShare"
+        val sendOnly = shortcut != null
         if (!sendOnly) askStorage(this, storagePermission::launch)
         if (!sendOnly && Prefs.settings.value.quickStash && !app.hamstr.engine.MediaLinks.needsEpisodeSelection(url)) {
             DownloadService.stash(this, url, null, Prefs.settings.value.defaultChoice())

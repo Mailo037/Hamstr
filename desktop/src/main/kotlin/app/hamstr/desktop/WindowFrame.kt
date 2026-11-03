@@ -44,11 +44,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import app.hamstr.res.*
 import app.hamstr.ui.components.MARK
+import app.hamstr.ui.components.Tip
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.animateSelection
 import app.hamstr.Log
 import app.hamstr.ui.theme.Hamstr
+import org.jetbrains.compose.resources.stringResource
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.Pointer
@@ -147,7 +150,7 @@ class WindowFrame(val window: ComposeWindow) {
 }
 
 /** How big the title bar and its buttons are: small rounded keys in the bar, not full-height slabs. */
-private val BAR = 34.dp
+internal val TITLE_BAR = 34.dp
 private val BUTTON = DpSize(30.dp, 24.dp)
 private val GLYPH = 8.dp
 
@@ -155,7 +158,7 @@ private val GLYPH = 8.dp
 @Composable
 fun TitleBar(frame: WindowFrame, onClose: () -> Unit) {
     val c = Hamstr.colors
-    Row(Modifier.fillMaxWidth().height(BAR), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(TITLE_BAR), verticalAlignment = Alignment.CenterVertically) {
         // Only the bar moves the window: a click on a button that slips a pixel stays a click.
         Row(
             Modifier
@@ -187,11 +190,11 @@ fun TitleBar(frame: WindowFrame, onClose: () -> Unit) {
             Txt("Hamstr", style = Hamstr.type.small, color = c.muted)
         }
         if (!Paths.mac) {
-            WindowButton("Minimize", frame, onClick = frame::minimize) {
+            WindowButton(stringResource(Res.string.player_minimize), frame, onClick = frame::minimize) {
                 val s = GLYPH.toPx() / 2
                 drawLine(it, Offset(size.width / 2 - s, size.height / 2), Offset(size.width / 2 + s, size.height / 2), 1.dp.toPx())
             }
-            WindowButton(if (frame.maximized) "Restore" else "Maximize", frame, onClick = frame::toggleMaximized) {
+            WindowButton(stringResource(if (frame.maximized) Res.string.desktop_restore else Res.string.desktop_maximize), frame, onClick = frame::toggleMaximized) {
                 val s = GLYPH.toPx()
                 val stroke = Stroke(1.dp.toPx())
                 val o = Offset((size.width - s) / 2, (size.height - s) / 2)
@@ -206,7 +209,7 @@ fun TitleBar(frame: WindowFrame, onClose: () -> Unit) {
                     drawRect(it, o, Size(s, s), style = stroke)
                 }
             }
-            WindowButton("Close", frame, danger = true, onClick = onClose) {
+            WindowButton(stringResource(Res.string.desktop_close), frame, danger = true, onClick = onClose) {
                 val s = GLYPH.toPx() / 2
                 val m = Offset(size.width / 2, size.height / 2)
                 drawLine(it, m + Offset(-s, -s), m + Offset(s, s), 1.dp.toPx())
@@ -233,7 +236,7 @@ private fun CellMark(size: Dp) {
     }
 }
 
-/** A window button: hovering lifts it a step, the close button turns red. */
+/** A window button: hovering lifts it a step and names it in a tooltip, the close button turns red. */
 @Composable
 private fun WindowButton(label: String, frame: WindowFrame, danger: Boolean = false, onClick: () -> Unit, glyph: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit) {
     val c = Hamstr.colors
@@ -253,6 +256,7 @@ private fun WindowButton(label: String, frame: WindowFrame, danger: Boolean = fa
             .semantics { contentDescription = label },
     ) {
         Canvas(Modifier.size(BUTTON)) { glyph(if (danger && hovered) Color.White else c.muted) }
+        Tip(hovered, label)
     }
 }
 

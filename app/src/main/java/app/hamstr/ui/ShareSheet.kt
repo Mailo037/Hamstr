@@ -76,6 +76,7 @@ import java.io.File
 import app.hamstr.ui.components.Chips
 import app.hamstr.ui.components.Sheet
 import app.hamstr.ui.components.SheetField
+import app.hamstr.ui.components.SquareButton
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -404,15 +405,12 @@ private fun MediaSheet(
         Divider()
         OpenWhenDoneRow(openDone, hint = false) { openDone = it }
         Spacer(Modifier.height(12.dp))
-        // Or hand the link to another Hamstr nearby, like AirDrop; the main buttons stay at the bottom.
-        if (onSend != null) {
-            HButton(stringResource(R.string.menu_tile_share), { onSend(url, stashInfo?.title) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_share)
-            Spacer(Modifier.height(8.dp))
-        }
         val keepChoice = {
             Prefs.edit { it.copy(mode = if (mode == Mode.Custom) it.mode else mode, height = height, container = container, audioFormat = audio, subtitles = subs, openWhenDone = openDone) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Or hand the link to another Hamstr nearby, like AirDrop: a small square before the rest.
+            if (onSend != null) SquareButton(Res.drawable.ic_share, stringResource(R.string.menu_tile_share), { onSend(url, stashInfo?.title) })
             HButton(stringResource(R.string.share_cancel), onDismiss, Modifier.weight(1f))
             val primary = Modifier.weight(2f)
             val s = state

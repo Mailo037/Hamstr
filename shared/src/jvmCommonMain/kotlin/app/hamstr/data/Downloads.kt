@@ -83,6 +83,11 @@ data class DownloadTask(
     val mediaKey: String? = null,
     // Off the library and the stash, but the file stays; Settings > Hidden brings it back or deletes it.
     val hidden: Boolean = false,
+    // The file's SHA-256 as it was saved, with its size and modified time then (FileChecks), so a
+    // change made to it outside Hamstr shows.
+    val sha256: String? = null,
+    val hashedSize: Long = 0,
+    val hashedModified: Long = 0,
     // Live only, never saved: what happens besides fetching bytes, and the retry state.
     val stage: Stage? = null,
     val attempts: Int = 0,
@@ -152,14 +157,25 @@ object DownloadStore {
     fun get(id: String) = _tasks.value.firstOrNull { it.id == id }
 
     fun add(task: DownloadTask) {
-        _tasks.update { listOf(task) + it }
+        // A new entry made from another (a playlist's next file, a song from a video) has its own file.
+        _tasks.update { listOf(task.unhashed()) + it }
         save()
     }
 
     fun update(id: String, persist: Boolean = true, block: (DownloadTask) -> DownloadTask) {
-        _tasks.update { list -> list.map { if (it.id == id) block(it) else it } }
+        _tasks.update { list ->
+            list.map {
+                if (it.id != id) it
+                else block(it).let { next ->
+                    // Downloaded again: the hash belongs to the file before, FileChecks takes the new one.
+                    if (next.sha256 != null && (next.status != Status.Done || it.status != Status.Done)) next.unhashed() else next
+                }
+            }
+        }
         if (persist) save()
     }
+
+    private fun DownloadTask.unhashed() = if (sha256 == null) this else copy(sha256 = null, hashedSize = 0, hashedModified = 0)
 
     fun remove(id: String) {
         _tasks.update { list -> list.filterNot { it.id == id } }
@@ -266,6 +282,7 @@ object DownloadStore {
         put("group", t.group); put("groupTitle", t.groupTitle)
         put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
         put("uploader", t.uploader); put("mediaKey", t.mediaKey); put("hidden", t.hidden)
+        put("sha256", t.sha256); put("hashedSize", t.hashedSize); put("hashedModified", t.hashedModified)
     }
 
     private fun fromJson(o: JSONObject) = DownloadTask(
@@ -301,6 +318,9 @@ object DownloadStore {
         uploader = o.optStringOrNull("uploader"),
         mediaKey = o.optStringOrNull("mediaKey"),
         hidden = o.optBoolean("hidden"),
+        sha256 = o.optStringOrNull("sha256"),
+        hashedSize = o.optLong("hashedSize"),
+        hashedModified = o.optLong("hashedModified"),
     )
 
     private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }

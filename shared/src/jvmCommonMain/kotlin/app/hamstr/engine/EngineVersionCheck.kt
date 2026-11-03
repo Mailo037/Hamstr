@@ -1,5 +1,6 @@
 package app.hamstr.engine
 
+/** Where a look for a newer yt-dlp or Cheek stands; both apps check before they update. */
 sealed interface EngineVersionCheck {
     data object Idle : EngineVersionCheck
     data object Checking : EngineVersionCheck
@@ -9,7 +10,7 @@ sealed interface EngineVersionCheck {
 }
 
 /** yt-dlp uses date versions, optionally followed by a numeric build component. */
-internal fun newerYtDlpVersion(latest: String, installed: String): Boolean {
+fun newerYtDlpVersion(latest: String, installed: String): Boolean {
     fun parts(version: String): List<Int> {
         val normalized = version.trim().removePrefix("v")
         require(Regex("\\d{4}\\.\\d{1,2}\\.\\d{1,2}(?:\\.\\d+)?").matches(normalized)) {
