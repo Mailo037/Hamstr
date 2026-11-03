@@ -288,7 +288,7 @@ private fun AboutPage(onQuit: () -> Unit, onTour: () -> Unit) {
     }
     Spacer(Modifier.height(16.dp))
     Group {
-        SettingRow(stringResource(Res.string.set_licenses), subtitle = "Hamstr (GPL-3.0), Cheek (Unlicense), yt-dlp (Unlicense), FFmpeg (LGPL/GPL), Inter & JetBrains Mono (OFL), Material Symbols & Icons (Apache-2.0)")
+        SettingRow(stringResource(Res.string.set_licenses), subtitle = "Hamstr (GPL-3.0), Cheek (Unlicense), yt-dlp (Unlicense), FFmpeg (LGPL/GPL), Inter & JetBrains Mono (OFL), Phosphor Icons (MIT)")
     }
     Spacer(Modifier.height(12.dp))
     Txt(stringResource(Res.string.desktop_about_local), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 6.dp))

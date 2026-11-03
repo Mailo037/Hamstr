@@ -938,7 +938,7 @@ private fun AboutPage(onUpdate: () -> Unit, onTour: () -> Unit) {
     }
     Spacer(Modifier.height(16.dp))
     Group {
-        SettingRow(stringResource(R.string.set_licenses), subtitle = "Hamstr (GPL-3.0), Cheek (Unlicense), yt-dlp (Unlicense), youtubedl-android (GPL-3.0), FFmpeg (LGPL/GPL), Inter & JetBrains Mono (OFL), Material Symbols & Icons (Apache-2.0)")
+        SettingRow(stringResource(R.string.set_licenses), subtitle = "Hamstr (GPL-3.0), Cheek (Unlicense), yt-dlp (Unlicense), youtubedl-android (GPL-3.0), FFmpeg (LGPL/GPL), Inter & JetBrains Mono (OFL), Phosphor Icons (MIT)")
     }
 }
 

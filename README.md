@@ -138,6 +138,6 @@ Hamstr is licensed under the [GPL-3.0](LICENSE), like youtubedl-android, which i
 - youtubedl-android ([GPL-3.0](https://github.com/JunkFood02/youtubedl-android/blob/master/LICENSE))
 - FFmpeg (LGPL/GPL)
 - Inter and JetBrains Mono ([OFL-1.1](licenses/))
-- Material Symbols ([Apache-2.0](licenses/Material-Symbols-Apache-2.0.txt))
+- Phosphor Icons ([MIT](licenses/Phosphor-MIT.txt))
 
 Only download what you have the right to keep.

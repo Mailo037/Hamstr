@@ -12,16 +12,16 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.9.4"
+VERSION = "0.9.5"
 FEATURES = [
-    ("EQUALIZER", "Ten bands, presets, or your own curve"),
-    ("CROSSFADE", "Songs fade into each other"),
-    ("STORAGE AND BACKUP", "What takes how much, all in one file"),
+    ("ROUNDER ICONS", "Every icon redrawn, soft like the app"),
+    ("SAME EVERYWHERE", "On the phone, the computer and the shortcuts"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
-# 0.9.4: no emulator; the phone screens come from SettingsPanelsTest (shared/build/settings).
-SHOTS = [("phone_eq.png", "Equalizer"), ("phone_data.png", "Storage")]
+# A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
+# 0.9.5: the icon panel, the app's own vectors drawn as tiles by headless Chrome.
+SHOTS = [("panel_icons.png", "Icons")]
 
 
 
@@ -42,6 +42,11 @@ def release(shots):
         d.text((186, y), title, font=font("jetbrains_mono_600.ttf", 32), fill=INK)
         d.text((186, y + 46), sub, font=font("inter_400.ttf", 34), fill=MUTED)
         y += 132
+
+    if SHOTS[0][0].startswith("panel_"):
+        f = Image.open(shots / SHOTS[0][0]).convert("RGBA")
+        img.alpha_composite(f, (W - f.width - 100, (H - f.height) // 2))
+        return img.convert("RGB")
 
     if SHOTS[0][0].startswith("desktop_"):
         drop(img, window(shots / SHOTS[0][0], 1180), (1080, 120), blur=50, alpha=200)
