@@ -20,7 +20,7 @@ Hamstr is one app on two kinds of device: the phone app (`app/`) and the desktop
   - `update/`: the self-updater, built on GitHub Releases and `PackageInstaller` sessions. `UpdateDownloadService` downloads with a foreground notification; the verified APK stays in private files until the user chooses to install it.
   - `ui/`: the screens that are still Android-only (library, player sheets, share sheet, most of settings).
 - `desktop/`: the desktop window (`DesktopApp`), its download queue (`Queue`, the desktop's `DownloadService`), how it finds yt-dlp, Cheek and FFmpeg (`Tools`) and keeps them fresh (`ToolUpdates`: yt-dlp and signed Cheek releases once a day), the library (`DesktopLibrary`), the player (`FfPlayer` decodes through the bundled FFmpeg, `DesktopPlayer` shows it) and Bluetooth (`DesktopBluetooth`). The JVM has no Bluetooth, so `desktop/ble` is a small Rust helper (btleplug to scan and connect, ble-peripheral-rust to advertise and serve) that the app runs next to it and speaks JSON lines with; it only moves bytes, and what they mean stays in `Ble.kt`.
-- `tools/`: scripts that render the icon (also the desktop icons, `python tools/render_icon.py desktop`), product images and shortcuts.
+- `tools/`: scripts that render the icon (also the desktop icons, `python tools/render_icon.py desktop`), the app's icons (`render_icons.py`, see Icons in DESIGN.md), product images and shortcuts.
 
 ### Adding something to both apps
 

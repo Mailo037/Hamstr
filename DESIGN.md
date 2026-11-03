@@ -137,6 +137,39 @@ padding between them, where the padding is small (up to about 8 dp).
 - Pictures: 52 dp squares in rows, 16:9 tiles in the library and in previews, 64 × 36 dp
   in pick lists.
 
+### Icons
+
+Hamstr is round, so its icons are too: round line ends, round joins, soft corners,
+nothing sharp. **Every icon is made for Hamstr**; none is dropped in as it comes, not
+from Material (Symbols or Icons, Rounded included), not from Android Studio's
+*Vector Asset*, not from another set or a screenshot. Square ends and pointed corners
+were exactly what made the icons look foreign before 0.9.5.
+
+How to make one:
+
+1. **From Phosphor**, where it has the thing. Find it on
+   [phosphoricons.com](https://phosphoricons.com) and add a line to `ICONS` in
+   [`tools/render_icons.py`](tools/render_icons.py): `"name": "phosphor-name-weight"`.
+   Line glyphs (plus, close, check, arrows, carets, repeat, shuffle) take `-bold`;
+   objects (play, trash, folder, gear, heart when on) take `-fill`. A `-fill` that puts
+   the glyph into a box or circle (`x-fill`, `dots-six-fill`, `playlist-fill`) is the wrong
+   one; take `-bold` there. Then `python tools/render_icons.py` writes
+   `ic_<name>.xml` into the shared drawables.
+2. **By hand**, where Phosphor has nothing (the ten-second skips): a vector on a 24 × 24
+   viewport, `#FFFFFFFF`, drawn as strokes 2–2.25 wide with
+   `strokeLineCap="round"` and `strokeLineJoin="round"`, or as fills whose corners are
+   arcs. Add its name to `DRAWN` so the script leaves it alone, and say in a comment at
+   the top of the file how it was drawn.
+3. **Look at it**: `python tools/render_icons.py preview` writes `build/icons.html` with
+   every icon at 24 dp and large. A new icon sits next to the others with the same
+   weight, the same roundness and about the same size; one that looks heavier, thinner
+   or sharper is redrawn, not shipped.
+
+Icons are tinted (`ink`, `muted`, `ghost`, `accent`), never coloured in the file. An
+on/off pair is one shape in two weights (`favorite` fill, `favorite_border` bold).
+The launcher shortcuts are drawn from these files (`tools/render_shortcuts.py`), so run
+that again when `add`, `content_paste` or `grid_view` changes.
+
 ## Scrolling
 
 1. **Every scroll container fades the edges it can still scroll towards.** Use
