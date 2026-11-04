@@ -2,13 +2,15 @@
 
     python tools/desktop_screens.py [--serial emulator-5554] [--out build/screens]
     python tools/desktop_screens.py --seed app/src/debug/assets/demo/default.json
+    python tools/desktop_screens.py --seed app/src/debug/assets/demo/default.json --following --pages stash,following
 
 Run tools/demo_screens.py first: this copies the seeded demo (its list, posters and media)
 from the device into a separate data folder, starts the built app on it
 (./gradlew :desktop:createDistributable) once per page and captures the window. Without a
 device, --seed draws the posters and makes short clips for a demo seed here instead (with the
 FFmpeg fetchTools put into desktop/build/tools). Your own desktop data stays untouched.
-Writes desktop_<page>.png next to the phone screenshots.
+Writes desktop_<page>.png next to the phone screenshots. --following adds followed channels and
+a few downloads that wait for the night (Download at night on, the night some hours away).
 """
 import argparse
 import json
@@ -21,7 +23,7 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 APP = ROOT / "desktop/build/compose/binaries/main/app/Hamstr/Hamstr.exe"
 PHONE_DEMO = "/storage/emulated/0/Android/data/app.hamstr/files/demo"
-PAGES = [("stash", ""), ("library", "Library"), ("devices", "Devices"), ("appearance", "Appearance"), ("playback", "Playback"), ("data", "Data"), ("about", "About")]
+PAGES = [("stash", ""), ("library", "Library"), ("following", "Following"), ("devices", "Devices"), ("appearance", "Appearance"), ("playback", "Playback"), ("data", "Data"), ("about", "About")]
 
 # PrintWindow with PW_RENDERFULLCONTENT also catches what Skia draws through Direct3D.
 CAPTURE = r"""
@@ -114,11 +116,40 @@ def seeded_data(seed, work):
     return data
 
 
+def add_following(data):
+    """Followed channels next to the list, and three of its videos held back for the night."""
+    items = json.loads((data / "downloads.json").read_text(encoding="utf8"))
+    now = int(time.time() * 1000)
+    posters = [it["thumbnail"] for it in items if it.get("thumbnail")]
+    subs = [
+        ("Lofi Garden", "Audio", 12, 35), ("Night Drive Sessions", "Video", 4, 95), ("Tiny Kitchen", "Video", 7, 160),
+    ]
+    (data / "subscriptions.json").write_text(json.dumps([{
+        "id": f"sub{i}", "url": f"https://www.youtube.com/@{name.lower().replace(' ', '')}/videos", "title": name,
+        "thumbnail": posters[i % len(posters)] if posters else None, "mode": mode, "seen": [], "addedAt": now - 86_400_000 * 9,
+        "checkedAt": now - minutes * 60_000, "error": None, "stashed": stashed, "pending": False,
+    } for i, (name, mode, stashed, minutes) in enumerate(subs)]), encoding="utf8")
+    held = []
+    for i, it in enumerate(items[:3]):
+        held.append({**it, "id": f"night{i}", "status": "Queued", "progress": 0.0, "filePath": None, "size": 0,
+                     "finishedAt": 0, "createdAt": now - i * 1000, "videoHeight": 0})
+    (data / "downloads.json").write_text(json.dumps(held + items), encoding="utf8")
+    # The night starts four hours from now and lasts six, so these wait for it.
+    start = (time.localtime().tm_hour + 4) % 24
+    with open(data / "settings.properties", "a", encoding="utf8") as f:
+        f.write(f"nightOnly=true
+nightFrom={start * 60}
+nightTo={(start + 6) % 24 * 60}
+")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--serial")
     ap.add_argument("--seed", help="a demo seed to make the list from, without a device")
     ap.add_argument("--out", default=str(ROOT / "build/screens"))
+    ap.add_argument("--following", action="store_true", help="followed channels and downloads waiting for the night")
+    ap.add_argument("--pages", help="only these pages, e.g. stash,following")
     a = ap.parse_args()
     out = pathlib.Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -126,9 +157,12 @@ def main():
         raise SystemExit("build the app first: ./gradlew :desktop:createDistributable")
     work = pathlib.Path(tempfile.mkdtemp(prefix="hamstr-desktop-"))
     data = seeded_data(a.seed, work) if a.seed else demo_data(a.serial, work)
+    if a.following:
+        add_following(data)
+    pages = [p for p in PAGES if not a.pages or p[0] in a.pages.split(",")]
     script = work / "capture.ps1"
     script.write_text(CAPTURE, encoding="utf8")
-    for name, page in PAGES:
+    for name, page in pages:
         proc = subprocess.Popen([str(APP)], env={**os.environ, "HAMSTR_DATA": str(data), "HAMSTR_OPEN": page})
         try:
             time.sleep(20)  # until yt-dlp is ready and the stash says nothing about the engine

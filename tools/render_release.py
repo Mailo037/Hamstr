@@ -12,16 +12,19 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.9.7"
+VERSION = "0.10.0"
 FEATURES = [
-    ("HEADPHONE PAUSE", "A tap on Sony's XM5 pauses again"),
-    ("CALMER DESKTOP PLAYER", "Files open without freezing the window"),
+    ("FOLLOW CHANNELS", "New videos stash themselves"),
+    ("DOWNLOAD AT NIGHT", "Or only while the phone charges"),
+    ("RETRY ALL", "With a yt-dlp update when a site changed"),
+    ("COPIED LINKS", "Offered when you come back"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.9.7: the desktop captures from tools/desktop_screens.py --seed; no phone or emulator was connected.
-SHOTS = [("desktop_library.png", "Library")]
+# 0.10.0: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
+# was connected, and this computer's JDK has no jpackage for the desktop captures.
+SHOTS = [("phone_stash.png", "Stash"), ("phone_following.png", "Following")]
 
 
 def sharing_panel(shots):
