@@ -12,19 +12,18 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.0"
+VERSION = "0.10.1"
 FEATURES = [
-    ("FOLLOW CHANNELS", "New videos stash themselves"),
-    ("DOWNLOAD AT NIGHT", "Or only while the phone charges"),
-    ("RETRY ALL", "With a yt-dlp update when a site changed"),
-    ("COPIED LINKS", "Offered when you come back"),
+    ("FOLLOW FROM THE PLAYER", "Tap the artist, pick from their videos"),
+    ("LINKS KNOW CHANNELS", "Shared channels and playlists offer Follow"),
+    ("SWIPE TO UNFOLLOW", "With Undo, and a sheet for each one"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.10.0: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
+# 0.10.0 and 0.10.1: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
-SHOTS = [("phone_stash.png", "Stash"), ("phone_following.png", "Following")]
+SHOTS = [("phone_artist.png", "Artist"), ("phone_following.png", "Following")]
 
 
 def sharing_panel(shots):

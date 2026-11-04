@@ -67,7 +67,12 @@ import org.jetbrains.compose.resources.stringResource
  * ([Downloads.control]); [Subscriptions] keeps the list.
  */
 @Composable
-fun FollowingSettings(onOpen: (Subscription) -> Unit = {}, onUnfollowed: (Subscription, Int) -> Unit = { _, _ -> }) {
+fun FollowingSettings(
+    onOpen: (Subscription) -> Unit = {},
+    onUnfollowed: (Subscription, Int) -> Unit = { _, _ -> },
+    // Swiped on the phone, a button on the computer (SwipeRow); a test draws either.
+    icons: Boolean = app.hamstr.Platform.desktop,
+) {
     val subs by Subscriptions.all.collectAsState()
     val checking by Subscriptions.checking.collectAsState()
     var text by remember { mutableStateOf(TextFieldValue("")) }
@@ -104,6 +109,7 @@ fun FollowingSettings(onOpen: (Subscription) -> Unit = {}, onUnfollowed: (Subscr
                             onUnfollowed(sub, i)
                         },
                         background = Hamstr.colors.overlay,
+                        icons = icons,
                     ) { FollowRow(sub) { onOpen(sub) } }
                 }
             }

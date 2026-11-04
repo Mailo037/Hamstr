@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -96,6 +97,12 @@ class ReleaseScreensTest {
                     Subscription(id = "c", url = "https://www.youtube.com/@tinykitchen/videos", title = "Tiny Kitchen", checkedAt = now - 160 * 60_000, stashed = 7),
                 ),
             )
+            // The artist's sheet the player opens, over a dimmed screen as in the app.
+            screen("phone_artist.png", check = "See its videos") {
+                Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.BottomCenter) {
+                    FollowSheet("Lofi Garden", "https://www.youtube.com/@lofigarden/videos", onOpen = {}, onShare = {}, onClose = {}, onBrowse = {})
+                }
+            }
             screen("phone_following.png", check = "Tiny Kitchen") {
                 Column(Modifier.padding(horizontal = 12.dp)) {
                     Spacer(Modifier.height(36.dp))
@@ -105,7 +112,8 @@ class ReleaseScreensTest {
                         Txt(stringResource(Res.string.page_following), style = Hamstr.type.title)
                     }
                     Spacer(Modifier.height(14.dp))
-                    FollowingSettings()
+                    // As the phone shows it: swiped, without the computer's buttons.
+                    FollowingSettings(icons = false)
                 }
             }
         } finally {
