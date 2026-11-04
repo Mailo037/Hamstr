@@ -854,4 +854,84 @@
     </plurals>
     <string name="backup_failed">Не удалось прочитать резервную копию: %1$s</string>
     <string name="backup_save_failed">Не удалось сохранить резервную копию: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">Ждём ночи · начнётся в %1$s</string>
+    <string name="stage_waiting_charger">Ждём зарядки</string>
+    <string name="status_next">следующая</string>
+    <plurals name="status_ahead">
+        <item quantity="one">%1$d впереди</item>
+        <item quantity="few">%1$d впереди</item>
+        <item quantity="many">%1$d впереди</item>
+        <item quantity="other">%1$d впереди</item>
+    </plurals>
+    <string name="stash_menu">Показать действия</string>
+    <plurals name="stash_held_night">
+        <item quantity="one">%1$d загрузка ждёт ночи</item>
+        <item quantity="few">%1$d загрузки ждут ночи</item>
+        <item quantity="many">%1$d загрузок ждут ночи</item>
+        <item quantity="other">%1$d загрузок ждут ночи</item>
+    </plurals>
+    <string name="stash_held_night_hint">Начнётся в %1$s или сейчас, если нужно</string>
+    <plurals name="stash_held_charger">
+        <item quantity="one">%1$d загрузка ждёт зарядки</item>
+        <item quantity="few">%1$d загрузки ждут зарядки</item>
+        <item quantity="many">%1$d загрузок ждут зарядки</item>
+        <item quantity="other">%1$d загрузок ждут зарядки</item>
+    </plurals>
+    <string name="stash_held_charger_hint">Начнётся, когда телефон зарядится, или сейчас, если нужно</string>
+    <string name="stash_start_now">Начать сейчас</string>
+    <plurals name="stash_failed_all">
+        <item quantity="one">%1$d загрузка не удалась</item>
+        <item quantity="few">%1$d загрузки не удались</item>
+        <item quantity="many">%1$d загрузок не удались</item>
+        <item quantity="other">%1$d загрузок не удались</item>
+    </plurals>
+    <string name="stash_failed_update_hint">Сайт изменился; обычно помогает более новая версия yt-dlp</string>
+    <string name="stash_update_retry">Обновить &amp; повторить</string>
+    <string name="stash_retry_all">Повторить все</string>
+    <string name="stash_updating">Обновляем yt-dlp, затем пробуем снова …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">Сохранить скопированную ссылку?</string>
+    <string name="clip_offer_hint">В буфере обмена есть ссылка</string>
+    <string name="clip_offer_dismiss">Не сейчас</string>
+    <string name="set_offer_clip">Предлагать скопированные ссылки</string>
+    <string name="set_offer_clip_hint">Ссылка, скопированная в другом приложении, появляется в запасах. Hamstr читает буфер обмена только после нажатия «Сохранить».</string>
+    <string name="set_offer_clip_hint_desktop">Скопированная ссылка появляется в запасах, когда вы возвращаетесь в Hamstr</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">Загружать ночью</string>
+    <string name="set_night_hint">Новые загрузки ждут и начинаются между %1$s и %2$s; текущие завершаются</string>
+    <string name="set_night_from">Ночь начинается в</string>
+    <string name="set_night_to">Ночь заканчивается в</string>
+    <string name="set_charging">Только во время зарядки</string>
+    <string name="set_charging_hint">Загрузки ждут, пока телефон подключён к зарядке</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">Подписки</string>
+    <string name="follow_add">Подписаться на канал или плейлист</string>
+    <string name="follow_hint">Ссылка на канал или плейлист</string>
+    <string name="follow_button">Подписаться</string>
+    <string name="follow_empty">Пока нет подписок. Подпишитесь на канал или плейлист, и Hamstr сам сохранит то, что там появится.</string>
+    <string name="follow_check_now">Проверить новые видео сейчас</string>
+    <string name="follow_checking">Ищем новые видео …</string>
+    <string name="follow_note">Hamstr проверяет каждые 4 часа и сохраняет не больше %1$d новых видео за проверку, в формате, указанном рядом с каждым. То, что было на момент подписки, не учитывается. Загрузка ночью удерживает их, как и любую другую загрузку.</string>
+    <string name="follow_looking">Проверяем …</string>
+    <string name="follow_not_feed">Это не канал и не плейлист</string>
+    <string name="follow_failed">Последняя проверка не удалась; Hamstr попробует снова</string>
+    <string name="follow_looked">проверено %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="one">%1$d сохранено</item>
+        <item quantity="few">%1$d сохранено</item>
+        <item quantity="many">%1$d сохранено</item>
+        <item quantity="other">%1$d сохранено</item>
+    </plurals>
+    <string name="follow_as_video">Новые видео приходят как видео · нажмите для аудио</string>
+    <string name="follow_as_audio">Новые видео приходят как аудио · нажмите для видео</string>
+    <string name="follow_remove">Отписаться</string>
+    <string name="follow_started">Подписка оформлена · новые видео приходят сами</string>
+    <plurals name="follow_summary">
+        <item quantity="one">%1$d канал или плейлист</item>
+        <item quantity="few">%1$d канала или плейлиста</item>
+        <item quantity="many">%1$d каналов или плейлистов</item>
+        <item quantity="other">%1$d каналов или плейлистов</item>
+    </plurals>
+    <string name="follow_summary_none">Сохранять новые видео автоматически</string>
 </resources>

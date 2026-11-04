@@ -830,4 +830,72 @@
     </plurals>
     <string name="backup_failed">De back-up kon niet worden gelezen: %1$s</string>
     <string name="backup_save_failed">De back-up kon niet worden opgeslagen: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">Wacht op de nacht · start om %1$s</string>
+    <string name="stage_waiting_charger">Wacht op de oplader</string>
+    <string name="status_next">volgt</string>
+    <plurals name="status_ahead">
+        <item quantity="one">%1$d ervoor</item>
+        <item quantity="other">%1$d ervoor</item>
+    </plurals>
+    <string name="stash_menu">Opties tonen</string>
+    <plurals name="stash_held_night">
+        <item quantity="one">%1$d download wacht op de nacht</item>
+        <item quantity="other">%1$d downloads wachten op de nacht</item>
+    </plurals>
+    <string name="stash_held_night_hint">Start om %1$s, of nu als je wilt</string>
+    <plurals name="stash_held_charger">
+        <item quantity="one">%1$d download wacht op de oplader</item>
+        <item quantity="other">%1$d downloads wachten op de oplader</item>
+    </plurals>
+    <string name="stash_held_charger_hint">Start zodra de telefoon oplaadt, of nu als je wilt</string>
+    <string name="stash_start_now">Nu starten</string>
+    <plurals name="stash_failed_all">
+        <item quantity="one">%1$d download mislukt</item>
+        <item quantity="other">%1$d downloads mislukt</item>
+    </plurals>
+    <string name="stash_failed_update_hint">De site is veranderd; een nieuwere yt-dlp lost dat meestal op</string>
+    <string name="stash_update_retry">Bijwerken &amp; opnieuw proberen</string>
+    <string name="stash_retry_all">Alles opnieuw proberen</string>
+    <string name="stash_updating">yt-dlp wordt bijgewerkt, daarna opnieuw proberen …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">De gekopieerde link hamsteren?</string>
+    <string name="clip_offer_hint">Er staat een link op het klembord</string>
+    <string name="clip_offer_dismiss">Niet nu</string>
+    <string name="set_offer_clip">Gekopieerde links aanbieden</string>
+    <string name="set_offer_clip_hint">Een link die je in een andere app kopieert, verschijnt in de voorraad. Hamstr leest het klembord pas als je op Hamsteren tikt.</string>
+    <string name="set_offer_clip_hint_desktop">Een gekopieerde link verschijnt in de voorraad als je terugkomt in Hamstr</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">’s Nachts downloaden</string>
+    <string name="set_night_hint">Nieuwe downloads wachten en starten tussen %1$s en %2$s; lopende downloads worden afgemaakt</string>
+    <string name="set_night_from">Nacht begint om</string>
+    <string name="set_night_to">Nacht eindigt om</string>
+    <string name="set_charging">Alleen tijdens het opladen</string>
+    <string name="set_charging_hint">Downloads wachten tot de telefoon aan de oplader ligt</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">Gevolgd</string>
+    <string name="follow_add">Een kanaal of playlist volgen</string>
+    <string name="follow_hint">Link naar een kanaal of playlist</string>
+    <string name="follow_button">Volgen</string>
+    <string name="follow_empty">Nog niets gevolgd. Volg een kanaal of playlist, dan hamstert Hamstr vanzelf wat daar verschijnt.</string>
+    <string name="follow_check_now">Nu naar nieuwe video’s zoeken</string>
+    <string name="follow_checking">Zoeken naar nieuwe video’s …</string>
+    <string name="follow_note">Hamstr kijkt elke 4 uur en hamstert per keer maximaal %1$d nieuwe video’s, in het formaat dat bij elke video staat. Wat er al was toen je ging volgen, blijft buiten beeld. ’s Nachts downloaden houdt ze tegen zoals elke andere download.</string>
+    <string name="follow_looking">Wordt bekeken …</string>
+    <string name="follow_not_feed">Geen kanaal of playlist</string>
+    <string name="follow_failed">De laatste keer lukte niet; Hamstr probeert het opnieuw</string>
+    <string name="follow_looked">bekeken %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="one">%1$d gehamsterd</item>
+        <item quantity="other">%1$d gehamsterd</item>
+    </plurals>
+    <string name="follow_as_video">Nieuwe video’s komen als video · tik voor audio</string>
+    <string name="follow_as_audio">Nieuwe video’s komen als audio · tik voor video</string>
+    <string name="follow_remove">Niet meer volgen</string>
+    <string name="follow_started">Gevolgd · nieuwe video’s komen vanzelf</string>
+    <plurals name="follow_summary">
+        <item quantity="one">%1$d kanaal of playlist</item>
+        <item quantity="other">%1$d kanalen en playlists</item>
+    </plurals>
+    <string name="follow_summary_none">Nieuwe video’s automatisch hamsteren</string>
 </resources>

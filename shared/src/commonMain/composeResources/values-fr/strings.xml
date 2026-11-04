@@ -830,4 +830,72 @@
     </plurals>
     <string name="backup_failed">Impossible de lire la sauvegarde : %1$s</string>
     <string name="backup_save_failed">Impossible d’enregistrer la sauvegarde : %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">En attente de la nuit · démarre à %1$s</string>
+    <string name="stage_waiting_charger">En attente du chargeur</string>
+    <string name="status_next">à suivre</string>
+    <plurals name="status_ahead">
+        <item quantity="one">%1$d devant</item>
+        <item quantity="other">%1$d devant</item>
+    </plurals>
+    <string name="stash_menu">Afficher les options</string>
+    <plurals name="stash_held_night">
+        <item quantity="one">%1$d téléchargement attend la nuit</item>
+        <item quantity="other">%1$d téléchargements attendent la nuit</item>
+    </plurals>
+    <string name="stash_held_night_hint">Démarre à %1$s, ou tout de suite si l’on préfère</string>
+    <plurals name="stash_held_charger">
+        <item quantity="one">%1$d téléchargement attend le chargeur</item>
+        <item quantity="other">%1$d téléchargements attendent le chargeur</item>
+    </plurals>
+    <string name="stash_held_charger_hint">Démarre dès que le téléphone charge, ou tout de suite si l’on préfère</string>
+    <string name="stash_start_now">Démarrer maintenant</string>
+    <plurals name="stash_failed_all">
+        <item quantity="one">%1$d téléchargement a échoué</item>
+        <item quantity="other">%1$d téléchargements ont échoué</item>
+    </plurals>
+    <string name="stash_failed_update_hint">Le site a changé ; une version plus récente de yt-dlp règle généralement le problème</string>
+    <string name="stash_update_retry">Mettre à jour &amp; réessayer</string>
+    <string name="stash_retry_all">Tout réessayer</string>
+    <string name="stash_updating">Mise à jour de yt-dlp, puis nouvel essai …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">Mettre en réserve le lien copié ?</string>
+    <string name="clip_offer_hint">Un lien se trouve dans le presse-papiers</string>
+    <string name="clip_offer_dismiss">Pas maintenant</string>
+    <string name="set_offer_clip">Proposer les liens copiés</string>
+    <string name="set_offer_clip_hint">Un lien copié dans une autre appli apparaît dans la réserve. Hamstr ne lit le presse-papiers qu’après un appui sur Mettre en réserve.</string>
+    <string name="set_offer_clip_hint_desktop">Un lien copié apparaît dans la réserve au retour dans Hamstr</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">Télécharger la nuit</string>
+    <string name="set_night_hint">Les nouveaux téléchargements attendent et démarrent entre %1$s et %2$s ; ceux en cours se terminent</string>
+    <string name="set_night_from">La nuit commence à</string>
+    <string name="set_night_to">La nuit se termine à</string>
+    <string name="set_charging">Seulement pendant la charge</string>
+    <string name="set_charging_hint">Les téléchargements attendent que le téléphone soit branché au chargeur</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">Abonnements</string>
+    <string name="follow_add">Suivre une chaîne ou une playlist</string>
+    <string name="follow_hint">Lien vers une chaîne ou une playlist</string>
+    <string name="follow_button">Suivre</string>
+    <string name="follow_empty">Aucun abonnement pour l’instant. Suivre une chaîne ou une playlist, et Hamstr met automatiquement en réserve ce qui y paraît.</string>
+    <string name="follow_check_now">Chercher de nouvelles vidéos maintenant</string>
+    <string name="follow_checking">Recherche de nouvelles vidéos …</string>
+    <string name="follow_note">Hamstr regarde toutes les 4 heures et met en réserve au plus %1$d nouvelles vidéos à chaque passage, dans le format indiqué à côté de chacune. Ce qui était déjà là au moment de l’abonnement reste exclu. Télécharger la nuit les retient comme tout autre téléchargement.</string>
+    <string name="follow_looking">Analyse en cours …</string>
+    <string name="follow_not_feed">Ni une chaîne ni une playlist</string>
+    <string name="follow_failed">Le dernier passage a échoué ; Hamstr réessaie</string>
+    <string name="follow_looked">vérifié %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="one">%1$d mis en réserve</item>
+        <item quantity="other">%1$d mis en réserve</item>
+    </plurals>
+    <string name="follow_as_video">Les nouvelles vidéos arrivent en vidéo · appuyer pour l’audio</string>
+    <string name="follow_as_audio">Les nouvelles vidéos arrivent en audio · appuyer pour la vidéo</string>
+    <string name="follow_remove">Ne plus suivre</string>
+    <string name="follow_started">Abonnement actif · les nouvelles vidéos arrivent toutes seules</string>
+    <plurals name="follow_summary">
+        <item quantity="one">%1$d chaîne ou playlist</item>
+        <item quantity="other">%1$d chaînes et playlists</item>
+    </plurals>
+    <string name="follow_summary_none">Mettre automatiquement en réserve les nouvelles vidéos</string>
 </resources>

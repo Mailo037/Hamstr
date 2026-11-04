@@ -818,4 +818,66 @@
     </plurals>
     <string name="backup_failed">无法读取备份：%1$s</string>
     <string name="backup_save_failed">无法保存备份：%1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">等待夜间 · %1$s 开始</string>
+    <string name="stage_waiting_charger">等待充电器</string>
+    <string name="status_next">接下来</string>
+    <plurals name="status_ahead">
+        <item quantity="other">前面还有 %1$d 个</item>
+    </plurals>
+    <string name="stash_menu">显示选项</string>
+    <plurals name="stash_held_night">
+        <item quantity="other">%1$d 个下载等待夜间</item>
+    </plurals>
+    <string name="stash_held_night_hint">%1$s 开始，或者现在开始</string>
+    <plurals name="stash_held_charger">
+        <item quantity="other">%1$d 个下载等待充电器</item>
+    </plurals>
+    <string name="stash_held_charger_hint">手机充电时开始，或者现在开始</string>
+    <string name="stash_start_now">立即开始</string>
+    <plurals name="stash_failed_all">
+        <item quantity="other">%1$d 个下载失败</item>
+    </plurals>
+    <string name="stash_failed_update_hint">网站有变化；通常更新 yt-dlp 就能解决</string>
+    <string name="stash_update_retry">更新并重试</string>
+    <string name="stash_retry_all">全部重试</string>
+    <string name="stash_updating">正在更新 yt-dlp，然后重试 …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">囤下复制的链接？</string>
+    <string name="clip_offer_hint">剪贴板里有一个链接</string>
+    <string name="clip_offer_dismiss">暂时不要</string>
+    <string name="set_offer_clip">提供复制的链接</string>
+    <string name="set_offer_clip_hint">在其他应用中复制的链接会显示在囤货中。Hamstr 只在你点按“囤下”后才读取剪贴板。</string>
+    <string name="set_offer_clip_hint_desktop">你复制的链接会在回到 Hamstr 时显示在囤货中</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">夜间下载</string>
+    <string name="set_night_hint">新下载会等待，并在 %1$s 到 %2$s 之间开始；正在进行的下载会继续完成</string>
+    <string name="set_night_from">夜间开始时间</string>
+    <string name="set_night_to">夜间结束时间</string>
+    <string name="set_charging">仅在充电时</string>
+    <string name="set_charging_hint">下载会等到手机接上充电器</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">关注</string>
+    <string name="follow_add">关注频道或播放列表</string>
+    <string name="follow_hint">频道或播放列表的链接</string>
+    <string name="follow_button">关注</string>
+    <string name="follow_empty">还没有关注任何内容。关注一个频道或播放列表后，Hamstr 会自动囤下那里出现的新内容。</string>
+    <string name="follow_check_now">立即查找新视频</string>
+    <string name="follow_checking">正在查找新视频 …</string>
+    <string name="follow_note">Hamstr 每 4 小时查看一次，每次最多囤下 %1$d 个新视频，格式显示在每个视频旁边。关注时已有的视频不包括在内。夜间下载会像其他下载一样为它们等待。</string>
+    <string name="follow_looking">正在查看 …</string>
+    <string name="follow_not_feed">不是频道或播放列表</string>
+    <string name="follow_failed">上次查看没有成功；Hamstr 会再试一次</string>
+    <string name="follow_looked">查看于 %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="other">已囤 %1$d 个</item>
+    </plurals>
+    <string name="follow_as_video">新视频以视频形式下载 · 点按切换为音频</string>
+    <string name="follow_as_audio">新视频以音频形式下载 · 点按切换为视频</string>
+    <string name="follow_remove">取消关注</string>
+    <string name="follow_started">已关注 · 新视频会自动下载</string>
+    <plurals name="follow_summary">
+        <item quantity="other">%1$d 个频道和播放列表</item>
+    </plurals>
+    <string name="follow_summary_none">自动囤下新视频</string>
 </resources>

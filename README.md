@@ -33,6 +33,9 @@
 - Files go to `Download/Hamstr` (or a folder of your own, Settings › Queue) and show up in every gallery and music app. On a computer they go to `Downloads/Hamstr` or any folder you pick.
 - Downloads you start in Hamstr keep going for as long as they need on Android 14 and later, without the daily limit Android sets for background work.
 - With *Instant stash* on, sharing starts the download straight away, without the sheet.
+- *Follow* a channel or playlist (in the + sheet, a playlist's sheet, or Settings › Following): every four hours Hamstr looks for what is new there and stashes it by itself, as video or as audio.
+- *Download at night* holds new downloads until the hours you pick, and on the phone *Only while charging* until it is on the charger. The stash says what waits for what, with *Start now*; several failed downloads get one *Retry all*, after a yt-dlp update when a site changed.
+- Copied a link in another app? The stash offers it when you come back (on Android 12 and later without reading the clipboard until you tap *Stash*).
 - A song that is locked with DRM (Spotify, Apple Music, SoundCloud Go) gets looked up on YouTube Music by title, artist and length, with an offer to stash that one instead. Not the right one? Listen into the other matches and pick it by ear.
 
 **Send**
@@ -62,6 +65,7 @@
   - Thumbnails that resolve out of characters.
   - A hamster that blinks, winks and munches when something finishes.
 - Drags have weight: the tab pill, switches, sheets and swipe rows stretch with their speed.
+- Made for screen readers too: every swipe is also in the row's actions (TalkBack's actions menu), switches say on or off, progress is read out and messages are announced.
 - Seven accents plus a custom hue, six backgrounds, three sizes and three mini player styles. The launcher icon (dark, light or accent), its shortcuts, the widgets and the notifications take the accent too. Every effect can be switched off on its own.
 - Three widgets: downloads at a glance, what plays with its controls, and the hamster alone to stash a copied link.
 - Speaks English, German, Spanish, French, Italian, Portuguese, Dutch, Polish, Turkish, Russian, Japanese, Korean and Chinese, following the system language (on Android 13 and later also per app).

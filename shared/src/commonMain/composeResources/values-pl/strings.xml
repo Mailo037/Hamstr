@@ -854,4 +854,84 @@
     </plurals>
     <string name="backup_failed">Nie udało się odczytać kopii zapasowej: %1$s</string>
     <string name="backup_save_failed">Nie udało się zapisać kopii zapasowej: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">Czekanie na noc · zacznie się o %1$s</string>
+    <string name="stage_waiting_charger">Czekanie na ładowarkę</string>
+    <string name="status_next">w kolejce</string>
+    <plurals name="status_ahead">
+        <item quantity="one">%1$d przed nim</item>
+        <item quantity="few">%1$d przed nim</item>
+        <item quantity="many">%1$d przed nim</item>
+        <item quantity="other">%1$d przed nim</item>
+    </plurals>
+    <string name="stash_menu">Pokaż opcje</string>
+    <plurals name="stash_held_night">
+        <item quantity="one">%1$d pobieranie czeka na noc</item>
+        <item quantity="few">%1$d pobrania czekają na noc</item>
+        <item quantity="many">%1$d pobrań czeka na noc</item>
+        <item quantity="other">%1$d pobrań czeka na noc</item>
+    </plurals>
+    <string name="stash_held_night_hint">Zacznie się o %1$s albo teraz, jeśli wolisz</string>
+    <plurals name="stash_held_charger">
+        <item quantity="one">%1$d pobieranie czeka na ładowanie</item>
+        <item quantity="few">%1$d pobrania czekają na ładowanie</item>
+        <item quantity="many">%1$d pobrań czeka na ładowanie</item>
+        <item quantity="other">%1$d pobrań czeka na ładowanie</item>
+    </plurals>
+    <string name="stash_held_charger_hint">Zacznie się, gdy telefon się naładuje, albo teraz, jeśli wolisz</string>
+    <string name="stash_start_now">Zacznij teraz</string>
+    <plurals name="stash_failed_all">
+        <item quantity="one">%1$d pobieranie się nie udało</item>
+        <item quantity="few">%1$d pobrania się nie udały</item>
+        <item quantity="many">%1$d pobrań się nie udało</item>
+        <item quantity="other">%1$d pobrań się nie udało</item>
+    </plurals>
+    <string name="stash_failed_update_hint">Strona się zmieniła; zwykle pomaga nowszy yt-dlp</string>
+    <string name="stash_update_retry">Zaktualizuj &amp; ponów</string>
+    <string name="stash_retry_all">Ponów wszystkie</string>
+    <string name="stash_updating">Aktualizowanie yt-dlp, potem ponowna próba …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">Zachomikować skopiowany link?</string>
+    <string name="clip_offer_hint">W schowku jest link</string>
+    <string name="clip_offer_dismiss">Nie teraz</string>
+    <string name="set_offer_clip">Proponuj skopiowane linki</string>
+    <string name="set_offer_clip_hint">Link skopiowany w innej aplikacji pojawia się w zapasach. Hamstr czyta schowek dopiero po dotknięciu Zachomikuj.</string>
+    <string name="set_offer_clip_hint_desktop">Skopiowany link pojawia się w zapasach, gdy wrócisz do Hamstr</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">Pobieraj w nocy</string>
+    <string name="set_night_hint">Nowe pobrania czekają i startują między %1$s a %2$s; trwające kończą się</string>
+    <string name="set_night_from">Noc zaczyna się o</string>
+    <string name="set_night_to">Noc kończy się o</string>
+    <string name="set_charging">Tylko podczas ładowania</string>
+    <string name="set_charging_hint">Pobrania czekają, aż telefon będzie podłączony do ładowarki</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">Obserwowane</string>
+    <string name="follow_add">Obserwuj kanał lub playlistę</string>
+    <string name="follow_hint">Link do kanału lub playlisty</string>
+    <string name="follow_button">Obserwuj</string>
+    <string name="follow_empty">Nic jeszcze nie obserwujesz. Obserwuj kanał lub playlistę, a Hamstr sam zachomikuje to, co się tam pojawi.</string>
+    <string name="follow_check_now">Szukaj teraz nowych filmów</string>
+    <string name="follow_checking">Szukanie nowych filmów …</string>
+    <string name="follow_note">Hamstr sprawdza co 4 godziny i zachomikowuje najwyżej %1$d nowych filmów za jednym razem, w formacie podanym przy każdym. To, co było, gdy zacząłeś obserwować, zostaje pominięte. Pobieranie w nocy wstrzymuje je jak każde inne pobranie.</string>
+    <string name="follow_looking">Sprawdzanie …</string>
+    <string name="follow_not_feed">To nie kanał ani playlista</string>
+    <string name="follow_failed">Ostatnie sprawdzenie się nie udało; Hamstr spróbuje ponownie</string>
+    <string name="follow_looked">sprawdzono %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="one">%1$d zachomikowane</item>
+        <item quantity="few">%1$d zachomikowane</item>
+        <item quantity="many">%1$d zachomikowane</item>
+        <item quantity="other">%1$d zachomikowane</item>
+    </plurals>
+    <string name="follow_as_video">Nowe filmy przychodzą jako wideo · dotknij, aby audio</string>
+    <string name="follow_as_audio">Nowe filmy przychodzą jako audio · dotknij, aby wideo</string>
+    <string name="follow_remove">Przestań obserwować</string>
+    <string name="follow_started">Obserwowane · nowe filmy przychodzą same</string>
+    <plurals name="follow_summary">
+        <item quantity="one">%1$d kanał lub playlista</item>
+        <item quantity="few">%1$d kanały lub playlisty</item>
+        <item quantity="many">%1$d kanałów i playlist</item>
+        <item quantity="other">%1$d kanałów i playlist</item>
+    </plurals>
+    <string name="follow_summary_none">Zachomikuj nowe filmy automatycznie</string>
 </resources>

@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.ui.components.swipeActions
 import androidx.compose.runtime.key
 import app.hamstr.ui.components.SwipeAction
 import app.hamstr.ui.components.SwipeRow
@@ -140,6 +141,7 @@ private enum class Page(val title: Int, val icon: DrawableResource) {
     Appearance(R.string.page_appearance, Res.drawable.ic_palette),
     Motion(R.string.page_motion, Res.drawable.ic_auto_awesome),
     Downloads(R.string.page_downloads, Res.drawable.ic_download),
+    Following(R.string.page_following, Res.drawable.ic_person),
     Playback(R.string.page_playback, Res.drawable.ic_play_arrow),
     Queue(R.string.page_queue, Res.drawable.ic_folder_open),
     Engine(R.string.page_engine, Res.drawable.ic_code),
@@ -229,7 +231,11 @@ private fun summary(context: android.content.Context, p: Page, s: Settings, engi
     }
     Page.Downloads -> if (s.mode == Mode.Audio) "${context.getString(R.string.mode_audio)} · ${s.audioFormat}"
         else "${context.getString(R.string.mode_video)} · ${heightLabel(s.height)} · ${s.container}"
-    Page.Queue -> context.getString(R.string.set_queue_summary, s.parallel) + if (s.wifiOnly) " · " + context.getString(R.string.set_wifi_short) else ""
+    Page.Following -> app.hamstr.data.Subscriptions.all.value.size.let { n ->
+        if (n == 0) context.getString(R.string.follow_summary_none) else context.resources.getQuantityString(R.plurals.follow_summary, n, n)
+    }
+    Page.Queue -> context.getString(R.string.set_queue_summary, s.parallel) + (if (s.wifiOnly) " · " + context.getString(R.string.set_wifi_short) else "") +
+        if (s.nightOnly) " · " + context.getString(R.string.set_night) else ""
     Page.Engine -> when (engine) {
         is EngineState.Ready -> (if (s.engine == DownloadEngine.Cheek) "Cheek ${Cheek.active.value} · yt-dlp " else "yt-dlp ") + engine.version
         EngineState.Starting -> context.getString(R.string.set_starting)
@@ -330,6 +336,7 @@ private fun SubPage(
             Page.Appearance -> AppearancePage()
             Page.Motion -> MotionPage()
             Page.Downloads -> DownloadsPage()
+            Page.Following -> app.hamstr.ui.FollowingSettings()
             Page.Queue -> QueuePage()
             Page.Playback -> PlaybackPage()
             Page.Engine -> EnginePage()
@@ -550,6 +557,7 @@ private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) 
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(Radii.row))
+                            .swipeActions()
                             .pressable({ onMenu(t) })
                             .heightIn(min = 64.dp)
                             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -622,6 +630,8 @@ private fun DownloadsPage() {
         FxRow(stringResource(R.string.set_playlists), stringResource(R.string.set_playlists_hint), s.playlists) { v -> Prefs.edit { it.copy(playlists = v) } }
         Divider()
         OpenWhenDoneRow(s.openWhenDone, hint = true) { v -> Prefs.edit { it.copy(openWhenDone = v) } }
+        Divider()
+        app.hamstr.ui.ClipboardRow()
     }
 }
 
@@ -654,6 +664,7 @@ internal fun OpenWhenDoneRow(on: Boolean, hint: Boolean, set: (Boolean) -> Unit)
     SettingRow(
         stringResource(R.string.set_open_done), subtitle = subtitle,
         onClick = { if (on && !system) askSystem() else set(!on) },
+        checked = on,
     ) {
         HSwitch(on, { v ->
             set(v)
@@ -694,6 +705,8 @@ private fun QueuePage() {
             FxRow(stringResource(R.string.set_transfer_jobs), stringResource(R.string.set_transfer_jobs_hint), s.transferJobs) { v -> Prefs.edit { it.copy(transferJobs = v) } }
         }
     }
+    Spacer(Modifier.height(12.dp))
+    Group { app.hamstr.ui.ScheduleRows(charger = true) }
     Spacer(Modifier.height(12.dp))
     Group { NotificationsRow() }
 }
@@ -752,6 +765,7 @@ private fun NotificationsRow() {
             },
         ),
         onClick = toggle,
+        checked = on,
     ) { HSwitch(on, { toggle() }) }
 }
 
@@ -987,6 +1001,10 @@ private val SETTINGS_INDEX = listOf(
     SettingEntry(R.string.set_parallel, Page.Queue, "parallel concurrent queue at once"),
     SettingEntry(R.string.set_save_location, Page.Queue, "folder storage path speicher ordner"),
     SettingEntry(R.string.set_wifi_only, Page.Queue, "wifi wi-fi wlan mobile data metered cellular"),
+    SettingEntry(R.string.set_night, Page.Queue, "night schedule later time hours nachts nacht zeitplan später uhrzeit"),
+    SettingEntry(R.string.set_charging, Page.Queue, "charging charger battery power akku laden ladegerät strom"),
+    SettingEntry(R.string.set_offer_clip, Page.Downloads, "clipboard copy copied paste link zwischenablage kopiert einfügen"),
+    SettingEntry(R.string.page_following, Page.Following, "follow subscribe subscription channel playlist new videos automatic abo abonnieren kanal folgen neu automatisch"),
     SettingEntry(R.string.set_notifications, Page.Queue, "notifications notification benachrichtigungen permission progress alert"),
     SettingEntry(R.string.set_engine, Page.Engine, "cheek rust engine yt-dlp speed fast parallel connections"),
     SettingEntry(R.string.set_version, Page.Engine, "yt-dlp engine version"),

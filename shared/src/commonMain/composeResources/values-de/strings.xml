@@ -830,4 +830,72 @@
     </plurals>
     <string name="backup_failed">Die Sicherung konnte nicht gelesen werden: %1$s</string>
     <string name="backup_save_failed">Die Sicherung konnte nicht gespeichert werden: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">Wartet auf die Nacht · startet um %1$s</string>
+    <string name="stage_waiting_charger">Wartet auf das Ladegerät</string>
+    <string name="status_next">als Nächstes</string>
+    <plurals name="status_ahead">
+        <item quantity="one">%1$d davor</item>
+        <item quantity="other">%1$d davor</item>
+    </plurals>
+    <string name="stash_menu">Optionen anzeigen</string>
+    <plurals name="stash_held_night">
+        <item quantity="one">%1$d Download wartet auf die Nacht</item>
+        <item quantity="other">%1$d Downloads warten auf die Nacht</item>
+    </plurals>
+    <string name="stash_held_night_hint">Startet um %1$s, oder jetzt, wenn du willst</string>
+    <plurals name="stash_held_charger">
+        <item quantity="one">%1$d Download wartet aufs Ladegerät</item>
+        <item quantity="other">%1$d Downloads warten aufs Ladegerät</item>
+    </plurals>
+    <string name="stash_held_charger_hint">Startet, sobald das Handy lädt, oder jetzt, wenn du willst</string>
+    <string name="stash_start_now">Jetzt starten</string>
+    <plurals name="stash_failed_all">
+        <item quantity="one">%1$d Download fehlgeschlagen</item>
+        <item quantity="other">%1$d Downloads fehlgeschlagen</item>
+    </plurals>
+    <string name="stash_failed_update_hint">Die Seite hat sich geändert; ein neueres yt-dlp behebt das meist</string>
+    <string name="stash_update_retry">Aktualisieren &amp; wiederholen</string>
+    <string name="stash_retry_all">Alle wiederholen</string>
+    <string name="stash_updating">yt-dlp wird aktualisiert, dann wird es erneut versucht …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">Den kopierten Link hamstern?</string>
+    <string name="clip_offer_hint">In der Zwischenablage liegt ein Link</string>
+    <string name="clip_offer_dismiss">Nicht jetzt</string>
+    <string name="set_offer_clip">Kopierte Links anbieten</string>
+    <string name="set_offer_clip_hint">Ein Link, den du in einer anderen App kopiert hast, erscheint im Vorrat. Hamstr liest die Zwischenablage erst, wenn du auf Hamstern tippst.</string>
+    <string name="set_offer_clip_hint_desktop">Ein kopierter Link erscheint im Vorrat, wenn du zu Hamstr zurückkommst</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">Nachts herunterladen</string>
+    <string name="set_night_hint">Neue Downloads warten und starten zwischen %1$s und %2$s; laufende werden fertig geladen</string>
+    <string name="set_night_from">Nacht beginnt um</string>
+    <string name="set_night_to">Nacht endet um</string>
+    <string name="set_charging">Nur beim Laden</string>
+    <string name="set_charging_hint">Downloads warten, bis das Handy am Ladegerät hängt</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">Abos</string>
+    <string name="follow_add">Einem Kanal oder einer Playlist folgen</string>
+    <string name="follow_hint">Link zu einem Kanal oder einer Playlist</string>
+    <string name="follow_button">Folgen</string>
+    <string name="follow_empty">Noch keinem Kanal und keiner Playlist gefolgt. Folge einem Kanal oder einer Playlist, und Hamstr hamstert automatisch, was dort neu erscheint.</string>
+    <string name="follow_check_now">Jetzt nach neuen Videos suchen</string>
+    <string name="follow_checking">Suche nach neuen Videos …</string>
+    <string name="follow_note">Hamstr schaut alle 4 Stunden nach und hamstert bei jedem Blick höchstens %1$d neue Videos, im Format neben jedem Video. Was schon da war, als du gefolgt bist, bleibt außen vor. Nachts herunterladen hält sie zurück wie jeden anderen Download.</string>
+    <string name="follow_looking">Wird angesehen …</string>
+    <string name="follow_not_feed">Kein Kanal und keine Playlist</string>
+    <string name="follow_failed">Der letzte Blick hat nicht geklappt; Hamstr versucht es erneut</string>
+    <string name="follow_looked">angesehen %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="one">%1$d gehamstert</item>
+        <item quantity="other">%1$d gehamstert</item>
+    </plurals>
+    <string name="follow_as_video">Neue Videos als Video · tippen für Audio</string>
+    <string name="follow_as_audio">Neue Videos als Audio · tippen für Video</string>
+    <string name="follow_remove">Nicht mehr folgen</string>
+    <string name="follow_started">Gefolgt · neue Videos kommen von allein</string>
+    <plurals name="follow_summary">
+        <item quantity="one">%1$d Kanal oder Playlist</item>
+        <item quantity="other">%1$d Kanäle und Playlists</item>
+    </plurals>
+    <string name="follow_summary_none">Neue Videos automatisch hamstern</string>
 </resources>

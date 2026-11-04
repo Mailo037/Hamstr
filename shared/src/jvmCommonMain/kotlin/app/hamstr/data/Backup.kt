@@ -9,7 +9,8 @@ import java.util.Locale
 
 /**
  * Everything Hamstr knows, in one file to keep or to take to another device: the settings, the
- * download list (titles, links and where the files were), resume positions and what only one
+ * download list (titles, links and where the files were), resume positions, the followed
+ * channels and what only one
  * platform has (the phone's playlists, as [extras]). Never the files themselves, and never
  * Nearby's key: a device's key is who it is, and it stays on the device.
  */
@@ -20,7 +21,7 @@ object Backup {
     /** Settings that belong to this device; a backup coming in leaves them as they are. */
     private val LOCAL = setOf(
         "lastUpdateCheck", "lastCheekCheck", "lastAppCheck", "seenRelease", "askedNotifications", "notifications",
-        "deviceName", "toured", "language", "trayOnClose", "startWithSystem", "transferJobs",
+        "deviceName", "toured", "language", "trayOnClose", "startWithSystem", "transferJobs", "clipSeen",
     )
 
     class Restored(val downloads: Int, val positions: Int, val extras: JSONObject)
@@ -37,13 +38,14 @@ object Backup {
         put("settings", JSONObject(Prefs.encode()))
         put("downloads", JSONArray(DownloadStore.encode()))
         put("positions", JSONObject().apply { Positions.all.value.forEach { (id, r) -> put(id, JSONArray(listOf(r.position, r.duration))) } })
+        put("subscriptions", JSONArray(Subscriptions.encode()))
         put("extras", JSONObject(extras))
     }.toString(2)
 
     /**
      * Takes a backup in: its settings replace this device's (except [LOCAL] ones, and the download
      * folder when it comes from the other platform), downloads and positions are added to the ones
-     * here. Throws [IllegalArgumentException] for a file that isn't a Hamstr backup.
+     * here, and so are followed channels. Throws [IllegalArgumentException] for a file that isn't a Hamstr backup.
      */
     fun restore(text: String): Restored {
         val o = runCatching { JSONObject(text) }.getOrNull()
@@ -63,6 +65,7 @@ object Backup {
                 id to Positions.Resume(pair.optLong(0), pair.optLong(1))
             }.toMap()
         }.orEmpty()
+        o.optJSONArray("subscriptions")?.let { Subscriptions.merge(Subscriptions.decode(it.toString())) }
         val before = Positions.all.value.size
         Positions.restore(positions)
         return Restored(downloads, Positions.all.value.size - before, o.optJSONObject("extras") ?: JSONObject())

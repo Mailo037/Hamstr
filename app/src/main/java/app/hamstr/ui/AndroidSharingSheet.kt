@@ -17,6 +17,7 @@ fun AndroidSharingSheet(content: ShareContent, onDismiss: () -> Unit, onCopied: 
         content,
         onCopyLink = { url ->
             context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Hamstr", url))
+            app.hamstr.ClipOffers.copiedHere(context)
             val message = context.getString(R.string.info_copied)
             if (onCopied != null) onCopied(message) else Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             onDismiss()

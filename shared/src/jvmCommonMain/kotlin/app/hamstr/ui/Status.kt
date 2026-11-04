@@ -2,6 +2,8 @@ package app.hamstr.ui
 
 import androidx.compose.runtime.Composable
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.Prefs
+import app.hamstr.data.Schedule
 import app.hamstr.data.Stage
 import app.hamstr.data.Status
 import app.hamstr.engine.Failures
@@ -30,6 +32,8 @@ fun stageString(t: DownloadTask, now: Long = System.currentTimeMillis()): Pair<S
     Stage.WaitingForNetwork -> Res.string.stage_waiting_network to null
     Stage.WaitingForWifi -> Res.string.stage_waiting_wifi to null
     Stage.PausedBySystem -> Res.string.stage_paused_by_system to null
+    Stage.WaitingForNight -> Res.string.stage_waiting_night to Schedule.clock(Prefs.settings.value.nightFrom)
+    Stage.WaitingForCharger -> Res.string.stage_waiting_charger to null
     Stage.Retrying -> {
         val left = (t.retryAt - now) / 1000
         if (left > 0) Res.string.stage_retrying to "$left s" else Res.string.stage_retrying_now to null

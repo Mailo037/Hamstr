@@ -74,6 +74,7 @@ import app.hamstr.ui.components.pressable
 
 internal fun copy(context: android.content.Context, text: String) {
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("Hamstr", text))
+    ClipOffers.copiedHere(context)
 }
 
 @Composable

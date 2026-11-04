@@ -379,6 +379,7 @@ private fun MediaSheet(
                 SettingRow(
                     stringResource(R.string.share_subtitles, defaults.subtitleLanguages().joinToString(", ")),
                     onClick = { subs = !subs },
+                    checked = subs,
                 ) { HSwitch(subs, { subs = it }) }
             }
             Mode.Audio -> {

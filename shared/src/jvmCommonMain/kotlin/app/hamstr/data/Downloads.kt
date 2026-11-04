@@ -24,10 +24,15 @@ enum class Status { Queued, Running, Paused, Done, Failed, Canceled;
 /** What a download is doing when it isn't moving bytes. */
 enum class Stage {
     Resolving, Merging, ExtractingAudio, Remuxing, Tagging,
-    WaitingForNetwork, WaitingForWifi, Retrying, PausedBySystem;
+    WaitingForNetwork, WaitingForWifi, Retrying, PausedBySystem,
+    // Held back by Settings: downloads at night only, or only while the phone charges (Schedule).
+    WaitingForNight, WaitingForCharger;
 
     /** Waiting stages keep the progress bar still; working stages animate it. */
-    val waiting get() = this == WaitingForNetwork || this == WaitingForWifi || this == Retrying || this == PausedBySystem
+    val waiting get() = this == WaitingForNetwork || this == WaitingForWifi || this == Retrying || this == PausedBySystem || held
+
+    /** Waiting because the schedule says so, not because something is missing; "Start now" overrides it. */
+    val held get() = this == WaitingForNight || this == WaitingForCharger
 
     companion object {
         /** Cheek's stage events and yt-dlp's post-processor tags. */
@@ -88,6 +93,8 @@ data class DownloadTask(
     val sha256: String? = null,
     val hashedSize: Long = 0,
     val hashedModified: Long = 0,
+    // Started now on purpose: the night and the charger (Schedule) don't hold it back.
+    val anytime: Boolean = false,
     // Live only, never saved: what happens besides fetching bytes, and the retry state.
     val stage: Stage? = null,
     val attempts: Int = 0,
@@ -283,6 +290,7 @@ object DownloadStore {
         put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
         put("uploader", t.uploader); put("mediaKey", t.mediaKey); put("hidden", t.hidden)
         put("sha256", t.sha256); put("hashedSize", t.hashedSize); put("hashedModified", t.hashedModified)
+        put("anytime", t.anytime)
     }
 
     private fun fromJson(o: JSONObject) = DownloadTask(
@@ -321,6 +329,7 @@ object DownloadStore {
         sha256 = o.optStringOrNull("sha256"),
         hashedSize = o.optLong("hashedSize"),
         hashedModified = o.optLong("hashedModified"),
+        anytime = o.optBoolean("anytime"),
     )
 
     private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }

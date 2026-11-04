@@ -54,9 +54,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
+import androidx.compose.foundation.progressSemantics
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -83,14 +88,14 @@ fun Txt(
     )
 }
 
-/** `[ LABEL ]` in mono, Glyph's ASCII badge. */
+/** `[ LABEL ]` in mono, Glyph's ASCII badge. A screen reader says the label, not the brackets. */
 @Composable
 fun Badge(label: String, accent: Boolean = false, modifier: Modifier = Modifier) {
     Txt(
         "[ ${label.uppercase()} ]",
         style = Hamstr.type.badge,
         color = if (accent) Hamstr.colors.accent else Hamstr.colors.muted,
-        modifier = modifier,
+        modifier = modifier.clearAndSetSemantics { text = AnnotatedString(label) },
         maxLines = 1,
     )
 }
@@ -255,11 +260,12 @@ fun PictureLabel(text: String, modifier: Modifier = Modifier, accent: Boolean = 
     )
 }
 
-/** Flat 3dp progress line, accent fill. */
+/** Flat 3dp progress line, accent fill; a screen reader hears how far it is. */
 @Composable
 fun ProgressLine(progress: Float, modifier: Modifier = Modifier, color: Color = Hamstr.colors.accent) {
     Box(
         modifier
+            .progressSemantics(progress.coerceIn(0f, 1f))
             .fillMaxWidth()
             .height(3.dp)
             .clip(CircleShape)
@@ -360,7 +366,8 @@ fun HSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)? = null, modi
             .background(lerp(c.hover, c.accent, p))
             .then(
                 if (onCheckedChange == null) Modifier else Modifier
-                    .clickable(remember { MutableInteractionSource() }, null, role = Role.Switch) { commit(!checked) }
+                    // On or off for a screen reader too, not just "switch".
+                    .toggleable(checked, remember { MutableInteractionSource() }, null, role = Role.Switch) { commit(it) }
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragStart = { dragging = true },
@@ -392,12 +399,17 @@ fun HSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)? = null, modi
     }
 }
 
+/**
+ * A settings row. With [checked] it is the row of a switch: tapping it flips the switch, and a
+ * screen reader hears one thing, the title with on or off, not the row and the switch apart.
+ */
 @Composable
 fun SettingRow(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     onClick: (() -> Unit)? = null,
+    checked: Boolean? = null,
     leading: (@Composable () -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
@@ -406,7 +418,14 @@ fun SettingRow(
             .fillMaxWidth()
             .searchHighlight(title)
             .clip(RoundedCornerShape(Radii.row))
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .swipeActions()
+            .then(
+                when {
+                    onClick == null -> Modifier
+                    checked != null -> Modifier.toggleable(checked, role = Role.Switch) { onClick() }
+                    else -> Modifier.clickable(onClick = onClick)
+                },
+            )
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -422,7 +441,7 @@ fun SettingRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        trailing()
+        if (checked != null && onClick != null) Box(Modifier.clearAndSetSemantics {}) { trailing() } else trailing()
     }
 }
 

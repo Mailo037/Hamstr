@@ -1,5 +1,6 @@
 package app.hamstr.engine
 
+import app.hamstr.data.Subscriptions
 import app.hamstr.data.DownloadEngine
 import app.hamstr.BuildConfig
 import app.hamstr.R
@@ -324,6 +325,23 @@ object Engine {
     }
 
     fun cachedInfo(url: String): MediaInfo? = infos.get(url)?.info ?: previews.get(url)?.info
+
+    /**
+     * A followed channel or playlist as it is now: its videos without their formats, the newest
+     * of a channel, all of a playlist (Subscriptions.listed). Never cached, every look is fresh.
+     */
+    suspend fun feed(url: String): MediaInfo = withContext(Dispatchers.IO) {
+        awaitReady()
+        val req = YoutubeDLRequest(url).apply {
+            addOption("--flat-playlist")
+            addOption("--yes-playlist")
+            Subscriptions.listed(url)?.let { addOption("--playlist-end", it) }
+            addOption("--socket-timeout", 15)
+            addOption("--cache-dir", extractorCacheDir.absolutePath)
+            addOption("--dump-single-json")
+        }
+        mediaInfo(url, JSONObject(readRuntime { WarmYtDlp.execute(req) ?: YoutubeDL.getInstance().execute(req) }.out))
+    }
 
     /** Puts a finished look-up in place, as if [MediaInfo.url] had just been resolved. The debug build's demo mode uses it. */
     fun remember(info: MediaInfo) = infos.put(info.url, InfoSnapshot(info, reusable = true))

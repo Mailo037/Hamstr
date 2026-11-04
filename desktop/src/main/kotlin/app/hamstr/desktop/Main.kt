@@ -12,6 +12,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.Subscriptions
 import app.hamstr.data.Downloads
 import app.hamstr.data.FileChecks
 import app.hamstr.data.Positions
@@ -64,6 +65,7 @@ fun main(args: Array<String>) {
     Language.start()
     Positions.init(PropertiesFile(File(Paths.data, "positions.properties")))
     DownloadStore.init(Paths.data)
+    Subscriptions.init(Paths.data)
     Downloads.control = Queue
     Queue.start()
     FileChecks.refresh()

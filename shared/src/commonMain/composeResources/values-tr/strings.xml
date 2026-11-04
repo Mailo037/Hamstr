@@ -830,4 +830,72 @@
     </plurals>
     <string name="backup_failed">Yedek okunamadı: %1$s</string>
     <string name="backup_save_failed">Yedek kaydedilemedi: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">Gecenin gelmesi bekleniyor · %1$s’de başlar</string>
+    <string name="stage_waiting_charger">Şarj cihazı bekleniyor</string>
+    <string name="status_next">sırada</string>
+    <plurals name="status_ahead">
+        <item quantity="one">önünde %1$d tane var</item>
+        <item quantity="other">önünde %1$d tane var</item>
+    </plurals>
+    <string name="stash_menu">Seçenekleri göster</string>
+    <plurals name="stash_held_night">
+        <item quantity="one">%1$d indirme geceyi bekliyor</item>
+        <item quantity="other">%1$d indirme geceyi bekliyor</item>
+    </plurals>
+    <string name="stash_held_night_hint">%1$s’de başlar, ya da istersen hemen</string>
+    <plurals name="stash_held_charger">
+        <item quantity="one">%1$d indirme şarj cihazını bekliyor</item>
+        <item quantity="other">%1$d indirme şarj cihazını bekliyor</item>
+    </plurals>
+    <string name="stash_held_charger_hint">Telefon şarja takılınca başlar, ya da istersen hemen</string>
+    <string name="stash_start_now">Şimdi başlat</string>
+    <plurals name="stash_failed_all">
+        <item quantity="one">%1$d indirme başarısız oldu</item>
+        <item quantity="other">%1$d indirme başarısız oldu</item>
+    </plurals>
+    <string name="stash_failed_update_hint">Site değişti; genellikle daha yeni bir yt-dlp bunu düzeltir</string>
+    <string name="stash_update_retry">Güncelle &amp; yeniden dene</string>
+    <string name="stash_retry_all">Hepsini yeniden dene</string>
+    <string name="stash_updating">yt-dlp güncelleniyor, ardından yeniden denenecek …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">Kopyaladığın bağlantı zulaya eklensin mi?</string>
+    <string name="clip_offer_hint">Panoda bir bağlantı var</string>
+    <string name="clip_offer_dismiss">Şimdi değil</string>
+    <string name="set_offer_clip">Kopyalanan bağlantıları öner</string>
+    <string name="set_offer_clip_hint">Başka bir uygulamada kopyaladığın bağlantı zulada görünür. Hamstr, Kaydet’e dokunana kadar panoyu okumaz.</string>
+    <string name="set_offer_clip_hint_desktop">Kopyaladığın bağlantı Hamstr’a döndüğünde zulada görünür</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">Geceleri indir</string>
+    <string name="set_night_hint">Yeni indirmeler bekler ve %1$s ile %2$s arasında başlar; çalışanlar tamamlanır</string>
+    <string name="set_night_from">Gece şu saatte başlar</string>
+    <string name="set_night_to">Gece şu saatte biter</string>
+    <string name="set_charging">Yalnızca şarj olurken</string>
+    <string name="set_charging_hint">İndirmeler, telefon şarj cihazına takılana kadar bekler</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">Takip edilenler</string>
+    <string name="follow_add">Bir kanalı veya oynatma listesini takip et</string>
+    <string name="follow_hint">Bir kanal ya da oynatma listesinin bağlantısı</string>
+    <string name="follow_button">Takip et</string>
+    <string name="follow_empty">Henüz takip edilen yok. Bir kanalı veya oynatma listesini takip et; Hamstr oradan çıkanları kendiliğinden zulaya alır.</string>
+    <string name="follow_check_now">Şimdi yeni videolara bak</string>
+    <string name="follow_checking">Yeni videolar aranıyor …</string>
+    <string name="follow_note">Hamstr 4 saatte bir bakar ve her seferinde en fazla %1$d yeni videoyu, her birinin yanında gösterilen biçimde zulaya alır. Takip ettiğinde orada olanlar dışarıda kalır. Geceleri indir, onları diğer indirmeler gibi bekletir.</string>
+    <string name="follow_looking">Bakılıyor …</string>
+    <string name="follow_not_feed">Kanal ya da oynatma listesi değil</string>
+    <string name="follow_failed">Son bakış işe yaramadı; Hamstr yeniden deniyor</string>
+    <string name="follow_looked">%1$s bakıldı</string>
+    <plurals name="follow_stashed">
+        <item quantity="one">%1$d zulada</item>
+        <item quantity="other">%1$d zulada</item>
+    </plurals>
+    <string name="follow_as_video">Yeni videolar video olarak gelir · ses için dokun</string>
+    <string name="follow_as_audio">Yeni videolar ses olarak gelir · video için dokun</string>
+    <string name="follow_remove">Takibi bırak</string>
+    <string name="follow_started">Takip ediliyor · yeni videolar kendiliğinden gelir</string>
+    <plurals name="follow_summary">
+        <item quantity="one">%1$d kanal veya oynatma listesi</item>
+        <item quantity="other">%1$d kanal veya oynatma listesi</item>
+    </plurals>
+    <string name="follow_summary_none">Yeni videoları kendiliğinden zulaya al</string>
 </resources>

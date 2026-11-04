@@ -41,6 +41,7 @@ import app.hamstr.data.Prefs
 import app.hamstr.ui.components.Badge
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.HButton
+import app.hamstr.ui.components.SquareButton
 import app.hamstr.ui.components.HamstrMark
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.Sheet
@@ -56,6 +57,7 @@ import app.hamstr.ui.theme.Radii
  * that are already on the phone or the computer. [onSend] opens the outgoing share sheet.
  * With [onStash] the link goes with a choice of its own (video or audio, quality, format),
  * folded under the field and starting from the defaults; the phone picks those in its share sheet.
+ * [onFollow] follows a channel or playlist instead (Settings › Following).
  */
 @Composable
 fun AddSheet(
@@ -64,6 +66,7 @@ fun AddSheet(
     onFiles: () -> Unit,
     onSend: ((String) -> Unit)? = null,
     onStash: ((String, Choice) -> Unit)? = null,
+    onFollow: ((String) -> Unit)? = null,
 ) {
     val c = Hamstr.colors
     var text by remember { mutableStateOf(TextFieldValue("")) }
@@ -123,6 +126,7 @@ fun AddSheet(
 
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (onFollow != null) SquareButton(Res.drawable.ic_person, stringResource(Res.string.follow_button), { link?.let(onFollow) }, tint = if (link != null) c.ink else c.ghost)
             HButton(stringResource(Res.string.add_stash), { submit() }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = Res.drawable.ic_download, enabled = link != null)
             if (onSend != null) HButton(stringResource(Res.string.menu_tile_share), { link?.let(onSend) }, icon = Res.drawable.ic_share, enabled = link != null)
         }

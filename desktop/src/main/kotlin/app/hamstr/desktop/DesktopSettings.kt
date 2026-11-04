@@ -1,5 +1,8 @@
 package app.hamstr.desktop
 
+import app.hamstr.ui.ClipboardRow
+import app.hamstr.ui.ScheduleRows
+import app.hamstr.ui.FollowingSettings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -72,6 +75,7 @@ internal enum class Page(val title: StringResource, val icon: DrawableResource) 
     Appearance(Res.string.page_appearance, Res.drawable.ic_palette),
     Motion(Res.string.page_motion, Res.drawable.ic_auto_awesome),
     Downloads(Res.string.page_downloads, Res.drawable.ic_download),
+    Following(Res.string.page_following, Res.drawable.ic_person),
     Playback(Res.string.page_playback, Res.drawable.ic_play_arrow),
     Engine(Res.string.page_engine, Res.drawable.ic_code),
     Devices(Res.string.page_devices, Res.drawable.ic_devices),
@@ -96,6 +100,7 @@ internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit
                     }
                     Page.Motion -> MotionPage()
                     Page.Downloads -> DownloadsPage()
+                    Page.Following -> FollowingSettings()
                     // The computer plays one file at a time: no queue to crossfade.
                     Page.Playback -> Group { EqualizerBlock() }
                     Page.Engine -> EnginePage(engine)
@@ -135,7 +140,11 @@ private fun DownloadsPage() {
         FxRow(stringResource(Res.string.set_clean_names), stringResource(Res.string.set_clean_names_hint), s.cleanNames) { v -> Prefs.edit { it.copy(cleanNames = v) } }
         Divider()
         FxRow(stringResource(Res.string.set_playlists), stringResource(Res.string.set_playlists_hint), s.playlists) { v -> Prefs.edit { it.copy(playlists = v) } }
+        Divider()
+        ClipboardRow()
     }
+    Spacer(Modifier.height(12.dp))
+    Group { ScheduleRows(charger = false) }
     Spacer(Modifier.height(12.dp))
     Group {
         SettingBlock(stringResource(Res.string.set_parallel)) {

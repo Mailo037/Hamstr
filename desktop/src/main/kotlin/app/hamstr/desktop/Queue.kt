@@ -9,9 +9,13 @@ import app.hamstr.data.DownloadTask
 import app.hamstr.data.FileChecks
 import app.hamstr.data.FileNames
 import app.hamstr.data.Mode
+import app.hamstr.data.Downloads
 import app.hamstr.data.Prefs
+import app.hamstr.data.Schedule
 import app.hamstr.data.Stage
 import app.hamstr.data.Status
+import app.hamstr.data.Subscriptions
+import app.hamstr.engine.MediaInfo
 import app.hamstr.engine.EngineState
 import app.hamstr.engine.Failures
 import app.hamstr.engine.Formats
@@ -29,6 +33,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import org.json.JSONObject
@@ -68,6 +75,53 @@ object Queue : DownloadControl {
                 .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
             boot()
         }
+        // The night switched off or moved: what it held goes now, or waits for the new hours.
+        scope.launch {
+            Prefs.settings.map { Triple(it.nightOnly, it.nightFrom, it.nightTo) }.distinctUntilChanged().drop(1).collect { release() }
+        }
+        // Once a minute: the night may have begun, a followed channel may be due.
+        scope.launch {
+            while (true) {
+                delay(60_000)
+                if (DownloadStore.tasks.value.any { it.status == Status.Queued && it.stage == Stage.WaitingForNight } && Schedule.night(Prefs.settings.value)) release()
+                if (Subscriptions.due()) checkFeedsNow(force = false)
+            }
+        }
+    }
+
+    /** Downloads the schedule held start over: [pump] holds them again if it still says so. */
+    private fun release() {
+        DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage?.held == true }
+            .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
+        pump()
+    }
+
+    override fun retry(ids: List<String>, updateFirst: Boolean) {
+        if (!updateFirst) return ids.forEach { resume(it) }
+        scope.launch {
+            Downloads.updating.value = true
+            try { updateYtDlpNow() } finally { Downloads.updating.value = false }
+            ids.forEach { resume(it) }
+        }
+    }
+
+    override suspend fun feed(url: String): MediaInfo {
+        val cmd = buildList {
+            addAll(listOf(Tools.ytDlp.path, "--dump-single-json", "--flat-playlist", "--yes-playlist", "--socket-timeout", "15", "--cache-dir", Paths.cache.path))
+            Subscriptions.listed(url)?.let { addAll(listOf("--playlist-end", it.toString())) }
+            addAll(listOf("--", url))
+        }
+        return MediaJson.info(url, JSONObject(output(cmd)))
+    }
+
+    override fun checkFeeds() {
+        scope.launch { checkFeedsNow(force = true) }
+    }
+
+    private suspend fun checkFeedsNow(force: Boolean) {
+        if (_engine.value !is EngineState.Ready) return
+        val n = Subscriptions.check({ feed(it) }, force) { tasks -> tasks.forEach(DownloadStore::add) }
+        if (n > 0) pump()
     }
 
     /** After a failed start: tries the tools once more. */
@@ -88,6 +142,7 @@ object Queue : DownloadControl {
         }
         if (_engine.value is EngineState.Ready && watching.compareAndSet(false, true)) ToolUpdates.watch()
         pump()
+        if (Subscriptions.due()) checkFeedsNow(force = false)
     }
 
     private val watching = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -151,10 +206,17 @@ object Queue : DownloadControl {
     @Synchronized
     private fun pump() {
         if (_engine.value !is EngineState.Ready) return
-        val max = Prefs.settings.value.parallel.coerceIn(1, 3)
+        val s = Prefs.settings.value
+        val max = s.parallel.coerceIn(1, 3)
         val now = System.currentTimeMillis()
         val queued = DownloadStore.tasks.value.filter { it.status == Status.Queued && !jobs.containsKey(it.id) }.reversed() // oldest first
         for (task in queued) {
+            // The night setting holds it; a computer has no charger to wait for.
+            val hold = Schedule.hold(task, s, charging = true, now)
+            if (hold != null) {
+                if (task.stage != hold) DownloadStore.update(task.id, persist = false) { it.copy(stage = hold) }
+                continue
+            }
             if (task.retryAt > now) continue
             if (jobs.size >= max) break
             val job = scope.launch(start = CoroutineStart.LAZY) { download(task) }

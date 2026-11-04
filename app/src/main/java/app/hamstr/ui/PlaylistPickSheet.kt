@@ -61,6 +61,7 @@ import app.hamstr.ui.components.Chips
 /**
  * A shared playlist, album or channel: every video in a list to tick off, one quality for all,
  * and each picked video becomes its own download in one group. Videos already stashed start unticked.
+ * The square button follows it instead (or as well): what comes out there later is stashed by itself.
  */
 @Composable
 internal fun PlaylistPickSheet(
@@ -147,6 +148,14 @@ internal fun PlaylistPickSheet(
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val subs by app.hamstr.data.Subscriptions.all.collectAsState()
+            val followed = subs.any { it.url == app.hamstr.data.Subscriptions.feedUrl(playlist.url) }
+            app.hamstr.ui.components.SquareButton(
+                if (followed) Res.drawable.ic_check else Res.drawable.ic_person,
+                stringResource(if (followed) R.string.follow_started else R.string.follow_button),
+                { if (!followed) app.hamstr.data.Subscriptions.follow(playlist.url, mode) { app.hamstr.engine.Engine.feed(it) } },
+                tint = if (followed) c.accent else c.ink,
+            )
             HButton(stringResource(R.string.share_cancel), onDismiss, Modifier.weight(1f))
             HButton(
                 if (selected.isEmpty()) stringResource(R.string.share_list_pick)

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -32,6 +34,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.hamstr.Platform
 import app.hamstr.ui.theme.Hamstr
@@ -49,6 +54,20 @@ data class SwipeAction(
     val onTrigger: () -> Unit,
 )
 
+/** The actions of the [SwipeRow] around a row; [swipeActions] hands them to screen readers. */
+val LocalSwipeActions = compositionLocalOf<List<SwipeAction>> { emptyList() }
+
+/**
+ * A screen reader can't swipe: on the row's clickable root this offers the actions of the
+ * [SwipeRow] around it as the row's own actions (TalkBack's actions menu, VoiceOver's rotor).
+ */
+@Composable
+fun Modifier.swipeActions(): Modifier {
+    val actions = LocalSwipeActions.current
+    if (actions.isEmpty()) return this
+    return semantics { customActions = actions.map { a -> CustomAccessibilityAction(a.label) { a.onTrigger(); true } } }
+}
+
 /**
  * Swipe a row sideways to act. The row tilts and squashes with the drag speed, the
  * action underneath grows until it arms (with a haptic tick), and past that point the
@@ -59,7 +78,8 @@ data class SwipeAction(
  * shows once there is room for all of it.
  *
  * With [icons] (on the desktop, where nobody swipes with a mouse) the actions sit as icons at
- * the row's end instead.
+ * the row's end instead. A screen reader gets them as the row's actions: the row's clickable
+ * carries [swipeActions].
  */
 @Composable
 fun SwipeRow(
@@ -180,6 +200,6 @@ fun SwipeRow(
                         onDragCancel = { armed = false; scope.launch { offset.animateTo(0f, back) } },
                     )
                 },
-        ) { content() }
+        ) { CompositionLocalProvider(LocalSwipeActions provides listOfNotNull(start, end)) { content() } }
     }
 }

@@ -13,6 +13,15 @@ import app.hamstr.engine.DownloadService
 import app.hamstr.engine.Engine
 import app.hamstr.engine.Network
 import app.hamstr.update.Updater
+import app.hamstr.data.Status
+import app.hamstr.data.Subscriptions
+import app.hamstr.engine.Wakeups
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 class HamstrApp : Application() {
     override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
@@ -21,6 +30,7 @@ class HamstrApp : Application() {
         super.onCreate()
         Prefs.init(this)
         DownloadStore.init(this)
+        Subscriptions.init(filesDir)
         Positions.init(this)
         Playlists.init(this)
         app.hamstr.data.Lyrics.init(this)
@@ -34,5 +44,24 @@ class HamstrApp : Application() {
         Widgets.start(this)
         app.hamstr.nearby.PhoneNearby.start(this)
         app.hamstr.ui.AppIcon.shortcuts(this, Prefs.settings.value.accent)
+        watchSchedule()
+    }
+
+    /**
+     * The alarm follows the followed channels and the night's hours; a schedule changed in
+     * Settings lets what it held go at once (or holds it again), even with the queue stopped.
+     */
+    private fun watchSchedule() {
+        val scope = MainScope()
+        scope.launch {
+            combine(Subscriptions.all.map { list -> list.map { it.checkedAt } }, Prefs.settings) { _, _ -> }.collect { Wakeups.plan(this@HamstrApp) }
+        }
+        scope.launch {
+            Prefs.settings.map { listOf(it.nightOnly, it.nightFrom, it.nightTo, it.chargingOnly) }.distinctUntilChanged().drop(1).collect {
+                if (DownloadStore.tasks.value.any { t -> t.status == Status.Queued && (t.stage?.held == true || t.stage == null) }) {
+                    runCatching { DownloadService.send(this@HamstrApp, DownloadService.ACTION_WAKE) }
+                }
+            }
+        }
     }
 }

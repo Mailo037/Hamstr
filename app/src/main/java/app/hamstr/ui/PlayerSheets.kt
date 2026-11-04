@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.ui.components.swipeActions
 import app.hamstr.res.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -126,6 +127,7 @@ fun QueueSheet(onClose: () -> Unit) {
                                 .height(QUEUE_ROW)
                                 .clip(RoundedCornerShape(Radii.row))
                                 .background(if (now || dragging) c.surface else c.overlay)
+                                .swipeActions()
                                 .clickable { Playback.jumpTo(queue.indexOfFirst { it.id == t.id }) },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

@@ -73,6 +73,7 @@ import app.hamstr.data.Downloads
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.FileChecks
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.hamstr.data.DownloadTask
@@ -106,9 +107,22 @@ import app.hamstr.ui.components.PictureLabel
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.iconSwap
 import app.hamstr.ui.components.onRightClick
+import app.hamstr.ui.components.swipeActions
+import app.hamstr.data.Prefs
+import app.hamstr.data.Schedule
+import app.hamstr.engine.Failures
+import app.hamstr.engine.Fix
+import org.jetbrains.compose.resources.DrawableResource
+import java.net.URI
 
 /** How many finished downloads the stash lists; the library has all of them. */
 private const val SHELF = 60
+
+/**
+ * A link copied in another app, offered on the stash. [link] is null on a phone that would tell
+ * the user Hamstr read the clipboard: it is read only once they take it.
+ */
+data class ClipOffer(val link: String?)
 
 @Composable
 fun StashScreen(
@@ -122,6 +136,8 @@ fun StashScreen(
     onHide: (List<DownloadTask>) -> Unit,
     onRetryEngine: () -> Unit,
     onShowAll: () -> Unit,
+    clip: ClipOffer? = null,
+    onClip: (take: Boolean) -> Unit = {},
 ) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
@@ -149,6 +165,15 @@ fun StashScreen(
     // Groups whose waiting downloads are shown too, not just the ones that are moving.
     var openGroups by remember { mutableStateOf(emptySet<String>()) }
     val rows = remember(tasks, openGroups) { activeRows(tasks, active, openGroups) }
+    // Where each waiting download stands in line, in the order the queue starts them.
+    val line = remember(tasks) {
+        tasks.filter { it.status == Status.Queued && it.stage == null }.reversed().withIndex().associate { (i, t) -> t.id to i }
+    }
+    val held = active.filter { it.status == Status.Queued && it.stage?.held == true }
+    val failed = active.filter { it.status == Status.Failed }
+    val updating by Downloads.updating.collectAsState()
+    // Copied, then stashed some other way (Ctrl+V): nothing left to offer.
+    val offer = clip?.takeIf { o -> o.link == null || tasks.none { it.url == o.link } }
 
     // Something finished: the hamster stuffs its cheeks and chews.
     var lastDone by remember { mutableIntStateOf(done.size) }
@@ -251,6 +276,16 @@ fun StashScreen(
                     }
                 }
             }
+            if (offer != null) item(key = "clip") {
+                Notice(
+                    Res.drawable.ic_content_paste, c.accent,
+                    stringResource(Res.string.clip_offer_title),
+                    offer.link?.let(::hostOf) ?: stringResource(Res.string.clip_offer_hint),
+                    stringResource(Res.string.add_stash), { onClip(true) },
+                    onClose = { onClip(false) },
+                    modifier = Modifier.animateItem(),
+                )
+            }
             if (tasks.none { it.status != Status.Canceled }) {
                 item(key = "empty") { EmptyState() }
             }
@@ -262,6 +297,33 @@ fun StashScreen(
                         modifier = Modifier.padding(horizontal = 12.dp).animateItem(),
                     )
                 }
+                if (held.isNotEmpty()) item(key = "held") {
+                    val night = held.any { it.stage == Stage.WaitingForNight }
+                    val s by Prefs.settings.collectAsState()
+                    Notice(
+                        Res.drawable.ic_timer, c.muted,
+                        pluralStringResource(if (night) Res.plurals.stash_held_night else Res.plurals.stash_held_charger, held.size, held.size),
+                        if (night) stringResource(Res.string.stash_held_night_hint, Schedule.clock(s.nightFrom)) else stringResource(Res.string.stash_held_charger_hint),
+                        stringResource(Res.string.stash_start_now), { Downloads.control.startNow(held.map { it.id }) },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+                // One failure has its own retry; several, or a site that changed, get one for all.
+                val outdated = failed.any { Failures.explain(it.error).fix == Fix.UpdateYtDlp }
+                if (updating || failed.size > 1 || outdated) item(key = "failed") {
+                    Notice(
+                        if (updating) Res.drawable.ic_refresh else Res.drawable.ic_error, if (updating) c.accent else c.red,
+                        if (updating) stringResource(Res.string.stash_updating) else pluralStringResource(Res.plurals.stash_failed_all, failed.size, failed.size),
+                        if (outdated && !updating) stringResource(Res.string.stash_failed_update_hint) else null,
+                        when {
+                            updating -> null
+                            outdated -> stringResource(Res.string.stash_update_retry)
+                            else -> stringResource(Res.string.stash_retry_all)
+                        },
+                        { Downloads.control.retry(failed.map { it.id }, updateFirst = outdated) },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
                 itemsIndexed(rows, key = { _, r -> r.key }) { i, r ->
                     GroupedItem(i, rows.size) {
                         when (r) {
@@ -271,7 +333,7 @@ fun StashScreen(
                             is ActiveRow.More -> MoreRow(r.count) { openGroups = openGroups + r.group }
                             is ActiveRow.Item -> Box(Modifier.padding(start = if (r.nested) 12.dp else 0.dp)) {
                                 SwipeRow(start = primarySwipe(r.task), end = cancelSwipe(r.task, onHide), icons = false) {
-                                    TaskRow(r.task, highlighted = r.task.status == Status.Running, onClick = { onMenu(r.task) }, onLongClick = { onMenu(r.task) })
+                                    TaskRow(r.task, highlighted = r.task.status == Status.Running, ahead = line[r.task.id], onClick = { onMenu(r.task) }, onLongClick = { onMenu(r.task) })
                                 }
                             }
                         }
@@ -420,6 +482,7 @@ private fun AlbumRow(album: Stashed.Album, expanded: Boolean, onToggle: () -> Un
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Radii.row))
+            .swipeActions()
             .clickable(onClick = onToggle)
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -537,6 +600,7 @@ private fun primarySwipe(t: DownloadTask): SwipeAction? {
         Status.Running -> SwipeAction(Res.drawable.ic_pause, stringResource(Res.string.notif_pause), c.muted) { Downloads.control.pause(t.id) }
         Status.Paused -> SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.stash_resume), c.accent) { Downloads.control.resume(t.id) }
         Status.Failed -> SwipeAction(Res.drawable.ic_refresh, stringResource(Res.string.notif_retry), c.accent) { Downloads.control.resume(t.id) }
+        Status.Queued -> if (t.stage?.held == true) SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.stash_start_now), c.accent) { Downloads.control.startNow(listOf(t.id)) } else null
         else -> null
     }
 }
@@ -580,6 +644,8 @@ fun TaskRow(
     versions: List<DownloadTask> = listOf(t),
     gone: Boolean = false,
     resume: Float? = null,
+    // How many downloads start before this waiting one; null when it isn't simply waiting its turn.
+    ahead: Int? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -594,7 +660,12 @@ fun TaskRow(
             .clip(RoundedCornerShape(Radii.row))
             .background(if (highlighted) c.surface else c.overlay)
             .onRightClick(onLongClick)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .swipeActions()
+            .combinedClickable(
+                onClickLabel = if (t.status == Status.Done && !gone) stringResource(Res.string.player_play) else stringResource(Res.string.stash_menu),
+                onLongClickLabel = stringResource(Res.string.stash_menu),
+                onClick = onClick, onLongClick = onLongClick,
+            )
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -617,7 +688,15 @@ fun TaskRow(
                 Badge(versionsBadge(versions))
                 if (!gone && t.status == Status.Done) ChangedMark(t.id)
                 Txt(
-                    if (gone) stringResource(Res.string.file_gone) else stage ?: statusLine(t, versions),
+                    when {
+                        gone -> stringResource(Res.string.file_gone)
+                        stage != null -> stage
+                        t.status == Status.Queued && ahead != null -> listOfNotNull(
+                            if (ahead == 0) stringResource(Res.string.status_next) else pluralStringResource(Res.plurals.status_ahead, ahead, ahead),
+                            (t.progress * 100).toInt().takeIf { it > 0 }?.let { "$it %" },
+                        ).joinToString(" · ")
+                        else -> statusLine(t, versions)
+                    },
                     style = Hamstr.type.small,
                     color = when {
                         t.status == Status.Failed || gone -> c.red
@@ -707,6 +786,57 @@ private fun EmptyState() {
         Txt(stringResource(if (Platform.desktop) Res.string.stash_empty_text_desktop else Res.string.stash_empty_text), color = c.muted)
     }
 }
+
+/**
+ * A line over the downloads that says what holds them back, or what is on offer, and the one
+ * thing to do about it: an icon tile, the words, the action in accent text, maybe a close.
+ */
+@Composable
+private fun Notice(
+    icon: DrawableResource,
+    tint: Color,
+    title: String,
+    meta: String?,
+    action: String?,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null,
+) {
+    val c = Hamstr.colors
+    Row(
+        modifier
+            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Radii.panel))
+            .background(c.overlay)
+            .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(c.surface), contentAlignment = Alignment.Center) {
+            Icon(icon, tint = tint, size = 20.dp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            Txt(title, style = Hamstr.type.bodyMedium, maxLines = 2)
+            if (meta != null) {
+                Spacer(Modifier.height(2.dp))
+                Txt(meta, style = Hamstr.type.small, color = c.ghost, maxLines = 2)
+            }
+        }
+        if (action != null) {
+            Box(
+                Modifier.clip(RoundedCornerShape(10.dp)).clickable(role = Role.Button, onClick = onAction)
+                    .heightIn(min = 40.dp).padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) { Txt(action, style = Hamstr.type.button, color = c.accent, maxLines = 1) }
+        }
+        if (onClose != null) IconButton(Res.drawable.ic_close, stringResource(Res.string.clip_offer_dismiss), onClose, background = Color.Transparent, size = 34.dp)
+    }
+}
+
+/** "youtube.com" for a link, for a line that has no room for all of it. */
+private fun hostOf(link: String): String =
+    runCatching { URI(link).host?.removePrefix("www.") }.getOrNull()?.takeIf { it.isNotBlank() } ?: link
 
 /** All qualities of a link in one badge, best first: [ 1080P · 480P ]. */
 fun versionsBadge(versions: List<DownloadTask>) =

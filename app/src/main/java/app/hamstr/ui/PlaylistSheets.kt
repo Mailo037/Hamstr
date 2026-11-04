@@ -1,5 +1,6 @@
 package app.hamstr.ui
 
+import app.hamstr.ui.components.swipeActions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -404,6 +405,7 @@ fun SongRow(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Radii.row))
+            .swipeActions()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(start = 6.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

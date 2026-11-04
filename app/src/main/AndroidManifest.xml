@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Waits for the network (or Wi-Fi) before downloads start or continue. -->
@@ -13,6 +14,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Android 14+: downloads the user started run as a transfer job, without the daily limit. -->
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+    <!-- Downloads at night and followed channels: an exact alarm may start the download service.
+         Hamstr isn't on Google Play, whose rule the lint check is about. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" tools:ignore="ExactAlarm" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Self-updates from GitHub Releases; the second skips the prompt once Hamstr installed itself. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
@@ -395,6 +401,13 @@
 
         <!-- The player widget's buttons. -->
         <receiver android:name=".widget.WidgetActions" android:exported="false" />
+
+        <!-- The night begins, a followed channel is due, or the phone started again. -->
+        <receiver android:name=".engine.WakeReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <receiver android:name=".update.InstallReceiver" android:exported="false" />
         <receiver android:name=".update.UpdatedReceiver" android:exported="false">

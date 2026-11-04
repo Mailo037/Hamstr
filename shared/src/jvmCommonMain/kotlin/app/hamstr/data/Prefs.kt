@@ -85,6 +85,16 @@ data class Settings(
     val downloadFolder: String = "",
     // Android 14+: downloads started in Hamstr run as a user-initiated transfer job (no daily limit).
     val transferJobs: Boolean = true,
+    // Downloads wait for the night, from [nightFrom] to [nightTo] in minutes after midnight, and on
+    // the phone for the charger (Schedule); "Start now" lets one through anyway.
+    val nightOnly: Boolean = false,
+    val nightFrom: Int = 60,
+    val nightTo: Int = 420,
+    val chargingOnly: Boolean = false,
+    // A link copied in another app is offered on the stash; [clipSeen] marks the last one offered
+    // (the clip's time on the phone, the link's hash on the computer), so each comes up once.
+    val offerClipboard: Boolean = true,
+    val clipSeen: Long = 0,
 ) {
     fun defaultChoice() = Choice(mode, height, container, audioFormat, subtitles, open = openWhenDone)
 
@@ -170,6 +180,12 @@ object Prefs {
         language = sp.getString("language", "")!!,
         downloadFolder = sp.getString("downloadFolder", "")!!,
         transferJobs = sp.getBoolean("transferJobs", true),
+        nightOnly = sp.getBoolean("nightOnly", false),
+        nightFrom = sp.getInt("nightFrom", 60).coerceIn(0, 24 * 60 - 1),
+        nightTo = sp.getInt("nightTo", 420).coerceIn(0, 24 * 60 - 1),
+        chargingOnly = sp.getBoolean("chargingOnly", false),
+        offerClipboard = sp.getBoolean("offerClipboard", true),
+        clipSeen = sp.getLong("clipSeen", 0),
     )
 
     /** Changes settings in one step: edits from two threads at once don't undo each other. */
@@ -255,6 +271,12 @@ object Prefs {
         .putString("language", s.language)
         .putString("downloadFolder", s.downloadFolder)
         .putBoolean("transferJobs", s.transferJobs)
+        .putBoolean("nightOnly", s.nightOnly)
+        .putInt("nightFrom", s.nightFrom)
+        .putInt("nightTo", s.nightTo)
+        .putBoolean("chargingOnly", s.chargingOnly)
+        .putBoolean("offerClipboard", s.offerClipboard)
+        .putLong("clipSeen", s.clipSeen)
 }
 
 fun heightLabel(h: Int?) = when (h) {

@@ -109,6 +109,13 @@ import app.hamstr.ui.readMediaInfo
 import app.hamstr.ui.canHaveVersions
 import app.hamstr.engine.AudioOut
 import app.hamstr.ui.StashScreen
+import app.hamstr.ui.ClipOffer
+import app.hamstr.data.Schedule
+import app.hamstr.data.Subscriptions
+import app.hamstr.engine.Wakeups
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import app.hamstr.ui.TourOverlay
 import app.hamstr.ui.TourGate
 import app.hamstr.ui.DownloadPreview
@@ -167,7 +174,12 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // Back in the foreground: queued downloads (also ones Android paused) go on, gone files show up.
-        if (DownloadStore.tasks.value.any { it.status == Status.Queued }) DownloadService.send(this, DownloadService.ACTION_START)
+        // What the night or the charger still holds stays put, without the queue starting for nothing.
+        val s = Prefs.settings.value
+        val charging = Wakeups.charging(this)
+        if (DownloadStore.tasks.value.any { it.status == Status.Queued && Schedule.hold(it, s, charging) == null }) DownloadService.send(this, DownloadService.ACTION_START)
+        // Followed channels Hamstr couldn't look at while it was away (no alarm, no network).
+        if (Subscriptions.due()) DownloadService.send(this, DownloadService.ACTION_WAKE)
         DownloadFiles.refreshMissing()
         // What the notifications said is on screen now: finished downloads, a new version.
         Seen.foreground = true
@@ -273,6 +285,8 @@ private fun App(inPip: Boolean) {
     // A held playlist's quick actions.
     var playlistMenu by rememberSaveable { mutableStateOf<String?>(null) }
     var clipLink by remember { mutableStateOf<String?>(null) }
+    // A link copied in another app, offered on the stash until taken or put away.
+    var clipOffer by remember { mutableStateOf<ClipOffer?>(null) }
     var notifyAsk by rememberSaveable { mutableStateOf(false) }
     var queueSheet by rememberSaveable { mutableStateOf(false) }
     var sleepSheet by rememberSaveable { mutableStateOf(false) }
@@ -450,6 +464,15 @@ private fun App(inPip: Boolean) {
         MainActivity.pendingAction.value = null
     }
 
+    // Coming back with something new on the clipboard: the stash offers it, once per copy.
+    LaunchedEffect(focused) {
+        if (focused && Prefs.settings.value.offerClipboard) ClipOffers.next(context)?.let { clipOffer = it }
+    }
+    val follow: (String) -> Unit = { url ->
+        Subscriptions.follow(url, Prefs.settings.value.mode) { Engine.feed(it) }
+        hint(resources.getString(R.string.follow_started))
+    }
+
     Box(Modifier.fillMaxSize().background(c.canvas)) {
         RasterBackground(Modifier.fillMaxWidth().height(top + 280.dp))
         // Swipe sideways anywhere to change tabs; the tab bar and the pager follow each other.
@@ -476,6 +499,14 @@ private fun App(inPip: Boolean) {
                     onHide = hide,
                     onRetryEngine = retryEngine,
                     onShowAll = { tab = Tab.Library },
+                    clip = clipOffer,
+                    onClip = { take ->
+                        clipOffer = null
+                        if (take) {
+                            val url = clipboardLink()
+                            if (url != null) sheetUrl = url else hint(resources.getString(R.string.no_clipboard_link))
+                        }
+                    },
                 )
                 Tab.Library -> LibraryScreen(
                     visible, padding,
@@ -526,7 +557,9 @@ private fun App(inPip: Boolean) {
             snack?.let { shown = it }
             shown?.let { s ->
                 Row(
-                    Modifier.clip(RoundedCornerShape(14.dp)).background(c.raised).padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 40.dp),
+                    // A screen reader says the message as it comes, without moving away from where it is.
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        .clip(RoundedCornerShape(14.dp)).background(c.raised).padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 40.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Txt(s.text, style = Hamstr.type.small, modifier = Modifier.weight(1f, fill = false).padding(end = 10.dp, top = 6.dp, bottom = 6.dp))
@@ -626,6 +659,7 @@ private fun App(inPip: Boolean) {
                 onLink = { url -> addSheet = false; sheetUrl = url },
                 onFiles = { addSheet = false; pickFiles.launch(arrayOf("*/*")) },
                 onSend = { url -> addSheet = false; sharing = ShareContent(url) },
+                onFollow = { url -> addSheet = false; follow(url) },
             )
         }
         val stashed = {

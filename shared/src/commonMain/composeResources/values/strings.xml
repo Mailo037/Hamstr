@@ -830,4 +830,72 @@
     </plurals>
     <string name="backup_failed">Couldn’t read the backup: %1$s</string>
     <string name="backup_save_failed">Couldn’t save the backup: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">Waiting for the night · starts at %1$s</string>
+    <string name="stage_waiting_charger">Waiting for the charger</string>
+    <string name="status_next">next up</string>
+    <plurals name="status_ahead">
+        <item quantity="one">%1$d ahead of it</item>
+        <item quantity="other">%1$d ahead of it</item>
+    </plurals>
+    <string name="stash_menu">Show options</string>
+    <plurals name="stash_held_night">
+        <item quantity="one">%1$d download waits for the night</item>
+        <item quantity="other">%1$d downloads wait for the night</item>
+    </plurals>
+    <string name="stash_held_night_hint">Starts at %1$s, or now if you like</string>
+    <plurals name="stash_held_charger">
+        <item quantity="one">%1$d download waits for the charger</item>
+        <item quantity="other">%1$d downloads wait for the charger</item>
+    </plurals>
+    <string name="stash_held_charger_hint">Starts once the phone charges, or now if you like</string>
+    <string name="stash_start_now">Start now</string>
+    <plurals name="stash_failed_all">
+        <item quantity="one">%1$d download failed</item>
+        <item quantity="other">%1$d downloads failed</item>
+    </plurals>
+    <string name="stash_failed_update_hint">The site changed; a newer yt-dlp usually fixes that</string>
+    <string name="stash_update_retry">Update &amp; retry</string>
+    <string name="stash_retry_all">Retry all</string>
+    <string name="stash_updating">Updating yt-dlp, then trying again …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">Stash the link you copied?</string>
+    <string name="clip_offer_hint">There’s a link on the clipboard</string>
+    <string name="clip_offer_dismiss">Not now</string>
+    <string name="set_offer_clip">Offer copied links</string>
+    <string name="set_offer_clip_hint">A link you copied in another app shows on the stash. Hamstr only reads the clipboard once you tap Stash.</string>
+    <string name="set_offer_clip_hint_desktop">A link you copied shows on the stash when you come back to Hamstr</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">Download at night</string>
+    <string name="set_night_hint">New downloads wait and start between %1$s and %2$s; running ones finish</string>
+    <string name="set_night_from">Night starts at</string>
+    <string name="set_night_to">Night ends at</string>
+    <string name="set_charging">Only while charging</string>
+    <string name="set_charging_hint">Downloads wait until the phone is on the charger</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">Following</string>
+    <string name="follow_add">Follow a channel or playlist</string>
+    <string name="follow_hint">Link to a channel or playlist</string>
+    <string name="follow_button">Follow</string>
+    <string name="follow_empty">Nothing followed yet. Follow a channel or playlist, and Hamstr stashes what comes out there by itself.</string>
+    <string name="follow_check_now">Look for new videos now</string>
+    <string name="follow_checking">Looking for new videos …</string>
+    <string name="follow_note">Hamstr looks every 4 hours and stashes at most %1$d new videos per look, in the format shown next to each. What was there when you followed stays out. Download at night holds them like any other download.</string>
+    <string name="follow_looking">Looking at it …</string>
+    <string name="follow_not_feed">Not a channel or playlist</string>
+    <string name="follow_failed">The last look didn’t work; Hamstr tries again</string>
+    <string name="follow_looked">looked %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="one">%1$d stashed</item>
+        <item quantity="other">%1$d stashed</item>
+    </plurals>
+    <string name="follow_as_video">New videos come as video · tap for audio</string>
+    <string name="follow_as_audio">New videos come as audio · tap for video</string>
+    <string name="follow_remove">Stop following</string>
+    <string name="follow_started">Following · new videos come by themselves</string>
+    <plurals name="follow_summary">
+        <item quantity="one">%1$d channel or playlist</item>
+        <item quantity="other">%1$d channels and playlists</item>
+    </plurals>
+    <string name="follow_summary_none">Stash new videos by themselves</string>
 </resources>

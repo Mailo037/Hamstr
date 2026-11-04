@@ -69,6 +69,11 @@ import app.hamstr.ui.ShareContent
 import app.hamstr.ui.SharingSheet
 import app.hamstr.ui.Overlay
 import app.hamstr.ui.StashScreen
+import app.hamstr.ui.ClipOffer
+import app.hamstr.data.Prefs
+import app.hamstr.data.Subscriptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalWindowInfo
 import app.hamstr.ui.TourOverlay
 import app.hamstr.ui.TourGate
 import app.hamstr.ui.components.DropMenu
@@ -127,6 +132,22 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     val sheetOpen = touring || adding || menuFor != null || sharing != null || playing != null || infoFor != null || requests.isNotEmpty()
 
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
+    // Back in the window with a link copied elsewhere: the stash offers it, once per link.
+    var clip by remember { mutableStateOf<ClipOffer?>(null) }
+    val focused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(focused) {
+        if (!focused || !Prefs.settings.value.offerClipboard) return@LaunchedEffect
+        val link = clipboardLink() ?: return@LaunchedEffect
+        val mark = link.hashCode().toLong()
+        if (mark == Prefs.settings.value.clipSeen || DownloadStore.tasks.value.any { it.url == link }) return@LaunchedEffect
+        Prefs.edit { it.copy(clipSeen = mark) }
+        clip = ClipOffer(link)
+    }
+    fun follow(link: String) {
+        Subscriptions.follow(link, Prefs.settings.value.mode) { Queue.feed(it) }
+        page = Page.Following
+        tab = Tab.Settings
+    }
     // Videos and songs play in Hamstr; documents and the like open in the system's app.
     fun play(t: DownloadTask) {
         if (playable(t)) playing = t else t.filePath?.let { Files.open(File(it)) }
@@ -172,6 +193,8 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                                         onHide = { list -> DownloadStore.setHidden(list.map { it.id }.toSet(), true) },
                                         onRetryEngine = Queue::retryStart,
                                         onShowAll = {},
+                                        clip = clip,
+                                        onClip = { take -> clip?.link?.takeIf { take }?.let(Queue::stash); clip = null },
                                     )
                                 }
                             }
@@ -196,6 +219,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                     onFiles = { adding = false; Files.pickAndImport() },
                     onSend = { adding = false; sharing = ShareContent(it) },
                     onStash = { link, choice -> Queue.stash(link, choice); adding = false; tab = Tab.Stash },
+                    onFollow = { adding = false; follow(it) },
                 )
             }
         }

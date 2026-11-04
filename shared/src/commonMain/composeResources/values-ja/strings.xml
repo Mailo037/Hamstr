@@ -818,4 +818,66 @@
     </plurals>
     <string name="backup_failed">バックアップを読み込めませんでした: %1$s</string>
     <string name="backup_save_failed">バックアップを保存できませんでした: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">夜を待機中 · %1$s に開始</string>
+    <string name="stage_waiting_charger">充電器を待機中</string>
+    <string name="status_next">次</string>
+    <plurals name="status_ahead">
+        <item quantity="other">前に %1$d 件</item>
+    </plurals>
+    <string name="stash_menu">オプションを表示</string>
+    <plurals name="stash_held_night">
+        <item quantity="other">%1$d 件のダウンロードが夜を待機中</item>
+    </plurals>
+    <string name="stash_held_night_hint">%1$s に開始、または今すぐ開始</string>
+    <plurals name="stash_held_charger">
+        <item quantity="other">%1$d 件のダウンロードが充電を待機中</item>
+    </plurals>
+    <string name="stash_held_charger_hint">スマホが充電されたら開始、または今すぐ開始</string>
+    <string name="stash_start_now">今すぐ開始</string>
+    <plurals name="stash_failed_all">
+        <item quantity="other">%1$d 件のダウンロードが失敗</item>
+    </plurals>
+    <string name="stash_failed_update_hint">サイトが変わりました。新しい yt-dlp で直ることが多いです</string>
+    <string name="stash_update_retry">更新して再試行</string>
+    <string name="stash_retry_all">すべて再試行</string>
+    <string name="stash_updating">yt-dlp を更新してから再試行しています …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">コピーしたリンクをストックしますか？</string>
+    <string name="clip_offer_hint">クリップボードにリンクがあります</string>
+    <string name="clip_offer_dismiss">今はしない</string>
+    <string name="set_offer_clip">コピーしたリンクを提案</string>
+    <string name="set_offer_clip_hint">別のアプリでコピーしたリンクがストックに表示されます。Hamstr はストックをタップするまでクリップボードを読みません。</string>
+    <string name="set_offer_clip_hint_desktop">Hamstr に戻ると、コピーしたリンクがストックに表示されます</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">夜にダウンロード</string>
+    <string name="set_night_hint">新しいダウンロードは %1$s から %2$s の間に開始するまで待機します。実行中のものは完了します</string>
+    <string name="set_night_from">夜の開始時刻</string>
+    <string name="set_night_to">夜の終了時刻</string>
+    <string name="set_charging">充電中のみ</string>
+    <string name="set_charging_hint">スマホが充電器に接続されるまでダウンロードを待機します</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">フォロー中</string>
+    <string name="follow_add">チャンネルまたはプレイリストをフォロー</string>
+    <string name="follow_hint">チャンネルまたはプレイリストのリンク</string>
+    <string name="follow_button">フォロー</string>
+    <string name="follow_empty">まだフォローはありません。チャンネルかプレイリストをフォローすると、Hamstr がそこに出てきたものを自動でストックします。</string>
+    <string name="follow_check_now">今すぐ新しい動画を確認</string>
+    <string name="follow_checking">新しい動画を確認中 …</string>
+    <string name="follow_note">Hamstr は 4 時間ごとに確認し、確認 1 回につき新しい動画を最大 %1$d 本ストックします。形式は各動画の横に表示されます。フォローした時点にあった動画は含まれません。夜にダウンロードを有効にすると、他のダウンロードと同じく待機します。</string>
+    <string name="follow_looking">確認中 …</string>
+    <string name="follow_not_feed">チャンネルでもプレイリストでもありません</string>
+    <string name="follow_failed">前回の確認に失敗しました。Hamstr は再試行します</string>
+    <string name="follow_looked">確認: %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="other">%1$d 件ストック済み</item>
+    </plurals>
+    <string name="follow_as_video">新しい動画は動画として届きます · タップで音声に</string>
+    <string name="follow_as_audio">新しい動画は音声として届きます · タップで動画に</string>
+    <string name="follow_remove">フォローをやめる</string>
+    <string name="follow_started">フォロー中 · 新しい動画は自動で届きます</string>
+    <plurals name="follow_summary">
+        <item quantity="other">%1$d 件のチャンネルとプレイリスト</item>
+    </plurals>
+    <string name="follow_summary_none">新しい動画を自動でストック</string>
 </resources>

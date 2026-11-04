@@ -38,9 +38,15 @@ import app.hamstr.data.DownloadFiles
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Mode
+import app.hamstr.data.Downloads
 import app.hamstr.data.Prefs
+import app.hamstr.data.Schedule
 import app.hamstr.data.Stage
 import app.hamstr.data.Status
+import app.hamstr.data.Subscriptions
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import kotlinx.coroutines.MainScope
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
@@ -73,7 +79,9 @@ import kotlin.coroutines.resume
  * user-initiated data transfer job ([DownloadJob]), which Android doesn't cut off after six
  * hours a day. Pause = stop the yt-dlp process (its .part file stays); resume runs it again.
  * Without a usable network, queued downloads wait and start on their own once it's back;
- * a connection that breaks mid-download is retried a few times with growing pauses.
+ * a connection that breaks mid-download is retried a few times with growing pauses. What the
+ * schedule holds (Schedule: the night, the charger) waits too; for the night the service stops
+ * and an alarm (Wakeups) brings it back, which also looks at followed channels (Subscriptions).
  */
 class DownloadService : Service() {
     override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
@@ -89,6 +97,16 @@ class DownloadService : Service() {
     @Volatile private var halted = false
     // The transfer job that holds the queue now; the service then runs bound, without a foreground service.
     @Volatile private var host: DownloadJob? = null
+    // Followed channels are being looked at; the service stays until the new videos are queued.
+    @Volatile private var lookingAtFeeds = false
+
+    /** Plugged in, the downloads that wait for the charger go; unplugged, running ones wait again. */
+    private val power = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (!Prefs.settings.value.chargingOnly) return
+            mainHandler.post { if (intent.action == Intent.ACTION_POWER_CONNECTED) wake() else holdForCharger() }
+        }
+    }
 
     /** What the job binds to. */
     inner class Local : Binder() {
@@ -107,6 +125,10 @@ class DownloadService : Service() {
                 .drop(1)
                 .collect { (_, allowed) -> mainHandler.post { if (!allowed) holdRunning() else wake() } }
         }
+        ContextCompat.registerReceiver(
+            this, power, IntentFilter().apply { addAction(Intent.ACTION_POWER_CONNECTED); addAction(Intent.ACTION_POWER_DISCONNECTED) },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -128,8 +150,33 @@ class DownloadService : Service() {
             ACTION_RESUME -> id?.let { DownloadStore.update(it, block = ::resumed) }
             ACTION_START -> DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage == Stage.PausedBySystem }
                 .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
+            // The alarm, a changed schedule or "Look now": held downloads ask the schedule again.
+            ACTION_WAKE -> {
+                DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage?.held == true }
+                    .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
+                lookAtFeeds(force = id == FORCE)
+            }
         }
         pump()
+    }
+
+    /** Looks at the followed channels that are due ([force]: all of them) and queues what is new. */
+    private fun lookAtFeeds(force: Boolean) {
+        if (lookingAtFeeds || !(force || Subscriptions.due()) || !Network.state.value.online) return
+        lookingAtFeeds = true
+        scope.launch {
+            try {
+                notifyProgress(force = true)
+                Subscriptions.check({ Engine.feed(it) }, force) { tasks -> tasks.forEach(DownloadStore::add) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("HamstrService", "Could not look at the followed channels", e)
+            } finally {
+                lookingAtFeeds = false
+                mainHandler.post { pump() }
+            }
+        }
     }
 
     /** A transfer job took the queue over: from now on no foreground service, and no daily limit. */
@@ -183,10 +230,13 @@ class DownloadService : Service() {
             Network.state.value.online -> Stage.WaitingForWifi
             else -> Stage.WaitingForNetwork
         }
+        val charging = Wakeups.charging(this)
         val queued = DownloadStore.tasks.value.filter { it.status == Status.Queued && it.id !in jobs && it.id !in stopping }.reversed() // oldest first
         for (task in queued) {
-            if (waiting != null) {
-                if (task.stage != waiting) DownloadStore.update(task.id, persist = false) { it.copy(stage = waiting) }
+            // The schedule first: waiting for the night says more than waiting for Wi-Fi.
+            val stage = Schedule.hold(task, s, charging, now) ?: waiting
+            if (stage != null) {
+                if (task.stage != stage) DownloadStore.update(task.id, persist = false) { it.copy(stage = stage) }
                 continue
             }
             if (task.retryAt > now) continue
@@ -213,6 +263,7 @@ class DownloadService : Service() {
                 ?.let { mainHandler.postDelayed(retryTick, it - now + 50) }
         }
         notifyProgress(force = true)
+        Wakeups.plan(this)
         if (jobs.isEmpty() && stopping.isEmpty()) finishIfIdle()
     }
 
@@ -220,6 +271,13 @@ class DownloadService : Service() {
     private fun wake() {
         DownloadStore.tasks.value.filter { it.status == Status.Queued && (it.stage?.waiting == true && it.stage != Stage.PausedBySystem) }
             .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null, retryAt = 0, attempts = 0) } }
+        pump()
+    }
+
+    /** Off the charger with "Only while charging": running downloads stop and wait for it again. */
+    private fun holdForCharger() {
+        synchronized(this) { jobs.keys.toList() }.filter { DownloadStore.get(it)?.anytime != true }
+            .forEach { stop(it, Status.Queued, Stage.WaitingForCharger) }
         pump()
     }
 
@@ -416,8 +474,9 @@ class DownloadService : Service() {
         // newly started foreground service before its start command is handled.
         mainHandler.post {
             synchronized(this) {
-                val idle = scope.isActive && jobs.isEmpty() && stopping.isEmpty() &&
-                    DownloadStore.tasks.value.none { it.status == Status.Queued && it.stage != Stage.PausedBySystem }
+                // What waits for the night has the alarm to come back with; no service sits there for hours.
+                val idle = scope.isActive && jobs.isEmpty() && stopping.isEmpty() && !lookingAtFeeds &&
+                    DownloadStore.tasks.value.none { it.status == Status.Queued && it.stage != Stage.PausedBySystem && it.stage != Stage.WaitingForNight }
                 val job = host
                 when {
                     !idle -> {}
@@ -458,6 +517,7 @@ class DownloadService : Service() {
     override fun onDestroy() {
         if (current === this) current = null
         mainHandler.removeCallbacksAndMessages(null)
+        runCatching { unregisterReceiver(power) }
         synchronized(this) { jobs.keys.toList() }.forEach { YoutubeDL.getInstance().destroyProcessById(it); Cheek.destroy(it) }
         scope.cancel()
         super.onDestroy()
@@ -576,6 +636,10 @@ class DownloadService : Service() {
         const val ACTION_PAUSE_ALL = "app.hamstr.PAUSE_ALL"
         const val ACTION_RESUME = "app.hamstr.RESUME"
         const val ACTION_CANCEL = "app.hamstr.CANCEL"
+        /** The alarm (Wakeups): the night began or a followed channel is due; with [FORCE] all channels are looked at. */
+        const val ACTION_WAKE = "app.hamstr.WAKE_QUEUE"
+        const val FORCE = "force"
+        private val controlScope = MainScope()
         const val EXTRA_ID = "id"
         const val CH_PROGRESS = "progress"
         const val CH_DONE = "done"
@@ -717,6 +781,7 @@ class DownloadService : Service() {
                     b.setContentTitle(stageText(context, t))
                         .setContentText(if (queued.size == 1) context.getString(R.string.notif_waiting_one) else context.getString(R.string.notif_waiting_many, queued.size))
                 }
+                Subscriptions.checking.value -> b.setContentTitle("Hamstr").setContentText(context.getString(R.string.follow_checking)).setProgress(0, 0, true)
                 else -> b.setContentTitle("Hamstr").setContentText(context.getString(R.string.notif_preparing)).setProgress(0, 0, true)
             }
             return b.build()
@@ -753,6 +818,19 @@ class DownloadService : Service() {
             override fun pause(id: String) = send(context, ACTION_PAUSE, id)
             override fun resume(id: String) = send(context, ACTION_RESUME, id)
             override fun cancel(id: String) = send(context, ACTION_CANCEL, id)
+
+            override fun retry(ids: List<String>, updateFirst: Boolean) {
+                if (!updateFirst) return ids.forEach { resume(it) }
+                controlScope.launch {
+                    Downloads.updating.value = true
+                    try { Engine.update(context) } finally { Downloads.updating.value = false }
+                    ids.forEach { resume(it) }
+                }
+            }
+
+            override suspend fun feed(url: String) = Engine.feed(url)
+
+            override fun checkFeeds() = send(context, ACTION_WAKE, FORCE)
         }
 
         fun mimeOf(file: File): String =

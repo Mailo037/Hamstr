@@ -20,6 +20,13 @@ import app.hamstr.data.Base
 import app.hamstr.data.DownloadEngine
 import app.hamstr.data.Mode
 import app.hamstr.data.Prefs
+import app.hamstr.data.Schedule
+import app.hamstr.Platform
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import app.hamstr.data.UiSize
 import app.hamstr.data.heightLabel
 import app.hamstr.res.*
@@ -53,7 +60,50 @@ fun SettingBlock(label: String, content: @Composable ColumnScope.() -> Unit) =
 /** A setting that is on or off; tapping the row flips it. */
 @Composable
 fun FxRow(title: String, subtitle: String, on: Boolean, set: (Boolean) -> Unit) {
-    SettingRow(title, subtitle = subtitle, onClick = { set(!on) }) { HSwitch(on, set) }
+    SettingRow(title, subtitle = subtitle, onClick = { set(!on) }, checked = on) { HSwitch(on, set) }
+}
+
+/** Where the night starts and ends, on the hour: the evening and the small hours. */
+private val NIGHT_STARTS = listOf(21, 22, 23, 0, 1, 2, 3).map { it * 60 }
+private val NIGHT_ENDS = listOf(5, 6, 7, 8, 9).map { it * 60 }
+
+/**
+ * Downloads at night only, and when; on the phone also only while it charges ([charger]).
+ * Rows for a [Group]; what waits says so in the stash, with "Start now".
+ */
+@Composable
+fun ScheduleRows(charger: Boolean) {
+    val s by Prefs.settings.collectAsState()
+    FxRow(
+        stringResource(Res.string.set_night),
+        stringResource(Res.string.set_night_hint, Schedule.clock(s.nightFrom), Schedule.clock(s.nightTo)),
+        s.nightOnly,
+    ) { v -> Prefs.edit { it.copy(nightOnly = v) } }
+    AnimatedVisibility(s.nightOnly, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+        Column {
+            SettingBlock(stringResource(Res.string.set_night_from)) {
+                Chips(NIGHT_STARTS, s.nightFrom, { Schedule.clock(it) }) { m -> Prefs.edit { it.copy(nightFrom = m) } }
+            }
+            SettingBlock(stringResource(Res.string.set_night_to)) {
+                Chips(NIGHT_ENDS, s.nightTo, { Schedule.clock(it) }) { m -> Prefs.edit { it.copy(nightTo = m) } }
+            }
+        }
+    }
+    if (charger) {
+        Divider()
+        FxRow(stringResource(Res.string.set_charging), stringResource(Res.string.set_charging_hint), s.chargingOnly) { v -> Prefs.edit { it.copy(chargingOnly = v) } }
+    }
+}
+
+/** Whether a link copied in another app is offered on the stash. */
+@Composable
+fun ClipboardRow() {
+    val s by Prefs.settings.collectAsState()
+    FxRow(
+        stringResource(Res.string.set_offer_clip),
+        stringResource(if (Platform.desktop) Res.string.set_offer_clip_hint_desktop else Res.string.set_offer_clip_hint),
+        s.offerClipboard,
+    ) { v -> Prefs.edit { it.copy(offerClipboard = v) } }
 }
 
 /** Accent, background and size, the start of Appearance. */

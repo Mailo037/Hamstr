@@ -818,4 +818,66 @@
     </plurals>
     <string name="backup_failed">백업을 읽을 수 없어요: %1$s</string>
     <string name="backup_save_failed">백업을 저장할 수 없어요: %1$s</string>
+    <!-- Waiting, in words: the queue's line, the night and the charger. -->
+    <string name="stage_waiting_night">밤을 기다리는 중 · %1$s에 시작</string>
+    <string name="stage_waiting_charger">충전기를 기다리는 중</string>
+    <string name="status_next">다음</string>
+    <plurals name="status_ahead">
+        <item quantity="other">앞에 %1$d개</item>
+    </plurals>
+    <string name="stash_menu">옵션 보기</string>
+    <plurals name="stash_held_night">
+        <item quantity="other">다운로드 %1$d개가 밤을 기다리는 중</item>
+    </plurals>
+    <string name="stash_held_night_hint">%1$s에 시작하거나, 원하면 지금 시작</string>
+    <plurals name="stash_held_charger">
+        <item quantity="other">다운로드 %1$d개가 충전기를 기다리는 중</item>
+    </plurals>
+    <string name="stash_held_charger_hint">휴대폰이 충전되면 시작하거나, 원하면 지금 시작</string>
+    <string name="stash_start_now">지금 시작</string>
+    <plurals name="stash_failed_all">
+        <item quantity="other">다운로드 %1$d개 실패</item>
+    </plurals>
+    <string name="stash_failed_update_hint">사이트가 바뀌었어요. 보통 최신 yt-dlp로 해결돼요</string>
+    <string name="stash_update_retry">업데이트 &amp; 다시 시도</string>
+    <string name="stash_retry_all">모두 다시 시도</string>
+    <string name="stash_updating">yt-dlp를 업데이트한 뒤 다시 시도하는 중 …</string>
+    <!-- A link copied in another app, offered on the stash. -->
+    <string name="clip_offer_title">복사한 링크를 보관할까요?</string>
+    <string name="clip_offer_hint">클립보드에 링크가 있어요</string>
+    <string name="clip_offer_dismiss">나중에</string>
+    <string name="set_offer_clip">복사한 링크 제안</string>
+    <string name="set_offer_clip_hint">다른 앱에서 복사한 링크가 보관함에 표시돼요. Hamstr는 보관을 누르기 전까지 클립보드를 읽지 않아요.</string>
+    <string name="set_offer_clip_hint_desktop">복사한 링크는 Hamstr로 돌아올 때 보관함에 표시돼요</string>
+    <!-- Downloading at night, and only on the charger. -->
+    <string name="set_night">밤에 다운로드</string>
+    <string name="set_night_hint">새 다운로드는 %1$s부터 %2$s 사이에 시작될 때까지 기다려요. 진행 중인 것은 끝까지 받아요</string>
+    <string name="set_night_from">밤 시작 시간</string>
+    <string name="set_night_to">밤 종료 시간</string>
+    <string name="set_charging">충전 중에만</string>
+    <string name="set_charging_hint">휴대폰이 충전기에 연결될 때까지 다운로드를 기다려요</string>
+    <!-- Following channels and playlists. -->
+    <string name="page_following">구독</string>
+    <string name="follow_add">채널이나 재생목록 구독하기</string>
+    <string name="follow_hint">채널이나 재생목록 링크</string>
+    <string name="follow_button">구독</string>
+    <string name="follow_empty">아직 구독한 항목이 없어요. 채널이나 재생목록을 구독하면 Hamstr가 새로 올라오는 것을 자동으로 보관해요.</string>
+    <string name="follow_check_now">지금 새 영상 확인</string>
+    <string name="follow_checking">새 영상을 확인하는 중 …</string>
+    <string name="follow_note">Hamstr는 4시간마다 확인하며, 확인할 때마다 새 영상을 최대 %1$d개 보관해요. 형식은 각 영상 옆에 표시돼요. 구독했을 때 이미 있던 영상은 제외돼요. 밤에 다운로드를 켜면 다른 다운로드처럼 대기해요.</string>
+    <string name="follow_looking">확인하는 중 …</string>
+    <string name="follow_not_feed">채널이나 재생목록이 아니에요</string>
+    <string name="follow_failed">마지막 확인이 실패했어요. Hamstr가 다시 시도할 거예요</string>
+    <string name="follow_looked">확인 %1$s</string>
+    <plurals name="follow_stashed">
+        <item quantity="other">%1$d개 보관됨</item>
+    </plurals>
+    <string name="follow_as_video">새 영상은 동영상으로 와요 · 눌러서 오디오로</string>
+    <string name="follow_as_audio">새 영상은 오디오로 와요 · 눌러서 동영상으로</string>
+    <string name="follow_remove">구독 취소</string>
+    <string name="follow_started">구독 중 · 새 영상은 자동으로 와요</string>
+    <plurals name="follow_summary">
+        <item quantity="other">채널 및 재생목록 %1$d개</item>
+    </plurals>
+    <string name="follow_summary_none">새 영상 자동 보관</string>
 </resources>
