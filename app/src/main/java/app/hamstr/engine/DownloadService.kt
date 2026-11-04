@@ -436,6 +436,7 @@ class DownloadService : Service() {
                 durationSec = metadata.optDouble("duration", it.durationSec.toDouble()).toInt(),
                 uploader = string("uploader") ?: string("channel") ?: it.uploader,
                 mediaKey = it.mediaKey ?: key,
+                channelUrl = string("channel_url") ?: string("uploader_url") ?: it.channelUrl,
             )
         }
         notifyProgress(force = true)
@@ -670,6 +671,7 @@ class DownloadService : Service() {
                     choice = choice,
                     uploader = info?.uploader,
                     mediaKey = info?.key,
+                    channelUrl = info?.channelUrl,
                 ),
             )
             send(context, ACTION_START)
@@ -698,7 +700,7 @@ class DownloadService : Service() {
                 DownloadStore.add(
                     DownloadTask(
                         url = e.url, title = e.title, thumbnail = e.thumbnail, source = playlist.source, durationSec = e.durationSec,
-                        choice = choice, uploader = e.uploader, mediaKey = e.key,
+                        choice = choice, uploader = e.uploader, mediaKey = e.key, channelUrl = playlist.channelUrl,
                         // Kept in playlist order, which is also the order they start in.
                         createdAt = now + i, group = group, groupTitle = group?.let { playlist.title },
                     ),
@@ -831,6 +833,8 @@ class DownloadService : Service() {
             override suspend fun feed(url: String) = Engine.feed(url)
 
             override fun checkFeeds() = send(context, ACTION_WAKE, FORCE)
+
+            override suspend fun channelOf(t: DownloadTask) = t.channelUrl ?: runCatching { Engine.info(t.url).channelUrl }.getOrNull()
         }
 
         fun mimeOf(file: File): String =

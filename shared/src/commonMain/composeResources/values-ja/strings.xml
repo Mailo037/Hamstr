@@ -880,4 +880,13 @@
         <item quantity="other">%1$d 件のチャンネルとプレイリスト</item>
     </plurals>
     <string name="follow_summary_none">新しい動画を自動でストック</string>
+    <string name="follow_finding">チャンネルを探しています …</string>
+    <string name="follow_no_channel">Hamstr でこのチャンネルが見つかりませんでした</string>
+    <string name="follow_sheet_hint">フォローすると、そこに出てくるものは自動でストックされます</string>
+    <string name="follow_new_as">新しい動画の届け方</string>
+    <string name="follow_share">リンクを共有</string>
+    <string name="follow_browse">動画を見て選ぶ</string>
+    <string name="follow_offer_channel">これはチャンネルです</string>
+    <string name="follow_offer_playlist">これはプレイリストです</string>
+    <string name="follow_unfollowed">%1$s のフォローを解除しました</string>
 </resources>

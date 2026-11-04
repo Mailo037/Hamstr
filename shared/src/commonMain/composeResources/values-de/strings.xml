@@ -898,4 +898,13 @@
         <item quantity="other">%1$d Kanäle und Playlists</item>
     </plurals>
     <string name="follow_summary_none">Neue Videos automatisch hamstern</string>
+    <string name="follow_finding">Kanal wird gesucht …</string>
+    <string name="follow_no_channel">Hamstr hat dafür keinen Kanal gefunden</string>
+    <string name="follow_sheet_hint">Folgen, dann wird alles, was dort erscheint, von allein gehamstert</string>
+    <string name="follow_new_as">Neue Videos kommen als</string>
+    <string name="follow_share">Link teilen</string>
+    <string name="follow_browse">Videos ansehen und welche auswählen</string>
+    <string name="follow_offer_channel">Das ist ein Kanal</string>
+    <string name="follow_offer_playlist">Das ist eine Playlist</string>
+    <string name="follow_unfollowed">Abo von %1$s beendet</string>
 </resources>

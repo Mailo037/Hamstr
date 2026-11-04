@@ -880,4 +880,13 @@
         <item quantity="other">%1$d 个频道和播放列表</item>
     </plurals>
     <string name="follow_summary_none">自动囤下新视频</string>
+    <string name="follow_finding">正在查找频道 …</string>
+    <string name="follow_no_channel">Hamstr 找不到对应的频道</string>
+    <string name="follow_sheet_hint">关注后，那里出现的内容会自动囤下</string>
+    <string name="follow_new_as">新视频的形式</string>
+    <string name="follow_share">分享链接</string>
+    <string name="follow_browse">浏览其视频并挑选</string>
+    <string name="follow_offer_channel">这是一个频道</string>
+    <string name="follow_offer_playlist">这是一个播放列表</string>
+    <string name="follow_unfollowed">已取消关注 %1$s</string>
 </resources>

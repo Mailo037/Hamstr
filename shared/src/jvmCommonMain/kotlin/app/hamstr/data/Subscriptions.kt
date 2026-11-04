@@ -119,6 +119,19 @@ object Subscriptions {
 
     fun keyOf(e: PlaylistEntry) = e.key ?: e.url
 
+    /** "AGONY - Videos", as yt-dlp names a channel's tab, is AGONY. */
+    fun cleanTitle(title: String) =
+        title.replace(Regex("\\s+-\\s+(Videos|Shorts|Live|Streams|Home|Releases|Playlists)$", RegexOption.IGNORE_CASE), "")
+
+    /** The followed one behind [url], however the link was written. */
+    fun of(url: String?): Subscription? = url?.let(::feedUrl)?.let { link -> _all.value.firstOrNull { it.url == link } }
+
+    /** Follows [sub] again, at its old place (Undo). */
+    fun restore(sub: Subscription, at: Int) {
+        _all.update { list -> if (list.any { it.url == sub.url }) list else list.toMutableList().apply { add(at.coerceIn(0, size), sub) } }
+        save()
+    }
+
     /**
      * Follows [url]: it shows at once, and once [reader] has looked at it, it carries its name and
      * what is there already counts as seen. A link that isn't a channel or playlist stays with
@@ -139,7 +152,7 @@ object Subscriptions {
                             val entries = info.entries
                             if (entries == null) s.copy(pending = false, checkedAt = System.currentTimeMillis(), error = NOT_A_FEED)
                             else s.copy(
-                                title = info.title.takeIf { it != link } ?: info.uploader ?: link,
+                                title = cleanTitle(info.title).takeIf { it != link } ?: info.uploader ?: link,
                                 thumbnail = info.thumbnail ?: entries.firstNotNullOfOrNull { it.thumbnail },
                                 seen = entries.mapTo(LinkedHashSet()) { keyOf(it) },
                                 pending = false, checkedAt = System.currentTimeMillis(), error = null,
@@ -234,7 +247,7 @@ object Subscriptions {
         return entries.mapIndexed { i, e ->
             DownloadTask(
                 url = e.url, title = e.title, thumbnail = e.thumbnail, source = e.key?.substringBefore(':'),
-                durationSec = e.durationSec, choice = choice, uploader = e.uploader, mediaKey = e.key,
+                durationSec = e.durationSec, choice = choice, uploader = e.uploader, mediaKey = e.key, channelUrl = sub.url,
                 // In the order they are listed, which is also the order they start in.
                 createdAt = now + i, group = group, groupTitle = group?.let { sub.title },
             )
@@ -259,7 +272,7 @@ object Subscriptions {
             runCatching {
                 val seen = o.optJSONArray("seen")
                 Subscription(
-                    id = o.getString("id"), url = o.getString("url"), title = o.optString("title", o.getString("url")),
+                    id = o.getString("id"), url = o.getString("url"), title = cleanTitle(o.optString("title", o.getString("url"))),
                     thumbnail = if (o.isNull("thumbnail")) null else o.optString("thumbnail").ifEmpty { null },
                     mode = runCatching { Mode.valueOf(o.optString("mode")) }.getOrDefault(Mode.Video),
                     seen = (0 until (seen?.length() ?: 0)).mapTo(LinkedHashSet()) { seen!!.getString(it) },

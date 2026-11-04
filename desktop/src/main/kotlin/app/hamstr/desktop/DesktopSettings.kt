@@ -85,7 +85,7 @@ internal enum class Page(val title: StringResource, val icon: DrawableResource) 
 
 /** A settings page, the same categories as on the phone; the side bar lists them. */
 @Composable
-internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit, onTour: () -> Unit, onDevice: (String) -> Unit) {
+internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit, onTour: () -> Unit, onDevice: (String) -> Unit, onFollowing: (app.hamstr.data.Subscription) -> Unit = {}) {
     AnimatedContent(page, Modifier.fillMaxSize(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "page") { p ->
         val scroll = rememberScrollState()
         // A readable column in the middle of the window, its title over it, like the stash.
@@ -100,7 +100,7 @@ internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit
                     }
                     Page.Motion -> MotionPage()
                     Page.Downloads -> DownloadsPage()
-                    Page.Following -> FollowingSettings()
+                    Page.Following -> FollowingSettings(onOpen = onFollowing)
                     // The computer plays one file at a time: no queue to crossfade.
                     Page.Playback -> Group { EqualizerBlock() }
                     Page.Engine -> EnginePage(engine)

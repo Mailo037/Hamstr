@@ -898,4 +898,13 @@
         <item quantity="other">%1$d kanalen en playlists</item>
     </plurals>
     <string name="follow_summary_none">Nieuwe video’s automatisch hamsteren</string>
+    <string name="follow_finding">Kanaal zoeken …</string>
+    <string name="follow_no_channel">Hamstr kon er geen kanaal voor vinden</string>
+    <string name="follow_sheet_hint">Volg het, dan wordt wat er uitkomt vanzelf opgeslagen</string>
+    <string name="follow_new_as">Nieuwe video’s komen als</string>
+    <string name="follow_share">Link delen</string>
+    <string name="follow_browse">Bekijk de video’s en kies er een paar</string>
+    <string name="follow_offer_channel">Dit is een kanaal</string>
+    <string name="follow_offer_playlist">Dit is een afspeellijst</string>
+    <string name="follow_unfollowed">Gevolgd %1$s gestopt</string>
 </resources>

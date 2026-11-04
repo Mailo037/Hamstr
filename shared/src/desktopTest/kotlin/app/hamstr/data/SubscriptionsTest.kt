@@ -77,6 +77,32 @@ class SubscriptionsTest {
     }
 
     @Test
+    fun linksToChannelsAndPlaylistsAreRecognised() {
+        val channel = app.hamstr.engine.MediaLinks.Feed.Channel
+        val playlist = app.hamstr.engine.MediaLinks.Feed.Playlist
+        assertEquals(channel, app.hamstr.engine.MediaLinks.feed("https://www.youtube.com/@agony"))
+        assertEquals(channel, app.hamstr.engine.MediaLinks.feed("https://m.youtube.com/@agony/videos"))
+        assertEquals(channel, app.hamstr.engine.MediaLinks.feed("https://music.youtube.com/channel/UC123"))
+        assertEquals(playlist, app.hamstr.engine.MediaLinks.feed("https://www.youtube.com/playlist?list=PL1"))
+        assertEquals(channel, app.hamstr.engine.MediaLinks.feed("https://soundcloud.com/someone"))
+        assertEquals(playlist, app.hamstr.engine.MediaLinks.feed("https://soundcloud.com/someone/sets/summer"))
+        assertEquals(channel, app.hamstr.engine.MediaLinks.feed("https://someone.bandcamp.com/"))
+        assertEquals(channel, app.hamstr.engine.MediaLinks.feed("https://www.tiktok.com/@someone"))
+        // One video or song is not a feed.
+        assertEquals(null, app.hamstr.engine.MediaLinks.feed("https://www.youtube.com/watch?v=abc&list=PL1"))
+        assertEquals(null, app.hamstr.engine.MediaLinks.feed("https://soundcloud.com/someone/a-song"))
+        assertEquals(null, app.hamstr.engine.MediaLinks.feed("https://www.tiktok.com/@someone/video/123"))
+        assertEquals(null, app.hamstr.engine.MediaLinks.feed("https://soundcloud.com/discover"))
+    }
+
+    @Test
+    fun aChannelTabIsNamedAfterTheChannel() {
+        assertEquals("AGONY", Subscriptions.cleanTitle("AGONY - Videos"))
+        assertEquals("Lofi Garden", Subscriptions.cleanTitle("Lofi Garden - Shorts"))
+        assertEquals("Up - Down", Subscriptions.cleanTitle("Up - Down"))
+    }
+
+    @Test
     fun followedChannelsSurviveABackupRoundTrip() {
         val sub = Subscription(url = "https://www.youtube.com/@someone/videos", title = "Someone", mode = Mode.Audio, seen = setOf("Youtube:a"), stashed = 3)
         val back = Subscriptions.decode(Subscriptions.encode(listOf(sub))).single()

@@ -880,4 +880,13 @@
         <item quantity="other">채널 및 재생목록 %1$d개</item>
     </plurals>
     <string name="follow_summary_none">새 영상 자동 보관</string>
+    <string name="follow_finding">채널을 찾는 중 …</string>
+    <string name="follow_no_channel">Hamstr에서 이 채널을 찾지 못했어요</string>
+    <string name="follow_sheet_hint">구독하면 거기서 올라오는 것들이 자동으로 보관돼요</string>
+    <string name="follow_new_as">새 영상은 다음 형태로 와요</string>
+    <string name="follow_share">링크 공유</string>
+    <string name="follow_browse">영상을 둘러보고 골라 담기</string>
+    <string name="follow_offer_channel">이것은 채널이에요</string>
+    <string name="follow_offer_playlist">이것은 재생목록이에요</string>
+    <string name="follow_unfollowed">%1$s 구독을 취소했어요</string>
 </resources>

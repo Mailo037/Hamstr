@@ -934,4 +934,13 @@
         <item quantity="other">%1$d kanałów i playlist</item>
     </plurals>
     <string name="follow_summary_none">Zachomikuj nowe filmy automatycznie</string>
+    <string name="follow_finding">Szukam kanału …</string>
+    <string name="follow_no_channel">Hamstr nie znalazł dla tego kanału</string>
+    <string name="follow_sheet_hint">Obserwuj, a to, co się tam pojawi, zachomikuje się samo</string>
+    <string name="follow_new_as">Nowe filmy przychodzą jako</string>
+    <string name="follow_share">Udostępnij link</string>
+    <string name="follow_browse">Zobacz jego filmy i wybierz kilka</string>
+    <string name="follow_offer_channel">To jest kanał</string>
+    <string name="follow_offer_playlist">To jest playlista</string>
+    <string name="follow_unfollowed">Przestano obserwować: %1$s</string>
 </resources>

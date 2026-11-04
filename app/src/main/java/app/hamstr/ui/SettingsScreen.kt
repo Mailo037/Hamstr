@@ -160,6 +160,8 @@ fun SettingsScreen(
     onTour: () -> Unit,
     onDevice: (String) -> Unit,
     onMenu: (DownloadTask) -> Unit,
+    onFollowing: (app.hamstr.data.Subscription) -> Unit = {},
+    onUnfollowed: (app.hamstr.data.Subscription, Int) -> Unit = { _, _ -> },
 ) {
     var page by rememberSaveable { mutableStateOf<Page?>(null) }
     var highlight by rememberSaveable { mutableStateOf<String?>(null) }
@@ -179,7 +181,7 @@ fun SettingsScreen(
     ) { p ->
         if (p == null) Root(contentPadding) { target, setting -> page = target; highlight = setting }
         else CompositionLocalProvider(LocalSettingHighlight provides highlight) {
-            SubPage(p, contentPadding, onUpdate, onDelete, onHint, onTour, onDevice, onMenu, onBack = { page = null; highlight = null })
+            SubPage(p, contentPadding, onUpdate, onDelete, onHint, onTour, onDevice, onMenu, onFollowing, onUnfollowed, onBack = { page = null; highlight = null })
         }
     }
 }
@@ -284,6 +286,8 @@ private fun SubPage(
     onTour: () -> Unit,
     onDevice: (String) -> Unit,
     onMenu: (DownloadTask) -> Unit,
+    onFollowing: (app.hamstr.data.Subscription) -> Unit,
+    onUnfollowed: (app.hamstr.data.Subscription, Int) -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -336,7 +340,7 @@ private fun SubPage(
             Page.Appearance -> AppearancePage()
             Page.Motion -> MotionPage()
             Page.Downloads -> DownloadsPage()
-            Page.Following -> app.hamstr.ui.FollowingSettings()
+            Page.Following -> app.hamstr.ui.FollowingSettings(onFollowing, onUnfollowed)
             Page.Queue -> QueuePage()
             Page.Playback -> PlaybackPage()
             Page.Engine -> EnginePage()

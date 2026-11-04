@@ -95,6 +95,8 @@ data class DownloadTask(
     val hashedModified: Long = 0,
     // Started now on purpose: the night and the charger (Schedule) don't hold it back.
     val anytime: Boolean = false,
+    // The channel or artist page it came from, to follow it from the player.
+    val channelUrl: String? = null,
     // Live only, never saved: what happens besides fetching bytes, and the retry state.
     val stage: Stage? = null,
     val attempts: Int = 0,
@@ -291,6 +293,7 @@ object DownloadStore {
         put("uploader", t.uploader); put("mediaKey", t.mediaKey); put("hidden", t.hidden)
         put("sha256", t.sha256); put("hashedSize", t.hashedSize); put("hashedModified", t.hashedModified)
         put("anytime", t.anytime)
+        put("channelUrl", t.channelUrl)
     }
 
     private fun fromJson(o: JSONObject) = DownloadTask(
@@ -330,6 +333,7 @@ object DownloadStore {
         hashedSize = o.optLong("hashedSize"),
         hashedModified = o.optLong("hashedModified"),
         anytime = o.optBoolean("anytime"),
+        channelUrl = o.optStringOrNull("channelUrl"),
     )
 
     private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }

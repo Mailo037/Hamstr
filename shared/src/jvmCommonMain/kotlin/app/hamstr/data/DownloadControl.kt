@@ -31,6 +31,9 @@ interface DownloadControl {
 
     /** Looks at every followed channel now ([Subscriptions.check] with force) and stashes what is new. */
     fun checkFeeds()
+
+    /** The channel or artist page of a download, asking yt-dlp when the download doesn't know it. */
+    suspend fun channelOf(t: DownloadTask): String?
 }
 
 object Downloads {

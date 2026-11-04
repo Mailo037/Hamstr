@@ -898,4 +898,13 @@
         <item quantity="other">%1$d canales y listas de reproducción</item>
     </plurals>
     <string name="follow_summary_none">Guardar vídeos nuevos automáticamente</string>
+    <string name="follow_finding">Buscando el canal …</string>
+    <string name="follow_no_channel">Hamstr no encontró un canal para eso</string>
+    <string name="follow_sheet_hint">Síguelo y lo que salga allí se guarda solo</string>
+    <string name="follow_new_as">Los vídeos nuevos llegan como</string>
+    <string name="follow_share">Compartir el enlace</string>
+    <string name="follow_browse">Ver sus vídeos y elegir algunos</string>
+    <string name="follow_offer_channel">Esto es un canal</string>
+    <string name="follow_offer_playlist">Esto es una lista de reproducción</string>
+    <string name="follow_unfollowed">Dejaste de seguir %1$s</string>
 </resources>

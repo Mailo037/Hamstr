@@ -203,6 +203,7 @@ fun PlayerHost(
     onMenu: (DownloadTask) -> Unit,
     onQuality: (DownloadTask) -> Unit,
     onShare: (DownloadTask) -> Unit = onMenu,
+    onArtist: (DownloadTask) -> Unit = {},
     onQueue: () -> Unit = {},
     onSleep: () -> Unit = {},
     onEditLyrics: (DownloadTask) -> Unit = {},
@@ -446,10 +447,15 @@ fun PlayerHost(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             DecodeText(t.title, style = if (kind == Kind.Audio) Hamstr.type.title else Hamstr.type.section, maxLines = 2)
-                            // Who made it: the artist for a song, the channel for a video.
+                            // Who made it: the artist for a song, the channel for a video. A tap
+                            // shows them, to follow or to pick more of their videos.
                             (t.uploader?.let(app.hamstr.data.Lyrics::cleanArtist) ?: t.source)?.let { who ->
                                 Spacer(Modifier.height(4.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = stringResource(R.string.follow_button)) { onArtist(t) }
+                                        .padding(end = 6.dp, top = 2.dp, bottom = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
                                     Icon(Res.drawable.ic_person, tint = c.ghost, size = 16.dp)
                                     Spacer(Modifier.width(6.dp))
                                     Txt(who, style = Hamstr.type.body, color = c.muted, maxLines = 1)

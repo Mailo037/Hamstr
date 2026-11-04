@@ -20,6 +20,8 @@ data class MediaInfo(
     val id: String? = null,
     // A playlist, album or channel: its videos as yt-dlp lists them, without their formats. Null for one video.
     val entries: List<PlaylistEntry>? = null,
+    // The channel or artist page it came from, to follow it.
+    val channelUrl: String? = null,
 ) {
     /** The same video under any of its links: extractor and ID. */
     val key get() = if (id != null && source != null) "$source:$id" else null
@@ -79,6 +81,7 @@ object MediaJson {
             audioBytes = audioBytes,
             id = string("id"),
             entries = entries,
+            channelUrl = string("channel_url") ?: string("uploader_url"),
         )
     }
 

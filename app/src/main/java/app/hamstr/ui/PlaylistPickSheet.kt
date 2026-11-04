@@ -111,6 +111,11 @@ internal fun PlaylistPickSheet(
                             playlist.uploader?.let { stringResource(R.string.share_list_by, it) } ?: stringResource(R.string.share_list_hint),
                             style = Hamstr.type.small, color = c.muted, maxLines = 1,
                         )
+                        // A channel or playlist by its link: follow it, new videos come by themselves.
+                        if (app.hamstr.engine.MediaLinks.feed(playlist.url) != null) {
+                            Spacer(Modifier.height(10.dp))
+                            app.hamstr.ui.FollowOffer(playlist.url)
+                        }
                         Spacer(Modifier.height(12.dp))
                         Segmented(
                             options = listOf(Mode.Video, Mode.Audio),
@@ -150,7 +155,8 @@ internal fun PlaylistPickSheet(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val subs by app.hamstr.data.Subscriptions.all.collectAsState()
             val followed = subs.any { it.url == app.hamstr.data.Subscriptions.feedUrl(playlist.url) }
-            app.hamstr.ui.components.SquareButton(
+            // Without the offer above (a link that doesn't look like a channel), following is this button.
+            if (app.hamstr.engine.MediaLinks.feed(playlist.url) == null) app.hamstr.ui.components.SquareButton(
                 if (followed) Res.drawable.ic_check else Res.drawable.ic_person,
                 stringResource(if (followed) R.string.follow_started else R.string.follow_button),
                 { if (!followed) app.hamstr.data.Subscriptions.follow(playlist.url, mode) { app.hamstr.engine.Engine.feed(it) } },

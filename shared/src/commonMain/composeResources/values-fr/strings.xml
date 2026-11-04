@@ -898,4 +898,13 @@
         <item quantity="other">%1$d chaînes et playlists</item>
     </plurals>
     <string name="follow_summary_none">Mettre automatiquement en réserve les nouvelles vidéos</string>
+    <string name="follow_finding">Recherche de la chaîne …</string>
+    <string name="follow_no_channel">Hamstr n’a pas trouvé de chaîne pour cela</string>
+    <string name="follow_sheet_hint">Abonnez-vous, et ce qui y sort est mis en réserve tout seul</string>
+    <string name="follow_new_as">Les nouvelles vidéos arrivent en tant que</string>
+    <string name="follow_share">Partager le lien</string>
+    <string name="follow_browse">Voir ses vidéos et en choisir</string>
+    <string name="follow_offer_channel">Ceci est une chaîne</string>
+    <string name="follow_offer_playlist">Ceci est une playlist</string>
+    <string name="follow_unfollowed">Abonnement à %1$s arrêté</string>
 </resources>

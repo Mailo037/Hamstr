@@ -33,7 +33,7 @@
 - Files go to `Download/Hamstr` (or a folder of your own, Settings › Queue) and show up in every gallery and music app. On a computer they go to `Downloads/Hamstr` or any folder you pick.
 - Downloads you start in Hamstr keep going for as long as they need on Android 14 and later, without the daily limit Android sets for background work.
 - With *Instant stash* on, sharing starts the download straight away, without the sheet.
-- *Follow* a channel or playlist (in the + sheet, a playlist's sheet, or Settings › Following): every four hours Hamstr looks for what is new there and stashes it by itself, as video or as audio.
+- *Follow* a channel or playlist: a shared or pasted link to one is recognised, the artist in the player opens theirs (with their videos to pick from), or add it in Settings › Following. Every four hours Hamstr looks for what is new there and stashes it by itself, as video or as audio.
 - *Download at night* holds new downloads until the hours you pick, and on the phone *Only while charging* until it is on the charger. The stash says what waits for what, with *Start now*; several failed downloads get one *Retry all*, after a yt-dlp update when a site changed.
 - Copied a link in another app? The stash offers it when you come back (on Android 12 and later without reading the clipboard until you tap *Stash*).
 - A song that is locked with DRM (Spotify, Apple Music, SoundCloud Go) gets looked up on YouTube Music by title, artist and length, with an offer to stash that one instead. Not the right one? Listen into the other matches and pick it by ear.

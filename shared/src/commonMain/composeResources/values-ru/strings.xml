@@ -934,4 +934,13 @@
         <item quantity="other">%1$d каналов или плейлистов</item>
     </plurals>
     <string name="follow_summary_none">Сохранять новые видео автоматически</string>
+    <string name="follow_finding">Ищем канал …</string>
+    <string name="follow_no_channel">Hamstr не смог найти для этого канал</string>
+    <string name="follow_sheet_hint">Подпишитесь, и всё, что там выходит, сохраняется само</string>
+    <string name="follow_new_as">Новые видео приходят как</string>
+    <string name="follow_share">Поделиться ссылкой</string>
+    <string name="follow_browse">Посмотреть видео и выбрать нужные</string>
+    <string name="follow_offer_channel">Это канал</string>
+    <string name="follow_offer_playlist">Это плейлист</string>
+    <string name="follow_unfollowed">Подписка на %1$s отменена</string>
 </resources>

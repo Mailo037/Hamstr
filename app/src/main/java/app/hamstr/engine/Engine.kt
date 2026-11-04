@@ -378,8 +378,11 @@ object Engine {
                 runInterruptible { Cheek.resolve(url) }?.let { nativePreview(url, it) }?.let { return it }
             }
         }
+        // A channel's page lists its tabs; its videos are what there is to pick from, the newest hundred.
+        val channel = MediaLinks.feed(url) == MediaLinks.Feed.Channel
         val response = YoutubeAccess.run(url) { client ->
-            val req = YoutubeDLRequest(url).apply {
+            val req = YoutubeDLRequest(if (channel) Subscriptions.feedUrl(url) else url).apply {
+                if (channel) addOption("--playlist-end", 100)
                 // A video in a playlist is the playlist only when whole playlists are switched on.
                 addOption(if (Prefs.settings.value.playlists) "--yes-playlist" else "--no-playlist")
                 // A playlist lists its videos without extracting each one; a single video is unaffected.

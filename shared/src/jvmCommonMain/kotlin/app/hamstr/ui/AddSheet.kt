@@ -103,6 +103,14 @@ fun AddSheet(
             }
         }
 
+        // A channel or playlist: it can be followed instead of stashed once.
+        link?.let { l ->
+            if (app.hamstr.engine.MediaLinks.feed(l) != null) {
+                Spacer(Modifier.height(8.dp))
+                FollowOffer(l)
+            }
+        }
+
         if (onStash != null) {
             Row(
                 Modifier
@@ -126,7 +134,7 @@ fun AddSheet(
 
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (onFollow != null) SquareButton(Res.drawable.ic_person, stringResource(Res.string.follow_button), { link?.let(onFollow) }, tint = if (link != null) c.ink else c.ghost)
+            if (onFollow != null && link?.let(app.hamstr.engine.MediaLinks::feed) == null) SquareButton(Res.drawable.ic_person, stringResource(Res.string.follow_button), { link?.let(onFollow) }, tint = if (link != null) c.ink else c.ghost)
             HButton(stringResource(Res.string.add_stash), { submit() }, Modifier.weight(1f), kind = ButtonKind.Primary, icon = Res.drawable.ic_download, enabled = link != null)
             if (onSend != null) HButton(stringResource(Res.string.menu_tile_share), { link?.let(onSend) }, icon = Res.drawable.ic_share, enabled = link != null)
         }

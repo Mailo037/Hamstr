@@ -898,4 +898,13 @@
         <item quantity="other">%1$d kanal veya oynatma listesi</item>
     </plurals>
     <string name="follow_summary_none">Yeni videoları kendiliğinden zulaya al</string>
+    <string name="follow_finding">Kanal aranıyor …</string>
+    <string name="follow_no_channel">Hamstr bunun için bir kanal bulamadı</string>
+    <string name="follow_sheet_hint">Takip et, orada çıkanlar kendiliğinden zulaya alınır</string>
+    <string name="follow_new_as">Yeni videolar şu şekilde gelir:</string>
+    <string name="follow_share">Bağlantıyı paylaş</string>
+    <string name="follow_browse">Videolarına bak ve birkaç tane seç</string>
+    <string name="follow_offer_channel">Bu bir kanal</string>
+    <string name="follow_offer_playlist">Bu bir oynatma listesi</string>
+    <string name="follow_unfollowed">%1$s takibi bırakıldı</string>
 </resources>

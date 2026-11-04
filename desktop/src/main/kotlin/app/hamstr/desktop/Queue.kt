@@ -114,6 +114,11 @@ object Queue : DownloadControl {
         return MediaJson.info(url, JSONObject(output(cmd)))
     }
 
+    override suspend fun channelOf(t: DownloadTask): String? = t.channelUrl ?: runCatching {
+        output(listOf(Tools.ytDlp.path, "--skip-download", "--no-playlist", "--socket-timeout", "15", "--cache-dir", Paths.cache.path,
+            "--print", "%(channel_url,uploader_url)s", "--", t.url)).lines().firstOrNull { it.startsWith("http") }
+    }.getOrNull()
+
     override fun checkFeeds() {
         scope.launch { checkFeedsNow(force = true) }
     }
@@ -277,6 +282,7 @@ object Queue : DownloadControl {
                 if (it.status != Status.Running) it else it.copy(
                     title = info.title, thumbnail = info.thumbnail ?: it.thumbnail, source = info.source ?: it.source,
                     durationSec = info.durationSec, uploader = info.uploader ?: it.uploader, mediaKey = it.mediaKey ?: info.key,
+                    channelUrl = info.channelUrl ?: it.channelUrl,
                 )
             }
             val single = v.optString("_type", "video") == "video"

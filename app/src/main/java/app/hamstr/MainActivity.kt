@@ -72,6 +72,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.Downloads
 import app.hamstr.data.DownloadFiles
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalConfiguration
@@ -248,6 +249,9 @@ internal enum class Tab(val label: Int, val icon: DrawableResource) {
     Settings(R.string.tab_settings, Res.drawable.ic_settings),
 }
 
+/** A channel to show in the follow sheet: its name, its link if known, or the download to find it from. */
+internal data class FollowFor(val name: String?, val link: String?, val task: DownloadTask? = null)
+
 /** A short message at the bottom, optionally with one action (Undo, Open, Retry). */
 internal data class Snack(val text: String, val action: String? = null, val id: Long = System.nanoTime(), val run: (() -> Unit)? = null)
 
@@ -287,6 +291,8 @@ private fun App(inPip: Boolean) {
     var clipLink by remember { mutableStateOf<String?>(null) }
     // A link copied in another app, offered on the stash until taken or put away.
     var clipOffer by remember { mutableStateOf<ClipOffer?>(null) }
+    // A channel or artist to follow or look through: from the player, Following or a link.
+    var followFor by remember { mutableStateOf<FollowFor?>(null) }
     var notifyAsk by rememberSaveable { mutableStateOf(false) }
     var queueSheet by rememberSaveable { mutableStateOf(false) }
     var sleepSheet by rememberSaveable { mutableStateOf(false) }
@@ -519,6 +525,10 @@ private fun App(inPip: Boolean) {
                     padding, onUpdate = { updateSheet = true }, onDelete = delete, onHint = { hint(it) }, onTour = { touring = true },
                     onDevice = { clipLink = clipboardLink(); deviceFor = it },
                     onMenu = { menuFor = it },
+                    onFollowing = { followFor = FollowFor(it.title, it.url) },
+                    onUnfollowed = { sub, at ->
+                        snack = Snack(resources.getString(R.string.follow_unfollowed, sub.title), resources.getString(R.string.undo)) { Subscriptions.restore(sub, at) }
+                    },
                 )
             }
         }
@@ -531,7 +541,7 @@ private fun App(inPip: Boolean) {
             )
             if (!inPip) PlayerHost(
                 miniBottom = bottom + 9.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
-                onShare = { share(listOf(it)) },
+                onShare = { share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
                 onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
                 miniStart = sideStart + 5.dp, miniWidth = SIDEBAR - 10.dp,
             )
@@ -539,7 +549,7 @@ private fun App(inPip: Boolean) {
             TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
             if (!inPip) PlayerHost(
                 miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
-                onShare = { share(listOf(it)) },
+                onShare = { share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
                 onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
             )
         }
@@ -666,6 +676,19 @@ private fun App(inPip: Boolean) {
             sheetUrl = null
             tab = Tab.Stash
             if (NotifyAsk.due(context)) notifyAsk = true
+        }
+        Overlay(visible = followFor != null, onDismiss = { followFor = null }) {
+            followFor?.let { f ->
+                app.hamstr.ui.FollowSheet(
+                    f.name, f.link,
+                    onOpen = { url -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } },
+                    onShare = { url -> followFor = null; sharing = ShareContent(url) },
+                    onClose = { followFor = null },
+                    resolve = f.task?.let { t -> suspend { Downloads.control.channelOf(t)?.also { c -> DownloadStore.update(t.id) { it.copy(channelUrl = c) } } } },
+                    // Its videos in the share sheet's list, to tick off and stash.
+                    onBrowse = { url -> followFor = null; Playback.minimize(); tab = Tab.Stash; sheetUrl = url },
+                )
+            }
         }
         Overlay(visible = sheetUrl != null, onDismiss = { sheetUrl = null }) {
             sheetUrl?.let { url ->

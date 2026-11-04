@@ -134,6 +134,8 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
     // Back in the window with a link copied elsewhere: the stash offers it, once per link.
     var clip by remember { mutableStateOf<ClipOffer?>(null) }
+    // A followed channel's sheet, from Settings › Following.
+    var followFor by remember { mutableStateOf<app.hamstr.data.Subscription?>(null) }
     val focused = LocalWindowInfo.current.isWindowFocused
     LaunchedEffect(focused) {
         if (!focused || !Prefs.settings.value.offerClipboard) return@LaunchedEffect
@@ -201,7 +203,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                             Tab.Library -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                                 Box(Modifier.widthIn(max = 880.dp)) { DesktopLibrary(visible, onPlay = ::play, onMenu = ::openMenu) }
                             }
-                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true }, onDevice = { clipLink = clipboardLink(); deviceFor = it })
+                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true }, onDevice = { clipLink = clipboardLink(); deviceFor = it }, onFollowing = { followFor = it })
                         }
                     }
                 }
@@ -221,6 +223,18 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                     onStash = { link, choice -> Queue.stash(link, choice); adding = false; tab = Tab.Stash },
                     onFollow = { adding = false; follow(it) },
                 )
+            }
+        }
+        Overlay(followFor != null, onDismiss = { followFor = null }) {
+            followFor?.let { f ->
+                DesktopSheet {
+                    app.hamstr.ui.FollowSheet(
+                        f.title, f.url,
+                        onOpen = { Files.browse(it) },
+                        onShare = { url -> followFor = null; sharing = ShareContent(url) },
+                        onClose = { followFor = null },
+                    )
+                }
             }
         }
         Overlay(deviceFor != null, onDismiss = { deviceFor = null }) {

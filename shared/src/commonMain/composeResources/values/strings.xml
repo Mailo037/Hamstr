@@ -898,4 +898,13 @@
         <item quantity="other">%1$d channels and playlists</item>
     </plurals>
     <string name="follow_summary_none">Stash new videos by themselves</string>
+    <string name="follow_finding">Finding the channel …</string>
+    <string name="follow_no_channel">Hamstr couldn’t find a channel for it</string>
+    <string name="follow_sheet_hint">Follow it, and what comes out there is stashed by itself</string>
+    <string name="follow_new_as">New videos come as</string>
+    <string name="follow_share">Share the link</string>
+    <string name="follow_browse">See its videos and pick some</string>
+    <string name="follow_offer_channel">This is a channel</string>
+    <string name="follow_offer_playlist">This is a playlist</string>
+    <string name="follow_unfollowed">Stopped following %1$s</string>
 </resources>
