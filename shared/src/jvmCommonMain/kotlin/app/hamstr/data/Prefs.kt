@@ -118,9 +118,11 @@ object Prefs {
     val containers = listOf("mp4", "mkv", "webm")
     val audioFormats = listOf("opus", "m4a", "mp3")
 
+    @Synchronized
     fun init(store: KeyValues) {
         sp = store
         _settings.value = read(store)
+        written = encode(_settings.value)
     }
 
     /** Settings as [write] leaves them in [sp]; what's missing or can't be read keeps its default. */
@@ -188,10 +190,33 @@ object Prefs {
         clipSeen = sp.getLong("clipSeen", 0),
     )
 
-    /** Changes settings in one step: edits from two threads at once don't undo each other. */
+    // The keys as last handed to [sp]; empty after an apply that threw, so the next edit writes every key.
+    private var written: Map<String, Any?> = emptyMap()
+
+    /**
+     * Changes settings in one step: edits from two threads at once don't undo each other. Only the
+     * keys that changed are written, and an edit that changes nothing writes nothing (the desktop
+     * rewrites its properties file on every apply; the phone's SharedPreferences queue a disk write).
+     */
     @Synchronized
     fun edit(block: (Settings) -> Settings) {
-        write(sp.edit(), _settings.updateAndGet(block)).apply()
+        val before = _settings.value
+        val after = _settings.updateAndGet(block)
+        if (after == before && written.isNotEmpty()) return
+        val now = encode(after)
+        val e = sp.edit()
+        now.forEach { (key, value) ->
+            if (key in written && written[key] == value) return@forEach
+            when (value) {
+                is Boolean -> e.putBoolean(key, value)
+                is Int -> e.putInt(key, value)
+                is Long -> e.putLong(key, value)
+                else -> e.putString(key, value as String?)
+            }
+        }
+        written = emptyMap()
+        e.apply()
+        written = now
     }
 
     /** [s] under the keys it is saved with, for a backup. */

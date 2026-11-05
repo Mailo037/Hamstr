@@ -209,9 +209,9 @@ fun HamstrMark(
                 paint.textSize = size
                 paint.color = color.toArgb()
                 if (scaleY != 1f) {
-                    scale(1f, scaleY, Offset(x, y)) { paint.draw(canvas, glyph.toString(), x, y + baseline) }
+                    scale(1f, scaleY, Offset(x, y)) { paint.draw(canvas, glyph, x, y + baseline) }
                 } else {
-                    paint.draw(canvas, glyph.toString(), x, y + baseline)
+                    paint.draw(canvas, glyph, x, y + baseline)
                 }
             }
         }

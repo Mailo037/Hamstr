@@ -58,4 +58,42 @@ class FileChecksTest {
             dir.deleteRecursively()
         }
     }
+    @Test
+    fun hashesMatchForFilesBiggerThanTheBufferOneAfterAnother() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "hamstr-checks-" + System.nanoTime()).apply { mkdirs() }
+        try {
+            // A check reads every file through one buffer: a smaller file after a bigger one must not pick up its tail.
+            val big = ByteArray((3 shl 20) + 17) { (it * 31).toByte() }
+            val small = ByteArray(1000) { (it * 7).toByte() }
+            val a = File(dir, "a.bin").apply { writeBytes(big) }
+            val b = File(dir, "b.bin").apply { writeBytes(small) }
+            val buffer = ByteArray(1 shl 20)
+            assertEquals(hex(big), FileChecks.sha256(a, buffer))
+            assertEquals(hex(small), FileChecks.sha256(b, buffer))
+            assertNull(FileChecks.sha256(File(dir, "gone.bin"), buffer))
+            assertEquals(hex(small), FileChecks.sha256(b))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun downloadsSharingAFileBothGetItsHash() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "hamstr-checks-" + System.nanoTime()).apply { mkdirs() }
+        val file = File(dir, "song.m4a").apply { writeBytes(ByteArray(5000) { it.toByte() }) }
+        fun task(id: String) = DownloadTask(
+            id = id, url = "https://example.com/$id", title = id, thumbnail = null, source = null, durationSec = 0,
+            choice = Choice(Mode.Audio, null, "m4a", "opus", false), status = Status.Done, filePath = file.path,
+        )
+        try {
+            DownloadStore.replace(listOf(task("x"), task("y")))
+            FileChecks.refresh()
+            until { DownloadStore.get("x")?.sha256 != null && DownloadStore.get("y")?.sha256 != null }
+            assertEquals(hex(file.readBytes()), DownloadStore.get("x")?.sha256)
+            assertEquals(DownloadStore.get("x")?.sha256, DownloadStore.get("y")?.sha256)
+        } finally {
+            DownloadStore.replace(emptyList())
+            dir.deleteRecursively()
+        }
+    }
 }

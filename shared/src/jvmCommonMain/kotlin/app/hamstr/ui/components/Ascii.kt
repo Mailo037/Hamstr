@@ -48,6 +48,9 @@ import kotlin.math.sin
 internal const val NOISE = "+#0*.:-="
 private const val RAMP = " .:-=+*#0@"
 
+/** [rgb] (0xRRGGBB) with [alpha] (0..1) as ARGB, for the per-glyph colours: no Color, no colour space. */
+private fun argb(rgb: Int, alpha: Float): Int = ((alpha.coerceIn(0f, 1f) * 255f + 0.5f).toInt() shl 24) or (rgb and 0xFFFFFF)
+
 internal fun hash(v: Float): Float {
     val h = sin(v * 127.1f + 311.7f) * 43758.5453f
     return h - floor(h)
@@ -128,7 +131,10 @@ fun AsciiImage(
     // Rain while loading, at 30 steps a second; it stands still while the window is in the background.
     val time by rememberAmbientClock(30, enabled = animate && fx.rain)
     val image: ImageBitmap? = bitmap
-    var cache by remember(bitmap) { mutableStateOf<Samples?>(null) }
+    // A plain holder, not state: the first draw fills it, and writing state while drawing
+    // would only ask for one more draw.
+    val cache = remember(bitmap) { arrayOfNulls<Samples>(1) }
+    val columns = remember { RainColumns() }
 
     Canvas(modifier) {
         drawRect(bg)
@@ -137,23 +143,24 @@ fun AsciiImage(
         val cw = size.width / cols
         val chh = size.height / rows
         val samples = bitmap?.let { b ->
-            cache?.takeIf { it.cols == cols && it.rows == rows } ?: sample(b, cols, rows).also { cache = it }
+            cache[0]?.takeIf { it.cols == cols && it.rows == rows } ?: sample(b, cols, rows).also { cache[0] = it }
         }
+        val head = accent.toArgb()
         paint.textSize = min(cw, chh) * 1.05f
         val sec = time / 1000f
         val canvas = drawContext.canvas
         val baseline = paint.centerBaseline
+        // What depends on the column alone (its drop's place and length, its noise's phase) once per column, not per cell.
+        if (rain > 0f) columns.at(sec, cols, rows)
         for (r in 0 until rows) for (c in 0 until cols) {
             var rainA = 0f
-            var head = false
+            var isHead = false
             if (rain > 0f) {
-                val speed = 7f + hash(c.toFloat()) * 9f
-                val trail = 6f + hash(c + 50f) * 10f
-                val pos = (sec * speed + hash(c + 99f) * (rows + trail) * 2f) % (rows + trail)
-                val dist = pos - r
+                val trail = columns.trail[c]
+                val dist = columns.pos[c] - r
                 if (dist >= 0f && dist < trail) {
                     rainA = 1f - dist / trail
-                    head = dist < 1f
+                    isHead = dist < 1f
                 }
             }
             val i = r * cols + c
@@ -161,9 +168,9 @@ fun AsciiImage(
             val y = r * chh + chh / 2f + baseline
             if (rain >= 0.5f || samples == null) {
                 if (rainA <= 0f) continue
-                val ch = NOISE[(hash(c * 31f + r * 17f + floor(sec * 2f + hash(c.toFloat()) * 9f) * 0.37f) * NOISE.length).toInt().coerceIn(0, NOISE.length - 1)]
-                paint.color = if (head) accent.toArgb() else Color(0xFFE1DED7).copy(alpha = rainA * 0.75f * max(rain, 0.5f)).toArgb()
-                paint.draw(canvas, ch.toString(), x, y)
+                val ch = NOISE[(hash(c * 31f + r * 17f + columns.phase[c]) * NOISE.length).toInt().coerceIn(0, NOISE.length - 1)]
+                paint.color = if (isHead) head else argb(0xE1DED7, rainA * 0.75f * max(rain, 0.5f))
+                paint.draw(canvas, ch, x, y)
             } else {
                 val l = samples.lum(i)
                 val ch = RAMP[min(RAMP.length - 1, (l * RAMP.length).toInt())]
@@ -175,13 +182,35 @@ fun AsciiImage(
                     (min(255, (((p shr 16) and 0xFF) * k + 40).toInt()) shl 16) or
                     (min(255, (((p shr 8) and 0xFF) * k + 40).toInt()) shl 8) or
                     min(255, ((p and 0xFF) * k + 40).toInt())
-                paint.draw(canvas, ch.toString(), x, y)
+                paint.draw(canvas, ch, x, y)
             }
         }
         if (image != null && reveal > 0f) {
             val edge = size.height * reveal.coerceIn(0f, 1f)
             clipRect(bottom = edge) { drawCover(image) }
             if (reveal < 1f) drawRect(accent, Offset(0f, edge - 1.dp.toPx()), Size(size.width, 1.dp.toPx()))
+        }
+    }
+}
+
+/** The loading rain's columns at one moment: where each drop is, how long its trail, its noise's phase. */
+private class RainColumns {
+    var pos = FloatArray(0)
+    var trail = FloatArray(0)
+    var phase = FloatArray(0)
+
+    fun at(sec: Float, cols: Int, rows: Int) {
+        if (pos.size < cols) {
+            pos = FloatArray(cols)
+            trail = FloatArray(cols)
+            phase = FloatArray(cols)
+        }
+        for (c in 0 until cols) {
+            val speed = 7f + hash(c.toFloat()) * 9f
+            val t = 6f + hash(c + 50f) * 10f
+            trail[c] = t
+            pos[c] = (sec * speed + hash(c + 99f) * (rows + t) * 2f) % (rows + t)
+            phase[c] = floor(sec * 2f + hash(c.toFloat()) * 9f) * 0.37f
         }
     }
 }
@@ -266,8 +295,8 @@ private class RasterCache {
                 val v = (sin(c * 0.55f + t / 1800f) + sin(r * 0.7f - t / 2300f) + sin((c + r) * 0.3f + t / 3100f)) / 3f
                 val a = fade * (0.05f + max(0f, v) * 0.16f)
                 if (a >= 0.02f) {
-                    paint.color = Color(0xFFE6E1D7).copy(alpha = a).toArgb()
-                    paint.draw(canvas, if (v > 0.45f) "+" else if (v > 0.2f) "·" else ".", c * cell + cell / 2, r * cell + cell / 2)
+                    paint.color = argb(0xE6E1D7, a)
+                    paint.draw(canvas, if (v > 0.45f) '+' else if (v > 0.2f) '·' else '.', c * cell + cell / 2, r * cell + cell / 2)
                 }
                 c++
             }

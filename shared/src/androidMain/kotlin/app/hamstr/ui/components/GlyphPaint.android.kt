@@ -25,5 +25,10 @@ private class AndroidGlyphPaint(typeface: Typeface) : GlyphPaint {
     override var textSize by paint::textSize
     override var color by paint::color
     override val centerBaseline get() = -(paint.ascent() + paint.descent()) / 2f
+    private val one = CharArray(1)
     override fun draw(canvas: Canvas, text: String, x: Float, y: Float) = canvas.nativeCanvas.drawText(text, x, y, paint)
+    override fun draw(canvas: Canvas, glyph: Char, x: Float, y: Float) {
+        one[0] = glyph
+        canvas.nativeCanvas.drawText(one, 0, 1, x, y, paint)
+    }
 }

@@ -3,6 +3,8 @@ package app.hamstr.engine
 import app.hamstr.ui.getString
 import app.hamstr.ui.stageString
 import app.hamstr.data.DownloadControl
+import app.hamstr.data.Latest
+import app.hamstr.data.Throttle
 import java.util.UUID
 import android.Manifest
 import android.app.NotificationChannel
@@ -93,6 +95,13 @@ class DownloadService : Service() {
     private val retryTick = Runnable { pump() }
     private var lastStartId = 0
     private var lastNotify = 0L
+    // Playlist files still being put in the media index; the service waits for them before it stops.
+    private val indexing = java.util.concurrent.atomic.AtomicInteger()
+    // Playlists' files waiting for the media index: one worker takes them in turn, so many playlists
+    // finishing at once don't each start their own.
+    private val toIndex = kotlinx.coroutines.channels.Channel<List<DownloadTask>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+    // What the progress notification shows now (and for whom: the service or a job); the same isn't built or sent twice.
+    private val shown = Latest<Pair<DownloadJob?, ProgressCard>>()
     // Set once Android's daily limit for background downloads ran out, until the next start.
     @Volatile private var halted = false
     // The transfer job that holds the queue now; the service then runs bound, without a foreground service.
@@ -125,6 +134,16 @@ class DownloadService : Service() {
                 .drop(1)
                 .collect { (_, allowed) -> mainHandler.post { if (!allowed) holdRunning() else wake() } }
         }
+        scope.launch {
+            for (files in toIndex) {
+                try {
+                    index(files)
+                } finally {
+                    indexing.decrementAndGet()
+                    finishIfIdle()
+                }
+            }
+        }
         ContextCompat.registerReceiver(
             this, power, IntentFilter().apply { addAction(Intent.ACTION_POWER_CONNECTED); addAction(Intent.ACTION_POWER_DISCONNECTED) },
             ContextCompat.RECEIVER_NOT_EXPORTED,
@@ -148,12 +167,10 @@ class DownloadService : Service() {
             ACTION_PAUSE_ALL -> synchronized(this) { jobs.keys.toList() }.forEach { stop(it, Status.Paused) }
             ACTION_CANCEL -> id?.let { stop(it, Status.Canceled) }
             ACTION_RESUME -> id?.let { DownloadStore.update(it, block = ::resumed) }
-            ACTION_START -> DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage == Stage.PausedBySystem }
-                .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
+            ACTION_START -> DownloadStore.updateAll(persist = false, which = { it.status == Status.Queued && it.stage == Stage.PausedBySystem }) { it.copy(stage = null) }
             // The alarm, a changed schedule or "Look now": held downloads ask the schedule again.
             ACTION_WAKE -> {
-                DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage?.held == true }
-                    .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
+                DownloadStore.updateAll(persist = false, which = { it.status == Status.Queued && it.stage?.held == true }) { it.copy(stage = null) }
                 lookAtFeeds(force = id == FORCE)
             }
         }
@@ -167,7 +184,7 @@ class DownloadService : Service() {
         scope.launch {
             try {
                 notifyProgress(force = true)
-                Subscriptions.check({ Engine.feed(it) }, force) { tasks -> tasks.forEach(DownloadStore::add) }
+                Subscriptions.check({ Engine.feed(it) }, force) { tasks -> DownloadStore.addAll(tasks) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -212,6 +229,7 @@ class DownloadService : Service() {
     }
 
     private fun goForeground() {
+        shown.forget()
         val n = progressNotification()
         ServiceCompat.startForeground(
             this, NOTIF_PROGRESS, n,
@@ -232,11 +250,14 @@ class DownloadService : Service() {
         }
         val charging = Wakeups.charging(this)
         val queued = DownloadStore.tasks.value.filter { it.status == Status.Queued && it.id !in jobs && it.id !in stopping }.reversed() // oldest first
+        // Set in one step after the loop: a held playlist would otherwise copy the list once per video.
+        val holds = HashMap<String, Stage>()
+        val hold = Schedule.holds(s, charging, now)
         for (task in queued) {
             // The schedule first: waiting for the night says more than waiting for Wi-Fi.
-            val stage = Schedule.hold(task, s, charging, now) ?: waiting
+            val stage = hold(task) ?: waiting
             if (stage != null) {
-                if (task.stage != stage) DownloadStore.update(task.id, persist = false) { it.copy(stage = stage) }
+                if (task.stage != stage) holds[task.id] = stage
                 continue
             }
             if (task.retryAt > now) continue
@@ -256,6 +277,7 @@ class DownloadService : Service() {
             }
             job.start()
         }
+        if (holds.isNotEmpty()) DownloadStore.updateAll(persist = false, which = { it.id in holds && it.status == Status.Queued }) { it.copy(stage = holds.getValue(it.id)) }
         // The next retry wakes the queue by itself.
         mainHandler.removeCallbacks(retryTick)
         if (waiting == null) {
@@ -267,10 +289,22 @@ class DownloadService : Service() {
         if (jobs.isEmpty() && stopping.isEmpty()) finishIfIdle()
     }
 
+    /**
+     * A playlist's Pause: what only waits is paused in one step, the running ones are stopped, and
+     * the queue looks once (its notification, the alarm, whether the service can end). Main thread.
+     */
+    internal fun pauseMany(ids: Set<String>) {
+        // Under pump's lock: none of them starts between being looked at and being paused.
+        val busy = synchronized(this) { DownloadStore.pauseWaiting(ids, jobs.keys.toHashSet()) }
+        busy.forEach { stop(it, Status.Paused) }
+        pump()
+    }
+
     /** The network is back (or Wi-Fi is): waiting and retrying downloads go at once. */
     private fun wake() {
-        DownloadStore.tasks.value.filter { it.status == Status.Queued && (it.stage?.waiting == true && it.stage != Stage.PausedBySystem) }
-            .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null, retryAt = 0, attempts = 0) } }
+        DownloadStore.updateAll(persist = false, which = { it.status == Status.Queued && (it.stage?.waiting == true && it.stage != Stage.PausedBySystem) }) {
+            it.copy(stage = null, retryAt = 0, attempts = 0)
+        }
         pump()
     }
 
@@ -301,22 +335,29 @@ class DownloadService : Service() {
             currentCoroutineContext().ensureActive()
             val pathFile = Engine.pathFile(task).also { it.delete() }
             val runJob = currentCoroutineContext()[Job]!!
-            var lastProgress = 0L
+            // How often this download's progress, and its stage's, reach the list.
+            val pace = Throttle(PROGRESS_MS)
+            val stagePace = Throttle(PROGRESS_MS)
             val res = Engine.execute(task) { progress, eta, line ->
                 if (runJob.isActive) {
                     when {
                         line.startsWith(Engine.METADATA_PREFIX) -> updateMetadata(task.id, line.removePrefix(Engine.METADATA_PREFIX))
-                        line.startsWith(Engine.STAGE_PROGRESS_PREFIX) -> line.removePrefix(Engine.STAGE_PROGRESS_PREFIX).toFloatOrNull()?.let { pct ->
-                            DownloadStore.update(task.id, persist = false) { if (it.status == Status.Running && it.stage != null) it.copy(stageProgress = (pct / 100f).coerceIn(0f, 1f)) else it }
+                        // FFmpeg reports many times a second; the bar moves at the same pace as the download's.
+                        line.startsWith(Engine.STAGE_PROGRESS_PREFIX) -> {
+                            if (stagePace.ready(task.id)) line.removePrefix(Engine.STAGE_PROGRESS_PREFIX).toFloatOrNull()?.let { pct ->
+                                DownloadStore.tick(task.id) { if (it.stage != null) it.copy(stageProgress = (pct / 100f).coerceIn(0f, 1f)) else it }
+                            }
                         }
-                        line.startsWith(Engine.STAGE_PREFIX) -> setStage(task.id, Stage.fromEngine(line.removePrefix(Engine.STAGE_PREFIX)))
+                        line.startsWith(Engine.STAGE_PREFIX) -> {
+                            // A new stage shows its first progress at once, however short it is.
+                            stagePace.reset(task.id)
+                            setStage(task.id, Stage.fromEngine(line.removePrefix(Engine.STAGE_PREFIX)))
+                        }
                         line.startsWith("[download]") -> {
-                            val now = SystemClock.elapsedRealtime()
-                            if (now - lastProgress >= 500) {
-                                lastProgress = now
+                            if (pace.ready(task.id)) {
                                 val speed = SPEED.find(line)?.groupValues?.get(1)?.let(::prettySpeed) ?: ""
-                                DownloadStore.update(task.id, persist = false) {
-                                    if (it.status != Status.Running) it else it.copy(
+                                DownloadStore.tick(task.id) {
+                                    it.copy(
                                         progress = (progress / 100f).coerceIn(0f, 1f).coerceAtLeast(it.progress),
                                         etaSec = eta, speed = speed.ifEmpty { it.speed },
                                         // The first bytes end "Resolving"; yt-dlp has no later stage before its post-processors.
@@ -327,7 +368,10 @@ class DownloadService : Service() {
                             }
                         }
                         // yt-dlp's post-processors print their name in brackets: [Merger], [ExtractAudio] …
-                        line.startsWith("[") -> POSTPROCESSOR.find(line)?.groupValues?.get(1)?.let(Stage::fromEngine)?.let { setStage(task.id, it) }
+                        line.startsWith("[") -> POSTPROCESSOR.find(line)?.groupValues?.get(1)?.let(Stage::fromEngine)?.let {
+                            stagePace.reset(task.id)
+                            setStage(task.id, it)
+                        }
                     }
                 }
             }
@@ -356,14 +400,21 @@ class DownloadService : Service() {
             }
             if (grouped && DownloadStore.get(task.id)?.status == Status.Done) {
                 val base = DownloadStore.get(task.id) ?: task
-                entries.drop(1).forEachIndexed { i, e ->
+                // The files are in: their entries go on the list (and to disk) at once, in one step.
+                // The media index can take seconds a file and is optional: it fills in their content
+                // URIs beside the queue (the next download needn't wait for it), a few at a time; the
+                // service stays until it is done, and a stop meanwhile loses only the URIs not in yet.
+                val rest = entries.drop(1).mapIndexed { i, e ->
                     val f = File(e.path)
-                    DownloadStore.add(base.copy(
+                    base.copy(
                         id = UUID.randomUUID().toString(), title = e.title ?: f.nameWithoutExtension, thumbnail = e.thumbnail,
-                        durationSec = e.duration, filePath = e.path, contentUri = scan(f)?.toString(), sizeBytes = f.length(),
+                        durationSec = e.duration, filePath = e.path, contentUri = null, sizeBytes = f.length(),
                         createdAt = base.createdAt + i + 1, mediaKey = null,
-                    ))
+                    )
                 }
+                DownloadStore.addAll(rest)
+                indexing.incrementAndGet()
+                toIndex.trySend(rest)
             }
             if (DownloadStore.get(task.id)?.status == Status.Done) {
                 Engine.clearTemporaryFiles(task)
@@ -396,6 +447,19 @@ class DownloadService : Service() {
                     DownloadStore.update(task.id) { if (it.status == Status.Running) it.copy(status = Status.Failed, error = message, speed = "", stage = null) else it }
                     if (DownloadStore.get(task.id)?.status == Status.Failed) notifyFailed(task.id)
                 }
+            }
+        }
+    }
+
+    /** Puts a playlist's files in the media index and their content URIs on the list, eight at a time. */
+    private suspend fun index(files: List<DownloadTask>) {
+        val paths = files.associate { it.id to it.filePath }
+        for (chunk in files.chunked(8)) {
+            val found = scanAll(chunk.map { File(it.filePath!!) })
+            val batch = chunk.mapNotNull { t -> found[File(t.filePath!!).absolutePath]?.let { t.id to it.toString() } }.toMap()
+            if (batch.isEmpty()) continue
+            DownloadStore.updateAll(which = { t -> t.contentUri == null && batch[t.id] != null && paths[t.id] == t.filePath }) {
+                it.copy(contentUri = batch.getValue(it.id))
             }
         }
     }
@@ -476,14 +540,17 @@ class DownloadService : Service() {
         mainHandler.post {
             synchronized(this) {
                 // What waits for the night has the alarm to come back with; no service sits there for hours.
-                val idle = scope.isActive && jobs.isEmpty() && stopping.isEmpty() && !lookingAtFeeds &&
+                val idle = scope.isActive && jobs.isEmpty() && stopping.isEmpty() && !lookingAtFeeds && indexing.get() == 0 &&
                     DownloadStore.tasks.value.none { it.status == Status.Queued && it.stage != Stage.PausedBySystem && it.stage != Stage.WaitingForNight }
                 val job = host
                 when {
                     !idle -> {}
                     // The job ends and lets go of the service, which then stops by itself.
                     job != null -> job.done()
-                    stopSelfResult(lastStartId) -> ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                    stopSelfResult(lastStartId) -> {
+                        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                        shown.forget()
+                    }
                 }
             }
         }
@@ -496,8 +563,7 @@ class DownloadService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         halted = true
         synchronized(this) { jobs.keys.toList() }.forEach { stop(it, Status.Queued, Stage.PausedBySystem) }
-        DownloadStore.tasks.value.filter { it.status == Status.Queued }
-            .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = Stage.PausedBySystem) } }
+        DownloadStore.updateAll(persist = false, which = { it.status == Status.Queued }) { it.copy(stage = Stage.PausedBySystem) }
         mainHandler.removeCallbacks(retryTick)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -533,13 +599,19 @@ class DownloadService : Service() {
         lastNotify = now
         // The foreground notification has to stay; with Hamstr's switch off it just goes quiet.
         if (!mayPost()) return
-        val n = progressNotification()
-        host?.update(n) ?: postNotification(NOTIF_PROGRESS, n)
+        // pump() and stage changes ask often with nothing new to say: what it would say is compared
+        // first, and only something new is built (with its PendingIntents) and sent to the system.
+        val job = host
+        val card = progressCard(this)
+        shown.send(job to card) {
+            val n = progressNotification(this, card)
+            job?.update(n) ?: postNotification(NOTIF_PROGRESS, n)
+        }
     }
 
     private fun progressNotification(): android.app.Notification = progressNotification(this)
 
-    private fun resumed(t: DownloadTask) = t.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0)
+    private fun resumed(t: DownloadTask) = resumedTask(t)
 
 
     /**
@@ -600,12 +672,15 @@ class DownloadService : Service() {
         postNotification(id.hashCode(), n)
     }
 
-    private fun postNotification(id: Int, notification: android.app.Notification) {
-        if (!mayPost()) return
-        try {
+    /** True when the system took it. */
+    private fun postNotification(id: Int, notification: android.app.Notification): Boolean {
+        if (!mayPost()) return false
+        return try {
             NotificationManagerCompat.from(this).notify(id, notification)
+            true
         } catch (_: SecurityException) {
             // The notification permission can be revoked after the check.
+            false
         }
     }
 
@@ -617,6 +692,23 @@ class DownloadService : Service() {
     private fun canNotify() = mayPost() && Prefs.settings.value.notifications
 
     private fun openApp(): PendingIntent = openApp(this)
+
+    /**
+     * [files] into the media index in one call (one connection to the scanner, not one each); their
+     * content URIs by path, for those that came back before the timeout.
+     */
+    private suspend fun scanAll(files: List<File>): Map<String, Uri> {
+        val found = java.util.concurrent.ConcurrentHashMap<String, Uri>()
+        val all = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val left = java.util.concurrent.atomic.AtomicInteger(files.size)
+        MediaScannerConnection.scanFile(this, files.map { it.absolutePath }.toTypedArray(), files.map { mimeOf(it) }.toTypedArray()) { path, uri ->
+            if (uri != null) found[path] = uri
+            if (left.decrementAndGet() == 0) all.complete(Unit)
+        }
+        // Like [scan]: a scanner that never answers holds nothing for long.
+        withTimeoutOrNull(10_000L + files.size * 2_000L) { all.await() }
+        return HashMap(found)
+    }
 
     private suspend fun scan(file: File): Uri? = withTimeoutOrNull(10_000) {
         // Indexing is optional; a missing scanner callback must not occupy a queue slot forever.
@@ -640,6 +732,8 @@ class DownloadService : Service() {
         /** The alarm (Wakeups): the night began or a followed channel is due; with [FORCE] all channels are looked at. */
         const val ACTION_WAKE = "app.hamstr.WAKE_QUEUE"
         const val FORCE = "force"
+        /** How often a running download's progress reaches the list (and every screen showing it). */
+        private const val PROGRESS_MS = 500L
         private val controlScope = MainScope()
         const val EXTRA_ID = "id"
         const val CH_PROGRESS = "progress"
@@ -696,16 +790,14 @@ class DownloadService : Service() {
             if (entries.isEmpty()) return
             val group = if (entries.size > 1) UUID.randomUUID().toString() else null
             val now = System.currentTimeMillis()
-            entries.forEachIndexed { i, e ->
-                DownloadStore.add(
-                    DownloadTask(
-                        url = e.url, title = e.title, thumbnail = e.thumbnail, source = playlist.source, durationSec = e.durationSec,
-                        choice = choice, uploader = e.uploader, mediaKey = e.key, channelUrl = playlist.channelUrl,
-                        // Kept in playlist order, which is also the order they start in.
-                        createdAt = now + i, group = group, groupTitle = group?.let { playlist.title },
-                    ),
+            DownloadStore.addAll(entries.mapIndexed { i, e ->
+                DownloadTask(
+                    url = e.url, title = e.title, thumbnail = e.thumbnail, source = playlist.source, durationSec = e.durationSec,
+                    choice = choice, uploader = e.uploader, mediaKey = e.key, channelUrl = playlist.channelUrl,
+                    // Kept in playlist order, which is also the order they start in.
+                    createdAt = now + i, group = group, groupTitle = group?.let { playlist.title },
                 )
-            }
+            })
             send(context, ACTION_START)
         }
 
@@ -745,46 +837,68 @@ class DownloadService : Service() {
         )
 
         /** The one ongoing notification: what runs, how far, and what waits. */
-        fun progressNotification(context: Context): android.app.Notification {
-            val tasks = DownloadStore.tasks.value
-            val running = tasks.filter { it.status == Status.Running }
-            val queued = tasks.filter { it.status == Status.Queued }
-            val b = NotificationCompat.Builder(context, if (Prefs.settings.value.notifications) CH_PROGRESS else CH_QUIET)
+        /** What the progress notification says now, from the download list. */
+        internal fun progressCard(context: Context): ProgressCard {
+            // A tick leaves the list as it is: its running and queued downloads come from the summary of it.
+            val summary = DownloadStore.summary()
+            val live = DownloadStore.live.value
+            val running = summary.running.map { DownloadStore.current(it, live) }
+            val queued = summary.queued
+            val s = Prefs.settings.value
+            val card = ProgressCard(quiet = !s.notifications, accent = s.accent, title = "Hamstr", text = null)
+            return when {
+                running.size == 1 -> {
+                    val t = running[0]
+                    val pct = (t.progress * 100).toInt()
+                    val stage = t.stage?.let { stageText(context, t) }
+                    card.copy(
+                        title = t.title,
+                        text = stage ?: listOf("$pct %", t.speed, eta(t.etaSec), if (queued.isNotEmpty()) context.getString(R.string.notif_queued, queued.size) else "")
+                            .filter { it.isNotEmpty() }.joinToString(" · "),
+                        max = 100, progress = pct, indeterminate = t.progress <= 0f || t.stage?.waiting == false,
+                        buttons = listOf(ACTION_PAUSE to t.id, ACTION_CANCEL to t.id),
+                    )
+                }
+                running.size > 1 -> {
+                    val avg = running.map { it.progress }.average().toFloat()
+                    card.copy(
+                        title = context.getString(R.string.notif_many, running.size),
+                        text = running.joinToString(" · ") { "${(it.progress * 100).toInt()} % ${it.title.take(24)}" },
+                        max = 100, progress = (avg * 100).toInt(),
+                        buttons = listOf(ACTION_PAUSE_ALL to ""),
+                    )
+                }
+                queued.any { it.stage != null } -> {
+                    val t = queued.first { it.stage != null }
+                    card.copy(
+                        title = stageText(context, t),
+                        text = if (queued.size == 1) context.getString(R.string.notif_waiting_one) else context.getString(R.string.notif_waiting_many, queued.size),
+                    )
+                }
+                Subscriptions.checking.value -> card.copy(text = context.getString(R.string.follow_checking), indeterminate = true)
+                else -> card.copy(text = context.getString(R.string.notif_preparing), indeterminate = true)
+            }
+        }
+
+        internal fun progressNotification(context: Context, card: ProgressCard = progressCard(context)): android.app.Notification {
+            val b = NotificationCompat.Builder(context, if (card.quiet) CH_QUIET else CH_PROGRESS)
                 .setSmallIcon(R.drawable.ic_stat_hamstr)
-                .setColor(Prefs.settings.value.accent)
+                .setColor(card.accent)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
                 .setCategory(NotificationCompat.CATEGORY_PROGRESS)
                 .setContentIntent(openApp(context))
-            when {
-                running.size == 1 -> {
-                    val t = running[0]
-                    val pct = (t.progress * 100).toInt()
-                    val stage = t.stage?.let { stageText(context, t) }
-                    b.setContentTitle(t.title)
-                        .setContentText(
-                            stage ?: listOf("$pct %", t.speed, eta(t.etaSec), if (queued.isNotEmpty()) context.getString(R.string.notif_queued, queued.size) else "")
-                                .filter { it.isNotEmpty() }.joinToString(" · "),
-                        )
-                        .setProgress(100, pct, t.progress <= 0f || t.stage?.waiting == false)
-                        .addAction(0, context.getString(R.string.notif_pause), action(context, ACTION_PAUSE, t.id))
-                        .addAction(0, context.getString(R.string.notif_cancel), action(context, ACTION_CANCEL, t.id))
+                .setContentTitle(card.title)
+                .setContentText(card.text)
+            if (card.max > 0 || card.indeterminate) b.setProgress(card.max, card.progress, card.indeterminate)
+            card.buttons.forEach { (what, id) ->
+                val label = when (what) {
+                    ACTION_PAUSE -> R.string.notif_pause
+                    ACTION_CANCEL -> R.string.notif_cancel
+                    else -> R.string.notif_pause_all
                 }
-                running.size > 1 -> {
-                    val avg = running.map { it.progress }.average().toFloat()
-                    b.setContentTitle(context.getString(R.string.notif_many, running.size))
-                        .setContentText(running.joinToString(" · ") { "${(it.progress * 100).toInt()} % ${it.title.take(24)}" })
-                        .setProgress(100, (avg * 100).toInt(), false)
-                        .addAction(0, context.getString(R.string.notif_pause_all), action(context, ACTION_PAUSE_ALL, ""))
-                }
-                queued.any { it.stage != null } -> {
-                    val t = queued.first { it.stage != null }
-                    b.setContentTitle(stageText(context, t))
-                        .setContentText(if (queued.size == 1) context.getString(R.string.notif_waiting_one) else context.getString(R.string.notif_waiting_many, queued.size))
-                }
-                Subscriptions.checking.value -> b.setContentTitle("Hamstr").setContentText(context.getString(R.string.follow_checking)).setProgress(0, 0, true)
-                else -> b.setContentTitle("Hamstr").setContentText(context.getString(R.string.notif_preparing)).setProgress(0, 0, true)
+                b.addAction(0, context.getString(label), action(context, what, id))
             }
             return b.build()
         }
@@ -799,7 +913,7 @@ class DownloadService : Service() {
             // Asked for with Hamstr open on Android 14+: a transfer job, which has no daily limit.
             if ((action == ACTION_START || action == ACTION_RESUME) && DownloadJob.usable(context)) {
                 if (current == null) {
-                    if (action == ACTION_RESUME && id != null) DownloadStore.update(id) { t -> t.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0) }
+                    if (action == ACTION_RESUME && id != null) DownloadStore.update(id, block = ::resumedTask)
                     if (DownloadJob.schedule(context)) return
                 } else {
                     // Already running as a foreground service: the job takes it over once it starts.
@@ -811,6 +925,9 @@ class DownloadService : Service() {
             ContextCompat.startForegroundService(context, i)
         }
 
+        /** A download set going again: queued, its error, stage and retries forgotten. */
+        internal fun resumedTask(t: DownloadTask) = t.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0)
+
         /** What a download is doing right now, when it's more than fetching bytes. */
         fun stageText(context: Context, t: DownloadTask): String? =
             stageString(t)?.let { (res, arg) -> if (arg == null) context.getString(res) else context.getString(res, arg) }
@@ -819,14 +936,37 @@ class DownloadService : Service() {
         fun control(context: Context) = object : DownloadControl {
             override fun pause(id: String) = send(context, ACTION_PAUSE, id)
             override fun resume(id: String) = send(context, ACTION_RESUME, id)
+
+            // A playlist's Pause, on the main thread, where the service is created and takes its commands.
+            override fun pauseAll(ids: List<String>) {
+                val picked = ids.toHashSet()
+                val run = Runnable {
+                    val service = current
+                    if (service != null) service.pauseMany(picked)
+                    // No queue: nothing downloads, and none can start before this is done. What was
+                    // held for the night may have been all the alarm waited for.
+                    else {
+                        DownloadStore.pauseWaiting(picked, emptySet())
+                        Wakeups.plan(context)
+                    }
+                }
+                if (Looper.myLooper() == Looper.getMainLooper()) run.run() else Handler(Looper.getMainLooper()).post(run)
+            }
+
+            // All queued in one step, then one start: the queue looks at the list once, not once per download.
+            override fun resumeAll(ids: List<String>) {
+                if (ids.size == 1) return resume(ids[0])
+                val picked = ids.toHashSet()
+                if (DownloadStore.updateAll(which = { it.id in picked && it.status != Status.Running }) { resumedTask(it) } > 0) send(context, ACTION_START)
+            }
             override fun cancel(id: String) = send(context, ACTION_CANCEL, id)
 
             override fun retry(ids: List<String>, updateFirst: Boolean) {
-                if (!updateFirst) return ids.forEach { resume(it) }
+                if (!updateFirst) return resumeAll(ids)
                 controlScope.launch {
                     Downloads.updating.value = true
                     try { Engine.update(context) } finally { Downloads.updating.value = false }
-                    ids.forEach { resume(it) }
+                    resumeAll(ids)
                 }
             }
 
@@ -881,3 +1021,19 @@ class DownloadService : Service() {
         }
     }
 }
+
+/**
+ * What the progress notification says, worked out before anything is built: the queue asks for it
+ * far more often than it changes, and an unchanged card is neither built nor sent again. Each
+ * button is an action and the download it acts on.
+ */
+internal data class ProgressCard(
+    val quiet: Boolean,
+    val accent: Int,
+    val title: String?,
+    val text: String?,
+    val max: Int = 0,
+    val progress: Int = 0,
+    val indeterminate: Boolean = false,
+    val buttons: List<Pair<String, String>> = emptyList(),
+)

@@ -68,6 +68,8 @@ class SettingsPanelsTest {
             Prefs.edit { it.copy(eqPreset = "custom", eqGains = listOf(-4f, 0f, 3f, 6f, 2f, -2f, -6f, 0f, 4f, 9f)) }
             shot("eq_custom_desktop.png", 640, 1f, check = "Custom") { Group { EqualizerBlock() } }
         } finally {
+            // What is still being written would bring the file back after the delete.
+            PropertiesFile.flushAll()
             Prefs.init(PropertiesFile(file.apply { delete() }))
         }
     }
@@ -116,6 +118,8 @@ class SettingsPanelsTest {
                 DataSettings(measure = { use }, clearCache = { 0 }, export = { null }, import = { null })
             }
         } finally {
+            // What is still being written would bring the file back after the delete.
+            PropertiesFile.flushAll()
             Prefs.init(PropertiesFile(file.apply { delete() }))
         }
     }

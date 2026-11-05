@@ -15,6 +15,8 @@ interface GlyphPaint {
     val centerBaseline: Float
     /** Draws [text] centred on [x], with its baseline at [y]. */
     fun draw(canvas: Canvas, text: String, x: Float, y: Float)
+    /** Draws one character like [draw], without making a String for it: the hot path of every raster. */
+    fun draw(canvas: Canvas, glyph: Char, x: Float, y: Float)
 }
 
 @Composable

@@ -87,6 +87,7 @@ class LanguageTest {
             assertEquals("", Prefs.settings.value.language)
         } finally {
             Locale.setDefault(before)
+            PropertiesFile.flushAll()
             file.delete()
         }
     }
@@ -121,6 +122,7 @@ class LanguageTest {
             }
         } finally {
             Locale.setDefault(before)
+            PropertiesFile.flushAll()
             file.delete()
         }
     }

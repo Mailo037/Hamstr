@@ -110,9 +110,10 @@ object DownloadFiles {
         val app = context.applicationContext
         tasks.forEach(Playback::closeIfCurrent)
         val files = tasks.mapNotNull { t -> t.filePath?.let { File(it).absoluteFile.normalize().path } }.toSet()
+        val picked = tasks.mapTo(HashSet()) { it.id }
         val ids = DownloadStore.tasks.value.filter { t ->
-            t.id in tasks.map { it.id } || t.filePath?.let { File(it).absoluteFile.normalize().path } in files
-        }.map { it.id }.toSet()
+            t.id in picked || files.isNotEmpty() && t.filePath?.let { File(it).absoluteFile.normalize().path } in files
+        }.mapTo(HashSet()) { it.id }
         val removed = DownloadStore.removeAll(ids)
         // Kept on disk too, so a file isn't left behind when the process dies before the end.
         trash(app).edit().putStringSet(TRASH, trashed(app) + files).apply()
@@ -189,16 +190,61 @@ object DownloadFiles {
         return t.copy(choice = t.choice.copy(mode = Mode.Audio, audioFormat = format), videoHeight = 0)
     }
 
-    /** Earlier downloads stored as videos although they hold only sound; runs once per start. */
+    /**
+     * Earlier downloads stored as videos although they hold only sound; runs once per start. A
+     * real video found on the way keeps its measured height, so the next start skips it instead
+     * of opening every such file again.
+     */
     fun fixAudioKinds() {
         scope.launch {
-            DownloadStore.tasks.value
-                .filter { it.status == Status.Done && it.choice.mode != Mode.Audio && it.videoHeight == 0 && it.filePath != null }
-                .forEach { t ->
-                    val file = File(t.filePath!!)
-                    if (file.isFile && hasVideo(file) == false) DownloadStore.update(t.id) { asAudio(it) }
-                }
+            // What was looked at, and what it turned out to be; put on the list a few at a time.
+            val fixes = HashMap<String, Pair<DownloadTask, (DownloadTask) -> DownloadTask>>()
+            fun keep() {
+                if (fixes.isEmpty()) return
+                val batch = HashMap(fixes)
+                fixes.clear()
+                // Only still the download that was looked at: not downloaded again or moved meanwhile.
+                DownloadStore.updateAll(which = { t ->
+                    val seen = batch[t.id]?.first
+                    seen != null && t.status == Status.Done && t.videoHeight == 0 && t.choice.mode != Mode.Audio &&
+                        t.filePath == seen.filePath && t.finishedAt == seen.finishedAt
+                }) { batch.getValue(it.id).second(it) }
+            }
+            try {
+                DownloadStore.tasks.value
+                    .filter { it.status == Status.Done && it.choice.mode != Mode.Audio && it.videoHeight == 0 && it.filePath != null }
+                    .forEach { t ->
+                        val file = File(t.filePath!!)
+                        if (!file.isFile) return@forEach
+                        when (val h = pictureHeight(file)) {
+                            0 -> fixes[t.id] = t to ::asAudio
+                            null, -1 -> {}
+                            else -> fixes[t.id] = t to { it.copy(videoHeight = h) }
+                        }
+                        if (fixes.size >= 16) keep()
+                    }
+            } finally {
+                keep()
+            }
         }
+    }
+
+    /**
+     * What [hasVideo] and [probeHeight] say together, from one look into the file: 0 for sound
+     * only, the picture's height, -1 for a picture of unknown height, null when it can't be read.
+     */
+    private fun pictureHeight(file: File): Int? {
+        if (app.hamstr.player.kindOf(file) == app.hamstr.player.Kind.Audio) return 0
+        if (app.hamstr.player.kindOf(file) != app.hamstr.player.Kind.Video) return null
+        return runCatching {
+            MediaMetadataRetriever().run {
+                try {
+                    setDataSource(file.absolutePath)
+                    if (extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") 0
+                    else extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()?.takeIf { it > 0 } ?: -1
+                } finally { release() }
+            }
+        }.getOrNull()
     }
 
     /** The video's height in pixels, or 0 for audio and files the platform can't read. */

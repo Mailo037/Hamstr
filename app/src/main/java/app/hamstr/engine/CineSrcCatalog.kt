@@ -78,7 +78,7 @@ internal object CineSrcCatalog {
     /** Each selected episode is an independent resumable queue item in one season group. */
     fun enqueue(context: Context, series: CineSrcSeries, season: CineSrcSeason, selected: Set<Int>, choice: Choice) {
         val groupTitle = series.title + " · " + context.getString(app.hamstr.R.string.cinesrc_season, season.number)
-        tasksFor(series, season, selected, choice, groupTitle).forEach(DownloadStore::add)
+        DownloadStore.addAll(tasksFor(series, season, selected, choice, groupTitle))
         DownloadService.send(context, DownloadService.ACTION_START)
     }
 

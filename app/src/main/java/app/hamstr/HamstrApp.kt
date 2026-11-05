@@ -28,13 +28,15 @@ class HamstrApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The history is the biggest file: it is read beside the smaller ones, needed from finishPending on.
+        DownloadStore.preload(filesDir)
         Prefs.init(this)
-        DownloadStore.init(this)
         Subscriptions.init(filesDir)
         Positions.init(this)
         Playlists.init(this)
         app.hamstr.data.Lyrics.init(this)
         Network.init(this)
+        DownloadStore.init(this)
         DownloadFiles.finishPending(this)
         DownloadFiles.fixAudioKinds()
         DownloadService.channels(this)
@@ -54,7 +56,11 @@ class HamstrApp : Application() {
     private fun watchSchedule() {
         val scope = MainScope()
         scope.launch {
-            combine(Subscriptions.all.map { list -> list.map { it.checkedAt } }, Prefs.settings) { _, _ -> }.collect { Wakeups.plan(this@HamstrApp) }
+            // Only what the alarm depends on: an accent or a volume change sets no new alarm.
+            combine(
+                Subscriptions.all.map { list -> list.map { it.checkedAt } }.distinctUntilChanged(),
+                Prefs.settings.map { Triple(it.nightOnly, it.nightFrom, it.nightTo) }.distinctUntilChanged(),
+            ) { _, _ -> }.collect { Wakeups.plan(this@HamstrApp) }
         }
         scope.launch {
             Prefs.settings.map { listOf(it.nightOnly, it.nightFrom, it.nightTo, it.chargingOnly) }.distinctUntilChanged().drop(1).collect {

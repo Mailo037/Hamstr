@@ -56,6 +56,8 @@ fun main(args: Array<String>) {
     Paths.data.mkdirs()
     // Already running: that one comes to the front (a start at sign-in leaves it be).
     if (!Instance.claim(quiet = Autostart.TRAY_FLAG in args)) return
+    // The history is the biggest file: read beside the settings, the splash and Compose loading.
+    DownloadStore.preload(Paths.data)
     Prefs.init(PropertiesFile(File(Paths.data, "settings.properties")))
     // Not every Linux desktop has a tray; there closing the window quits as before.
     val tray = SystemTray.isSupported()

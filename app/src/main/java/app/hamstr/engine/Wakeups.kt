@@ -25,7 +25,12 @@ import app.hamstr.data.Subscriptions
 object Wakeups {
     private const val TAG = "HamstrWake"
 
-    /** Sets the alarm for the next of the two, or takes it away when neither is coming. */
+    /**
+     * Sets the alarm for the next of the two, or takes it away when neither is coming. One plan at
+     * a time (the app's watcher and the queue both plan), so what the system holds and [planned]
+     * can't drift apart.
+     */
+    @Synchronized
     fun plan(context: Context) {
         val s = Prefs.settings.value
         val now = System.currentTimeMillis()
@@ -34,20 +39,43 @@ object Wakeups {
         val night = Schedule.nextNight(s, now).takeIf {
             s.nightOnly && !Schedule.night(s, now) && DownloadStore.tasks.value.any { t -> t.status == Status.Queued && !t.anytime }
         }
-        // One that is overdue (no network last time) comes again in a quarter of an hour, not at once.
-        val feeds = Subscriptions.nextCheck()?.coerceAtLeast(now + 15 * 60_000)
+        // One that is overdue (no network last time) comes again in a quarter of an hour, not at once;
+        // rounded up to five minutes, so planning again a moment later asks for the same time.
+        val feeds = Subscriptions.nextCheck()?.let { due ->
+            val soonest = now + 15 * 60_000
+            if (due >= soonest) due else (soonest + STEP - 1) / STEP * STEP
+        }
         val at = listOfNotNull(night, feeds).minOrNull()
+        // pump() plans after every download; the system hears of it only when the time changed.
+        val want = at ?: NONE
+        if (planned == want) return
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         val pi = PendingIntent.getBroadcast(
             context, 0, Intent(context, WakeReceiver::class.java).setAction(ACTION),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        if (at == null) return am.cancel(pi)
-        runCatching {
-            if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
-            else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
-        }.onFailure { Log.w(TAG, "No alarm", it) }
+        if (at == null) {
+            am.cancel(pi)
+        } else {
+            runCatching {
+                if (Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+                else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            }.onFailure { Log.w(TAG, "No alarm", it); return }
+        }
+        planned = want
     }
+
+    /** The alarm went off (or the phone started again and forgot it): the next plan sets one whatever it was. */
+    @Synchronized
+    fun forget() {
+        planned = UNKNOWN
+    }
+
+    // The alarm as last handed to the system in this process; NONE: cancelled, UNKNOWN: not known.
+    private var planned = UNKNOWN
+    private const val NONE = 0L
+    private const val UNKNOWN = -1L
+    private const val STEP = 5 * 60_000L
 
     /** The phone is on a charger (or a USB port that charges it). */
     fun charging(context: Context) = context.getSystemService(BatteryManager::class.java)?.isCharging ?: true
@@ -58,6 +86,7 @@ object Wakeups {
 /** The alarm went off, or the phone started again (which forgets alarms): the queue looks. */
 class WakeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        Wakeups.forget()
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             Wakeups.plan(context)
             // What was waiting when the phone went off waits on; the queue sees whether it still has to.

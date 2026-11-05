@@ -339,7 +339,7 @@ private fun MediaSheet(
                     )
                     Txt(
                         if (here.isNotEmpty()) listOfNotNull(versionsBadge(here), here.sumOf { it.sizeBytes }.takeIf { it > 0 }?.let(::formatBytes)).joinToString(" · ")
-                        else coming.first().let { "${formatBadge(it)} · ${(it.progress * 100).toInt()} %" },
+                        else rememberCurrent(coming.first()).let { "${formatBadge(it)} · ${(it.progress * 100).toInt()} %" },
                         style = Hamstr.type.small, color = c.ghost, maxLines = 1,
                     )
                 }

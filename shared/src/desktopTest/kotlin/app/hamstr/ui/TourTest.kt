@@ -54,6 +54,7 @@ class TourTest {
             Prefs.init(PropertiesFile(file))
             assertFalse(TourGate.due())
         } finally {
+            PropertiesFile.flushAll()
             file.delete()
         }
     }
@@ -142,6 +143,8 @@ class TourTest {
                 shot(File(out, "size_${size.name.lowercase()}_7_look.png"), false, 6, 1_500L, 412, 892, 2.625f, size.scale)
             }
         } finally {
+            // What is still being written would bring the file back after the delete.
+            PropertiesFile.flushAll()
             Prefs.init(PropertiesFile(file.apply { delete() }))
         }
     }

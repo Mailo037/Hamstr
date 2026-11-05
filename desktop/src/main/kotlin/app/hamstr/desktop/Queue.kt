@@ -15,6 +15,7 @@ import app.hamstr.data.Schedule
 import app.hamstr.data.Stage
 import app.hamstr.data.Status
 import app.hamstr.data.Subscriptions
+import app.hamstr.data.Throttle
 import app.hamstr.engine.MediaInfo
 import app.hamstr.engine.EngineState
 import app.hamstr.engine.Failures
@@ -59,6 +60,8 @@ object Queue : DownloadControl {
     val engine: StateFlow<EngineState> = _engine.asStateFlow()
 
     private const val PROGRESS = "HAMSTR_PROGRESS "
+    /** How often a running download's progress reaches the list (and every screen showing it). */
+    private const val PROGRESS_MS = 400L
     /** The first Cheek that embeds subtitles and downloads yt-dlp's playlists itself. */
     private const val CHEEK_SUBTITLES = "0.3.2"
     private val POSTPROCESSOR = Regex("""^\[(\w+)]""")
@@ -71,8 +74,7 @@ object Queue : DownloadControl {
     fun start() {
         scope.launch {
             // Downloads that were running when the app closed carry on.
-            DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage != null }
-                .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
+            DownloadStore.updateAll(persist = false, which = { it.status == Status.Queued && it.stage != null }) { it.copy(stage = null) }
             boot()
         }
         // The night switched off or moved: what it held goes now, or waits for the new hours.
@@ -91,17 +93,16 @@ object Queue : DownloadControl {
 
     /** Downloads the schedule held start over: [pump] holds them again if it still says so. */
     private fun release() {
-        DownloadStore.tasks.value.filter { it.status == Status.Queued && it.stage?.held == true }
-            .forEach { t -> DownloadStore.update(t.id, persist = false) { it.copy(stage = null) } }
+        DownloadStore.updateAll(persist = false, which = { it.status == Status.Queued && it.stage?.held == true }) { it.copy(stage = null) }
         pump()
     }
 
     override fun retry(ids: List<String>, updateFirst: Boolean) {
-        if (!updateFirst) return ids.forEach { resume(it) }
+        if (!updateFirst) return resumeAll(ids)
         scope.launch {
             Downloads.updating.value = true
             try { updateYtDlpNow() } finally { Downloads.updating.value = false }
-            ids.forEach { resume(it) }
+            resumeAll(ids)
         }
     }
 
@@ -125,7 +126,7 @@ object Queue : DownloadControl {
 
     private suspend fun checkFeedsNow(force: Boolean) {
         if (_engine.value !is EngineState.Ready) return
-        val n = Subscriptions.check({ feed(it) }, force) { tasks -> tasks.forEach(DownloadStore::add) }
+        val n = Subscriptions.check({ feed(it) }, force) { tasks -> DownloadStore.addAll(tasks) }
         if (n > 0) pump()
     }
 
@@ -193,19 +194,30 @@ object Queue : DownloadControl {
 
     override fun cancel(id: String) = stop(id, Status.Canceled)
 
-    override fun resume(id: String) {
-        DownloadStore.update(id) { it.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0) }
+    override fun resume(id: String) = resumeAll(listOf(id))
+
+    override fun resumeAll(ids: List<String>) {
+        val picked = ids.toHashSet()
+        DownloadStore.updateAll(which = { it.id in picked }) { it.copy(status = Status.Queued, error = null, stage = null, attempts = 0, retryAt = 0) }
         pump()
     }
 
-    private fun stop(id: String, status: Status) {
+    // A playlist's Pause: what waits is paused in one step, the few running ones are stopped, and the queue looks once.
+    override fun pauseAll(ids: List<String>) {
+        // Under pump's lock: none of them starts between being looked at and being paused.
+        val busy = synchronized(this) { DownloadStore.pauseWaiting(ids.toHashSet(), HashSet(jobs.keys)) }
+        busy.forEach { stop(it, Status.Paused, pump = false) }
+        pump()
+    }
+
+    private fun stop(id: String, status: Status, pump: Boolean = true) {
         val task = DownloadStore.get(id) ?: return
         if (!task.status.active && !(status == Status.Canceled && task.status == Status.Paused)) return
         DownloadStore.update(id) { it.copy(status = status, speed = "", etaSec = -1, stage = null) }
         processes.remove(id)?.let(::kill)
         jobs.remove(id)?.cancel()
         if (status == Status.Canceled) File(Paths.parts, id).deleteRecursively()
-        pump()
+        if (pump) pump()
     }
 
     @Synchronized
@@ -215,11 +227,14 @@ object Queue : DownloadControl {
         val max = s.parallel.coerceIn(1, 3)
         val now = System.currentTimeMillis()
         val queued = DownloadStore.tasks.value.filter { it.status == Status.Queued && !jobs.containsKey(it.id) }.reversed() // oldest first
+        // Set in one step after the loop: a held playlist would otherwise copy the list once per song.
+        val holds = HashMap<String, Stage>()
+        val holding = Schedule.holds(s, charging = true, now)
         for (task in queued) {
             // The night setting holds it; a computer has no charger to wait for.
-            val hold = Schedule.hold(task, s, charging = true, now)
+            val hold = holding(task)
             if (hold != null) {
-                if (task.stage != hold) DownloadStore.update(task.id, persist = false) { it.copy(stage = hold) }
+                if (task.stage != hold) holds[task.id] = hold
                 continue
             }
             if (task.retryAt > now) continue
@@ -228,10 +243,13 @@ object Queue : DownloadControl {
             jobs[task.id] = job
             job.invokeOnCompletion {
                 jobs.remove(task.id, job)
+                progressPace.reset(task.id)
+                stagePace.reset(task.id)
                 scope.launch { pump() }
             }
             job.start()
         }
+        if (holds.isNotEmpty()) DownloadStore.updateAll(persist = false, which = { it.id in holds && it.status == Status.Queued }) { it.copy(stage = holds.getValue(it.id)) }
         // The next retry wakes the queue by itself: one alarm, set for the earliest.
         val next = DownloadStore.tasks.value.filter { it.status == Status.Queued && it.retryAt > now }.minOfOrNull { it.retryAt }
         if (next != wakeAt) {
@@ -366,7 +384,9 @@ object Queue : DownloadControl {
     }
 
     private fun stageProgress(id: String, fraction: Float) {
-        DownloadStore.update(id, persist = false) { if (it.status == Status.Running && it.stage != null) it.copy(stageProgress = fraction.coerceIn(0f, 1f)) else it }
+        // FFmpeg reports many times a second; the bar moves at the same pace as the download's.
+        if (!stagePace.ready(id)) return
+        DownloadStore.tick(id) { if (it.stage != null) it.copy(stageProgress = fraction.coerceIn(0f, 1f)) else it }
     }
 
     private suspend fun ytDlp(task: DownloadTask, infoFile: File?, work: File, paths: File): Run {
@@ -411,14 +431,14 @@ object Queue : DownloadControl {
         }
     }
 
-    private val lastProgress = ConcurrentHashMap<String, Long>()
+    // How often each running download reaches the list; forgotten when its job ends.
+    private val progressPace = Throttle(PROGRESS_MS)
+    private val stagePace = Throttle(PROGRESS_MS)
 
     private fun progress(id: String, fraction: Float, speed: Long, eta: Long) {
-        val now = System.currentTimeMillis()
-        if (now - (lastProgress[id] ?: 0) < 400) return
-        lastProgress[id] = now
-        DownloadStore.update(id, persist = false) {
-            if (it.status != Status.Running) it else it.copy(
+        if (!progressPace.ready(id)) return
+        DownloadStore.tick(id) {
+            it.copy(
                 progress = fraction.coerceIn(0f, 1f).coerceAtLeast(it.progress),
                 etaSec = eta, speed = if (speed > 0) speedText(speed) else it.speed,
                 // The first bytes end "Resolving"; the post-processors come later.
@@ -429,6 +449,8 @@ object Queue : DownloadControl {
 
     private fun stage(id: String, stage: Stage?) {
         stage ?: return
+        // A new stage shows its first progress at once, however short it is.
+        stagePace.reset(id)
         DownloadStore.update(id, persist = false) { if (it.status == Status.Running) it.copy(stage = stage, stageProgress = -1f, speed = "", etaSec = -1) else it }
     }
 
@@ -461,14 +483,14 @@ object Queue : DownloadControl {
         }
         // A playlist becomes a group: this task keeps the first file, the rest join it.
         val base = DownloadStore.get(task.id) ?: return
-        entries.drop(1).forEachIndexed { i, e ->
+        DownloadStore.addAll(entries.drop(1).mapIndexed { i, e ->
             val f = File(e.optString("filepath"))
-            DownloadStore.add(base.copy(
+            base.copy(
                 id = UUID.randomUUID().toString(), title = e.optString("title").ifBlank { f.nameWithoutExtension },
                 thumbnail = e.optString("thumbnail").ifBlank { null }, durationSec = e.optDouble("duration", 0.0).toInt(),
                 filePath = f.path, sizeBytes = f.length(), createdAt = base.createdAt + i + 1, mediaKey = null,
-            ))
-        }
+            )
+        })
         FileChecks.refresh()
     }
 

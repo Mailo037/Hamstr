@@ -118,6 +118,8 @@ class ReleaseScreensTest {
             }
         } finally {
             Subscriptions.replace(emptyList())
+            // What is still being written would bring the file back after the delete.
+            PropertiesFile.flushAll()
             Prefs.init(PropertiesFile(file.apply { delete() }))
         }
     }

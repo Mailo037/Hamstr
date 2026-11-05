@@ -41,11 +41,19 @@ object Schedule {
     }
 
     /** Why [t] may not start yet, or null when it may. The computer has no charger to wait for: it passes true. */
-    fun hold(t: DownloadTask, s: Settings, charging: Boolean, now: Long = System.currentTimeMillis()): Stage? = when {
-        t.anytime -> null
-        !night(s, now) -> Stage.WaitingForNight
-        s.chargingOnly && !charging -> Stage.WaitingForCharger
-        else -> null
+    fun hold(t: DownloadTask, s: Settings, charging: Boolean, now: Long = System.currentTimeMillis()): Stage? = holds(s, charging, now)(t)
+
+    /** [hold] for a whole queue: whether it is night is worked out once, not once per waiting download. */
+    fun holds(s: Settings, charging: Boolean, now: Long = System.currentTimeMillis()): (DownloadTask) -> Stage? {
+        val night = night(s, now)
+        return { t ->
+            when {
+                t.anytime -> null
+                !night -> Stage.WaitingForNight
+                s.chargingOnly && !charging -> Stage.WaitingForCharger
+                else -> null
+            }
+        }
     }
 
     /** [minute] as a time of day the way this language writes it: "01:00", "1:00 AM". */

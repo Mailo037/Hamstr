@@ -18,12 +18,17 @@ interface DownloadControl {
      */
     fun retry(ids: List<String>, updateFirst: Boolean)
 
+    /** [pause] for many (a playlist's Pause). */
+    fun pauseAll(ids: List<String>) = ids.forEach(::pause)
+
+    /** [resume] for many (a playlist, "Retry all"): the queues override it to look at the list once, not once each. */
+    fun resumeAll(ids: List<String>) = ids.forEach(::resume)
+
     /** Starts downloads the night or the charger holds back (Schedule) right away. */
     fun startNow(ids: List<String>) {
-        ids.forEach { id ->
-            DownloadStore.update(id) { it.copy(anytime = true) }
-            resume(id)
-        }
+        val picked = ids.toHashSet()
+        DownloadStore.updateAll(which = { it.id in picked }) { it.copy(anytime = true) }
+        resumeAll(ids)
     }
 
     /** Reads a channel or playlist without its formats, for Subscriptions. */

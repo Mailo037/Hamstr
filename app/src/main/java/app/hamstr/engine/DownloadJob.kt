@@ -67,11 +67,12 @@ class DownloadJob : JobService() {
         return again
     }
 
-    /** A newer progress notification, for the job's own. */
-    fun update(n: android.app.Notification) {
-        val p = params ?: return
-        runCatching { setNotification(p, DownloadService.NOTIF_PROGRESS, n, JOB_END_NOTIFICATION_POLICY_REMOVE) }
+    /** A newer progress notification, for the job's own; true when the system took it. */
+    fun update(n: android.app.Notification): Boolean {
+        val p = params ?: return false
+        return runCatching { setNotification(p, DownloadService.NOTIF_PROGRESS, n, JOB_END_NOTIFICATION_POLICY_REMOVE) }
             .onFailure { Log.w(TAG, "Couldn't update the notification", it) }
+            .isSuccess
     }
 
     /** The queue is empty: the job ends and lets go of the service. */

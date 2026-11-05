@@ -13,6 +13,7 @@ import android.widget.RemoteViews
 import app.hamstr.MainActivity
 import app.hamstr.R
 import app.hamstr.data.DownloadStore
+import app.hamstr.data.Latest
 import app.hamstr.data.Prefs
 import app.hamstr.data.Status
 import app.hamstr.engine.DownloadService
@@ -30,8 +31,11 @@ import kotlinx.coroutines.launch
 /** Home screen widget: what Hamstr is doing right now, plus paste and add in one tap. */
 class HamstrWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        Widgets.placed(true)
         manager.updateAppWidget(ids, Widgets.views(context))
     }
+
+    override fun onDisabled(context: Context) = Widgets.placed(false)
 }
 
 object Widgets {
@@ -42,7 +46,7 @@ object Widgets {
     fun start(context: Context) {
         val app = context.applicationContext
         scope.launch {
-            combine(DownloadStore.tasks, Prefs.settings.map { it.accent }.distinctUntilChanged()) { _, _ -> }
+            combine(DownloadStore.tasks, DownloadStore.live, Prefs.settings.map { it.accent }.distinctUntilChanged()) { _, _, _ -> }
                 .sample(1000)
                 .collect { refresh(app) }
         }
@@ -55,46 +59,83 @@ object Widgets {
         }
     }
 
-    fun refresh(context: Context) {
-        val manager = AppWidgetManager.getInstance(context)
-        val ids = manager.getAppWidgetIds(ComponentName(context, HamstrWidget::class.java))
-        if (ids.isNotEmpty()) manager.updateAppWidget(ids, views(context))
+    // Whether a Hamstr widget is on a home screen: null until asked once, then kept by the provider's callbacks.
+    private var placed: Boolean? = null
+    // What the placed widgets show now: the same (a sample with no visible change) isn't sent again.
+    private val shown = Latest<Card>()
+
+    /** The provider heard of widgets being placed or the last one going. */
+    @Synchronized
+    fun placed(on: Boolean) {
+        placed = on
+        shown.forget()
     }
 
-    fun views(context: Context): RemoteViews {
-        val v = RemoteViews(context.packageName, R.layout.widget_hamstr)
-        val tasks = DownloadStore.tasks.value
-        val running = tasks.filter { it.status == Status.Running }
-        val queued = tasks.count { it.status == Status.Queued }
-        val current = running.firstOrNull()
+    /** Asks the system once; a callback that came first (or meanwhile, it waits for this lock) wins. */
+    @Synchronized
+    private fun placed(manager: AppWidgetManager, component: ComponentName): Boolean =
+        placed ?: manager.getAppWidgetIds(component).isNotEmpty().also { placed = it }
+
+    fun refresh(context: Context) {
+        val manager = AppWidgetManager.getInstance(context)
+        val component = ComponentName(context, HamstrWidget::class.java)
+        // No widget placed: no call into the system each second while downloads run.
+        if (!placed(manager, component)) return
+        val card = card(context)
+        shown.send(card) {
+            manager.updateAppWidget(component, views(context, card))
+            true
+        }
+    }
+
+    /** What the widget says, worked out before any RemoteViews (with the mark's bitmap) are made. */
+    private data class Card(val title: String, val line: String, val progress: Int, val accent: Int)
+
+    private fun card(context: Context): Card {
+        // Ticks change only the progress: the list's part is the summary worked out once per list.
+        val summary = DownloadStore.summary()
+        val running = summary.running
+        val queued = summary.queued.size
+        val current = running.firstOrNull()?.let { DownloadStore.current(it) }
+        val accent = Prefs.settings.value.accent
         if (current != null) {
-            v.setTextViewText(R.id.widget_title, current.title)
             val more = running.size - 1 + queued
-            v.setTextViewText(
-                R.id.widget_line,
+            return Card(
+                current.title,
                 // While FFmpeg works or the queue waits, that is what it says.
                 DownloadService.stageText(context, current)
                     ?: listOf("${(current.progress * 100).toInt()}%", current.speed, DownloadService.eta(current.etaSec), if (more > 0) context.getString(R.string.widget_more, more) else "")
                         .filter { it.isNotEmpty() }.joinToString(" · "),
+                (current.progress * 1000).toInt(), accent,
             )
+        }
+        val newest = summary.newestDone
+        return Card(
+            context.getString(R.string.widget_stashed, formatBytes(summary.doneBytes)),
+            when {
+                queued > 0 -> summary.queued.firstOrNull { it.stage != null }?.let { DownloadService.stageText(context, it) } ?: context.getString(R.string.widget_waiting, queued)
+                newest == null -> context.getString(R.string.widget_start)
+                else -> context.resources.getQuantityString(R.plurals.widget_files, summary.done, summary.done, newest.title)
+            },
+            -1, accent,
+        )
+    }
+
+    fun views(context: Context): RemoteViews = views(context, card(context))
+
+    private fun views(context: Context, card: Card): RemoteViews {
+        val v = RemoteViews(context.packageName, R.layout.widget_hamstr)
+        v.setTextViewText(R.id.widget_title, card.title)
+        v.setTextViewText(R.id.widget_line, card.line)
+        if (card.progress >= 0) {
             v.setViewVisibility(R.id.widget_progress, View.VISIBLE)
-            v.setProgressBar(R.id.widget_progress, 1000, (current.progress * 1000).toInt(), false)
+            v.setProgressBar(R.id.widget_progress, 1000, card.progress, false)
         } else {
-            val done = tasks.filter { it.status == Status.Done }
-            v.setTextViewText(R.id.widget_title, context.getString(R.string.widget_stashed, formatBytes(done.sumOf { it.sizeBytes })))
-            v.setTextViewText(
-                R.id.widget_line,
-                when {
-                    queued > 0 -> tasks.firstOrNull { it.status == Status.Queued && it.stage != null }?.let { DownloadService.stageText(context, it) } ?: context.getString(R.string.widget_waiting, queued)
-                    done.isEmpty() -> context.getString(R.string.widget_start)
-                    else -> context.resources.getQuantityString(R.plurals.widget_files, done.size, done.size, done.first().title)
-                },
-            )
             v.setViewVisibility(R.id.widget_progress, View.GONE)
         }
-        v.setImageViewBitmap(R.id.widget_mark, PlayerWidgets.markBitmap(context, Prefs.settings.value.accent))
+        v.setImageViewBitmap(R.id.widget_mark, PlayerWidgets.markBitmap(context, card.accent))
         if (Build.VERSION.SDK_INT >= 31) {
-            val accent = ColorStateList.valueOf(Prefs.settings.value.accent)
+            val accent = ColorStateList.valueOf(card.accent)
             v.setColorStateList(R.id.widget_add, "setBackgroundTintList", accent)
             v.setColorStateList(R.id.widget_progress, "setProgressTintList", accent)
         }

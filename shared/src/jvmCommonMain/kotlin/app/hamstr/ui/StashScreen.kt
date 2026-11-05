@@ -44,6 +44,7 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -76,6 +77,7 @@ import app.hamstr.data.FileChecks
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Positions
 import app.hamstr.data.collapseVersions
@@ -103,6 +105,8 @@ import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.LocalFx
 import app.hamstr.ui.theme.Radii
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import app.hamstr.ui.components.PictureLabel
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.iconSwap
@@ -141,8 +145,11 @@ fun StashScreen(
 ) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
-    val active = tasks.filter { it.status != Status.Done && it.status != Status.Canceled }
-    val done = tasks.filter { it.status == Status.Done }
+    // A new list (a download started, finished, moved on): one pass sorts it, the rest only reads.
+    // Progress ticks don't come here; the rows that show them listen for them (rememberCurrent).
+    val lists = remember(tasks) { StashLists(tasks) }
+    val active = lists.active
+    val done = lists.done
     val shelf = remember(done) { collapseVersions(done) }
     val albums = remember(shelf) { shelfOf(shelf) }
     val heads = remember(albums) { albums.flatMap { e -> if (e is Stashed.Album) e.tracks.map { it.head } else listOf((e as Stashed.One).head) } }
@@ -156,8 +163,8 @@ fun StashScreen(
             }
         }
     }
-    val totalBytes = done.sumOf { it.sizeBytes }
-    val running = tasks.count { it.status.active }
+    val totalBytes = lists.totalBytes
+    val running = lists.running
     val mark = rememberMarkState()
     val moods = LocalFx.current.moods
     val missing by FileChecks.missing.collectAsState()
@@ -165,15 +172,12 @@ fun StashScreen(
     // Groups whose waiting downloads are shown too, not just the ones that are moving.
     var openGroups by remember { mutableStateOf(emptySet<String>()) }
     val rows = remember(tasks, openGroups) { activeRows(tasks, active, openGroups) }
-    // Where each waiting download stands in line, in the order the queue starts them.
-    val line = remember(tasks) {
-        tasks.filter { it.status == Status.Queued && it.stage == null }.reversed().withIndex().associate { (i, t) -> t.id to i }
-    }
-    val held = active.filter { it.status == Status.Queued && it.stage?.held == true }
-    val failed = active.filter { it.status == Status.Failed }
+    val line = lists.line
+    val held = lists.held
+    val failed = lists.failed
     val updating by Downloads.updating.collectAsState()
     // Copied, then stashed some other way (Ctrl+V): nothing left to offer.
-    val offer = clip?.takeIf { o -> o.link == null || tasks.none { it.url == o.link } }
+    val offer = remember(clip, tasks) { clip?.takeIf { o -> o.link == null || tasks.none { it.url == o.link } } }
 
     // Something finished: the hamster stuffs its cheeks and chews.
     var lastDone by remember { mutableIntStateOf(done.size) }
@@ -286,14 +290,14 @@ fun StashScreen(
                     modifier = Modifier.animateItem(),
                 )
             }
-            if (tasks.none { it.status != Status.Canceled }) {
+            if (lists.empty) {
                 item(key = "empty") { EmptyState() }
             }
             if (active.isNotEmpty()) {
                 item(key = "h_active") {
                     SectionHeader(
                         stringResource(Res.string.stash_downloading),
-                        trailing = stringResource(Res.string.stash_running, active.count { it.status == Status.Running }),
+                        trailing = stringResource(Res.string.stash_running, lists.moving),
                         modifier = Modifier.padding(horizontal = 12.dp).animateItem(),
                     )
                 }
@@ -399,6 +403,40 @@ fun StashScreen(
     }
 }
 
+/** The stash's lists out of all downloads, made in one pass over them. */
+internal class StashLists(tasks: List<DownloadTask>) {
+    val active = ArrayList<DownloadTask>()
+    val done = ArrayList<DownloadTask>()
+    val held = ArrayList<DownloadTask>()
+    val failed = ArrayList<DownloadTask>()
+    /** Where each waiting download stands in line, in the order the queue starts them (oldest first). */
+    val line: Map<String, Int>
+    var totalBytes = 0L
+    var running = 0
+    var moving = 0
+    var empty = true
+
+    init {
+        val waiting = ArrayList<String>()
+        for (t in tasks) {
+            if (t.status != Status.Canceled) empty = false
+            if (t.status.active) running++
+            when (t.status) {
+                Status.Done -> { done += t; totalBytes += t.sizeBytes }
+                Status.Canceled -> {}
+                else -> {
+                    active += t
+                    if (t.status == Status.Running) moving++
+                    if (t.status == Status.Failed) failed += t
+                    if (t.status == Status.Queued && t.stage?.held == true) held += t
+                }
+            }
+            if (t.status == Status.Queued && t.stage == null) waiting += t.id
+        }
+        line = HashMap<String, Int>(waiting.size * 2).also { m -> waiting.asReversed().forEachIndexed { i, id -> m[id] = i } }
+    }
+}
+
 /** What the Downloading section lists: single downloads, and playlists as a header over their videos. */
 private sealed interface ActiveRow {
     val key: String
@@ -413,7 +451,10 @@ private sealed interface ActiveRow {
  * group shows only what moves, failed or was paused; the queued rest is one line until opened.
  */
 private fun activeRows(tasks: List<DownloadTask>, active: List<DownloadTask>, open: Set<String>): List<ActiveRow> {
-    val groups = tasks.filter { it.group != null && it.status != Status.Canceled }.groupBy { it.group!! }.filterValues { it.size > 1 }
+    if (active.isEmpty()) return emptyList()
+    // Only the groups something is on its way in: the whole history's albums don't need grouping on every tick.
+    val moving = active.mapNotNullTo(HashSet()) { it.group }
+    val groups = if (moving.isEmpty()) emptyMap() else tasks.filter { it.group in moving && it.status != Status.Canceled }.groupBy { it.group!! }.filterValues { it.size > 1 }
     val seen = HashSet<String>()
     val out = ArrayList<ActiveRow>()
     for (t in active) {
@@ -513,14 +554,23 @@ private fun AlbumRow(album: Stashed.Album, expanded: Boolean, onToggle: () -> Un
 
 /** A playlist on its way: how many are in, one bar for all of it, and pause or resume for the whole group. */
 @Composable
-private fun GroupRow(title: String, members: List<DownloadTask>, expanded: Boolean, onToggle: () -> Unit) {
+private fun GroupRow(title: String, group: List<DownloadTask>, expanded: Boolean, onToggle: () -> Unit) {
     val c = Hamstr.colors
-    val done = members.count { it.status == Status.Done }
-    val failed = members.count { it.status == Status.Failed }
-    val moving = members.filter { it.status.active }
-    val paused = members.filter { it.status == Status.Paused || it.status == Status.Failed }
-    val overall = (members.sumOf { if (it.status == Status.Done) 1.0 else it.progress.toDouble() } / members.size).toFloat()
-    val progress by animateFloatAsState(overall, Specs.glide(), label = "groupProgress")
+    // What only changes with the list, once per list; the ticks move just the running ones' share.
+    val done = remember(group) { group.count { it.status == Status.Done } }
+    val failed = remember(group) { group.count { it.status == Status.Failed } }
+    val moving = remember(group) { group.filter { it.status.active } }
+    val paused = remember(group) { group.filter { it.status == Status.Paused || it.status == Status.Failed } }
+    val running = remember(group) { group.filter { it.status == Status.Running } }
+    val settled = remember(group) { group.sumOf { if (it.status == Status.Done) 1.0 else if (it.status == Status.Running) 0.0 else it.progress.toDouble() } }
+    // A group with nothing running doesn't listen to the ticks at all.
+    val runningShare = if (running.isEmpty()) 0.0 else {
+        val share = remember(running) { DownloadStore.live.map { m -> running.sumOf { (m[it.id]?.progress ?: it.progress).toDouble() } }.distinctUntilChanged() }
+        share.collectAsState(running.sumOf { DownloadStore.current(it).progress.toDouble() }).value
+    }
+    val overall = ((settled + runningShare) / group.size).toFloat()
+    // Read only by the bar (Animated): its frames don't redraw the row.
+    val progress = animateFloatAsState(overall, Specs.glide(), label = "groupProgress")
     val turn by animateFloatAsState(if (expanded) 180f else 0f, Specs.blend(), label = "chevron")
     Row(
         Modifier
@@ -536,7 +586,7 @@ private fun GroupRow(title: String, members: List<DownloadTask>, expanded: Boole
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Txt("$done", style = Hamstr.type.mono, color = c.accent)
-                Txt("/${members.size}", style = Hamstr.type.small, color = c.ghost)
+                Txt("/${group.size}", style = Hamstr.type.small, color = c.ghost)
             }
         }
         Spacer(Modifier.width(12.dp))
@@ -544,22 +594,22 @@ private fun GroupRow(title: String, members: List<DownloadTask>, expanded: Boole
             Txt(title, style = Hamstr.type.bodyMedium, maxLines = 1)
             Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Badge(pluralStringResource(Res.plurals.share_list_videos, members.size, members.size))
-                Txt(stringResource(Res.string.stash_group_count, done, members.size), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
+                Badge(pluralStringResource(Res.plurals.share_list_videos, group.size, group.size))
+                Txt(stringResource(Res.string.stash_group_count, done, group.size), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
                 if (failed > 0) Txt(stringResource(Res.string.stash_group_failed, failed), style = Hamstr.type.small, color = c.red, maxLines = 1)
             }
             Spacer(Modifier.height(7.dp))
-            ProgressLine(progress, color = if (moving.isEmpty()) c.ghost else c.accent)
+            Animated(progress) { ProgressLine(it, color = if (moving.isEmpty()) c.ghost else c.accent) }
         }
         Spacer(Modifier.width(8.dp))
         Txt("${(overall * 100).toInt()}%", style = Hamstr.type.mono, modifier = Modifier.padding(end = 2.dp))
         if (moving.isNotEmpty()) {
             IconButton(Res.drawable.ic_pause, stringResource(Res.string.stash_group_pause), {
-                moving.forEach { Downloads.control.pause(it.id) }
+                Downloads.control.pauseAll(moving.map { it.id })
             }, size = 34.dp)
         } else if (paused.isNotEmpty()) {
             IconButton(Res.drawable.ic_play_arrow, stringResource(Res.string.stash_group_resume), {
-                paused.forEach { Downloads.control.resume(it.id) }
+                Downloads.control.resumeAll(paused.map { it.id })
             }, size = 34.dp, tint = c.accent)
         }
         Icon(Res.drawable.ic_expand_more, tint = c.muted, size = 20.dp, modifier = Modifier.graphicsLayer { rotationZ = turn })
@@ -636,12 +686,29 @@ fun ChangedMark(id: String, modifier: Modifier = Modifier) {
     Icon(Res.drawable.ic_edit, tint = Hamstr.colors.muted, size = 14.dp, modifier = modifier.semantics { contentDescription = label })
 }
 
+/**
+ * [t] with its latest progress. Only a running download listens to the ticks ([DownloadStore.live]),
+ * so a tick redraws the rows that show it, not the screens built from the whole list.
+ */
+@Composable
+fun rememberCurrent(t: DownloadTask): DownloadTask {
+    if (t.status != Status.Running) return t
+    // Only this download's own entry: another download's tick changes nothing here.
+    val mine = remember(t.id) { DownloadStore.live.map { it[t.id] }.distinctUntilChanged() }
+    val live by mine.collectAsState(DownloadStore.live.value[t.id])
+    return DownloadStore.current(t, live)
+}
+
+/** Reads [value] itself: a change of it recomposes only [content], not the composable around it. */
+@Composable
+private fun Animated(value: State<Float>, content: @Composable (Float) -> Unit) = content(value.value)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskRow(
-    t: DownloadTask,
+    task: DownloadTask,
     highlighted: Boolean = false,
-    versions: List<DownloadTask> = listOf(t),
+    versions: List<DownloadTask> = listOf(task),
     gone: Boolean = false,
     resume: Float? = null,
     // How many downloads start before this waiting one; null when it isn't simply waiting its turn.
@@ -650,9 +717,11 @@ fun TaskRow(
     onLongClick: () -> Unit,
 ) {
     val c = Hamstr.colors
+    val t = rememberCurrent(task)
     val bitmap = rememberImage(t.thumbnail, 160)
-    // Progress glides instead of jumping between yt-dlp's updates.
-    val progress by animateFloatAsState(t.progress, Specs.glide(), label = "progress")
+    // Progress glides instead of jumping between yt-dlp's updates. Its frames are read only where
+    // it is drawn (Animated), so they redraw the thumbnail and the line, not the whole row.
+    val progress = animateFloatAsState(t.progress, Specs.glide(), label = "progress")
     val stage = rememberStageText(t)
     Row(
         Modifier
@@ -670,13 +739,15 @@ fun TaskRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb))) {
-            AsciiImage(
-                bitmap = bitmap,
-                reveal = if (t.status == Status.Done) 1f else progress,
-                rain = if (bitmap == null && t.status.active) 1f else 0f,
-                cell = 5.dp,
-                modifier = Modifier.size(52.dp).graphicsLayer { alpha = if (gone) 0.35f else 1f },
-            )
+            Animated(progress) { p ->
+                AsciiImage(
+                    bitmap = bitmap,
+                    reveal = if (t.status == Status.Done) 1f else p,
+                    rain = if (bitmap == null && t.status.active) 1f else 0f,
+                    cell = 5.dp,
+                    modifier = Modifier.size(52.dp).graphicsLayer { alpha = if (gone) 0.35f else 1f },
+                )
+            }
             // Where it was left off.
             if (resume != null) Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(resume).height(3.dp).background(c.accent))
         }
@@ -708,7 +779,7 @@ fun TaskRow(
             }
             if (t.status == Status.Running || t.status == Status.Paused || t.status == Status.Queued) {
                 Spacer(Modifier.height(7.dp))
-                StageLine(progress, t)
+                Animated(progress) { StageLine(it, t) }
             }
         }
         Spacer(Modifier.width(8.dp))
@@ -860,26 +931,30 @@ fun formatBadge(t: DownloadTask): String {
  * with the percentage on top. Shown when a row that is still downloading is tapped.
  */
 @Composable
-fun DownloadPreview(t: DownloadTask, modifier: Modifier = Modifier) {
+fun DownloadPreview(task: DownloadTask, modifier: Modifier = Modifier) {
     val c = Hamstr.colors
+    val t = rememberCurrent(task)
     val bitmap = rememberImage(t.thumbnail, 480)
-    val progress by animateFloatAsState(t.progress, Specs.glide(), label = "previewProgress")
+    // Read only where it is drawn (Animated): its frames don't redraw the label and the status line.
+    val progress = animateFloatAsState(t.progress, Specs.glide(), label = "previewProgress")
     val moving = t.status == Status.Running || t.status == Status.Queued
     val stage = rememberStageText(t)
     Box(modifier.fillMaxWidth().aspectRatio(if (t.choice.mode == Mode.Audio) 1f else 16f / 9f).clip(RoundedCornerShape(14.dp))) {
-        AsciiImage(
-            bitmap = bitmap,
-            reveal = progress,
-            // Matrix columns keep running through the part that isn't there yet.
-            rain = when {
-                bitmap == null -> if (moving) 1f else 0.6f
-                moving -> 0.3f
-                else -> 0f
-            },
-            animate = moving,
-            cell = 7.dp,
-            modifier = Modifier.matchParentSize(),
-        )
+        Animated(progress) { p ->
+            AsciiImage(
+                bitmap = bitmap,
+                reveal = p,
+                // Matrix columns keep running through the part that isn't there yet.
+                rain = when {
+                    bitmap == null -> if (moving) 1f else 0.6f
+                    moving -> 0.3f
+                    else -> 0f
+                },
+                animate = moving,
+                cell = 7.dp,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
         Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.78f))))
         PictureLabel(
             stringResource(
@@ -896,11 +971,13 @@ fun DownloadPreview(t: DownloadTask, modifier: Modifier = Modifier) {
             badge = true,
         )
         Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Txt(
-                "${(progress * 100).toInt()}%",
-                style = Hamstr.type.mono.copy(fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
-                color = if (t.status == Status.Failed) c.red else Color.White,
-            )
+            Animated(progress) { p ->
+                Txt(
+                    "${(p * 100).toInt()}%",
+                    style = Hamstr.type.mono.copy(fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
+                    color = if (t.status == Status.Failed) c.red else Color.White,
+                )
+            }
             Txt(stage ?: statusLine(t), style = Hamstr.type.small, color = Color.White.copy(alpha = 0.75f), maxLines = 1)
         }
     }

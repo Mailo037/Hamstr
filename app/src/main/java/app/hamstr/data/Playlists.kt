@@ -146,7 +146,8 @@ object Playlists {
             id.startsWith(GROUP) -> {
                 val g = id.removePrefix(GROUP)
                 val title = DownloadStore.tasks.value.firstNotNullOfOrNull { t -> t.groupTitle?.takeIf { t.group == g } }
-                items.forEach { t -> DownloadStore.update(t.id) { it.copy(group = g, groupTitle = title) } }
+                val ids = items.mapTo(HashSet()) { it.id }
+                DownloadStore.updateAll(which = { it.id in ids }) { it.copy(group = g, groupTitle = title) }
             }
         }
     }
@@ -163,7 +164,8 @@ object Playlists {
             }
             id.startsWith(GROUP) -> {
                 val times = items.map { it.createdAt }.sorted()
-                order.forEachIndexed { i, t -> if (t.createdAt != times[i]) DownloadStore.update(t.id) { it.copy(createdAt = times[i]) } }
+                val at = order.withIndex().associate { (i, t) -> t.id to times[i] }
+                DownloadStore.updateAll(which = { it.id in at }) { it.copy(createdAt = at.getValue(it.id)) }
             }
         }
     }
@@ -181,7 +183,7 @@ object Playlists {
             id.startsWith(LIST) -> edit(id.removePrefix(LIST)) { it.copy(name = name) }
             id.startsWith(GROUP) -> {
                 val g = id.removePrefix(GROUP)
-                DownloadStore.tasks.value.filter { it.group == g }.forEach { t -> DownloadStore.update(t.id) { it.copy(groupTitle = name) } }
+                DownloadStore.updateAll(which = { it.group == g }) { it.copy(groupTitle = name) }
             }
         }
     }
@@ -192,7 +194,7 @@ object Playlists {
             id.startsWith(LIST) -> { _lists.update { all -> all.filterNot { it.id == id.removePrefix(LIST) } }; save() }
             id.startsWith(GROUP) -> {
                 val g = id.removePrefix(GROUP)
-                DownloadStore.tasks.value.filter { it.group == g }.forEach { t -> DownloadStore.update(t.id) { it.copy(group = null, groupTitle = null) } }
+                DownloadStore.updateAll(which = { it.group == g }) { it.copy(group = null, groupTitle = null) }
             }
         }
     }
