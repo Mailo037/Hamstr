@@ -12,16 +12,15 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.2"
+VERSION = "0.10.3"
 FEATURES = [
-    ("BIG LISTS STAY SMOOTH", "Progress redraws only what moves"),
-    ("PLAYLISTS IN ONE STEP", "Added, paused and resumed at once"),
-    ("LIGHTER IN THE BACKGROUND", "Fewer notifications, alarms and writes"),
+    ("ADD TO QUEUE GOES UP TOP", "Right after the song that plays now"),
+    ("DRAG TO THE EDGE", "The queue scrolls along with the song you hold"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.10.0 to 0.10.2: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
+# 0.10.0 to 0.10.3: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
 SHOTS = [("phone_stash.png", "Stash"), ("phone_following.png", "Following")]
 

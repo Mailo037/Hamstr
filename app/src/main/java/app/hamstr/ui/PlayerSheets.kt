@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,6 +99,48 @@ fun QueueSheet(onClose: () -> Unit) {
     val list = rememberLazyListState()
     val at = rows.indexOfFirst { it.id == current?.id }
     LaunchedEffect(Unit) { if (at > 1) list.scrollToItem(at - 1) }
+    // The held row trades places with a neighbour once it is half a row past it.
+    fun follow() {
+        val idx = rows.indexOfFirst { it.id == dragKey }
+        if (idx < 0) return
+        val target = when {
+            dragOffset > step / 2 && idx < rows.lastIndex -> idx + 1
+            dragOffset < -step / 2 && idx > 0 -> idx - 1
+            else -> idx
+        }
+        if (target == idx) return
+        // The list keeps its place by its first row; when that is the held one, it would scroll
+        // along with it, so the place is kept as it was.
+        val first = list.firstVisibleItemIndex
+        if (first == idx || first == target) list.requestScrollToItem(first, list.firstVisibleItemScrollOffset)
+        rows = rows.toMutableList().apply { add(target, removeAt(idx)) }
+        dragOffset -= (target - idx) * step
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+    }
+    // Held near the top or the bottom edge, the list scrolls by itself, faster the closer it gets.
+    val edge = with(LocalDensity.current) { 56.dp.toPx() }
+    val fastest = with(LocalDensity.current) { 14.dp.toPx() }
+    LaunchedEffect(dragKey) {
+        val key = dragKey ?: return@LaunchedEffect
+        while (dragKey == key) {
+            withFrameNanos {}
+            val info = list.layoutInfo
+            val item = info.visibleItemsInfo.firstOrNull { it.key == key } ?: continue
+            val top = item.offset + dragOffset
+            val bottom = top + item.size
+            val speed = when {
+                top < info.viewportStartOffset + edge -> -fastest * ((info.viewportStartOffset + edge - top) / edge).coerceIn(0f, 1f)
+                bottom > info.viewportEndOffset - edge -> fastest * ((bottom - info.viewportEndOffset + edge) / edge).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            if (speed == 0f) continue
+            val moved = list.scrollBy(speed)
+            if (moved == 0f) continue
+            // The row moved with the list; the finger didn't, so the row stays under it.
+            dragOffset += moved
+            follow()
+        }
+    }
     Sheet(scroll = false) {
         SheetHeader(
             stringResource(R.string.queue_title),
@@ -150,17 +194,7 @@ fun QueueSheet(onClose: () -> Unit) {
                                         ) { change, drag ->
                                             change.consume()
                                             dragOffset += drag.y
-                                            val idx = rows.indexOfFirst { it.id == dragKey }
-                                            val target = when {
-                                                dragOffset > step / 2 && idx < rows.lastIndex -> idx + 1
-                                                dragOffset < -step / 2 && idx > 0 -> idx - 1
-                                                else -> idx
-                                            }
-                                            if (target != idx) {
-                                                rows = rows.toMutableList().apply { add(target, removeAt(idx)) }
-                                                dragOffset -= (target - idx) * step
-                                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                            }
+                                            follow()
                                         }
                                     },
                                 contentAlignment = Alignment.Center,

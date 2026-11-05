@@ -375,7 +375,7 @@ private fun App(inPip: Boolean) {
             resources.getString(R.string.undo),
         ) { DownloadStore.setHidden(ids, false); DownloadStore.restore(removed) }
     }
-    // A swipe or a menu row: right after what plays now, or at the end of the queue.
+    // A swipe or a menu row: right after what plays now, or after what was added to the queue before.
     val enqueue: (DownloadTask, Boolean) -> Unit = { t, next ->
         scope.launch {
             val playing = Playback.current.value != null
@@ -383,7 +383,7 @@ private fun App(inPip: Boolean) {
             if (ok && playing) hint(resources.getString(if (next) R.string.queued_next else R.string.queued_end, t.title))
         }
     }
-    // A whole playlist, in its order: right after what plays now, or at the end; with nothing playing it just plays.
+    // A whole playlist, in its order: right after what plays now, or after what was added before; with nothing playing it just plays.
     val enqueueAll: (List<DownloadTask>, Boolean, String) -> Unit = { list, next, name ->
         if (Playback.current.value == null) playList(list.first(), list) else scope.launch {
             for (t in if (next) list.reversed() else list) if (next) Playback.playNext(context, t) else Playback.addToQueue(context, t)

@@ -140,6 +140,7 @@ object Playback {
         val entries = queue.filter(::playable).ifEmpty { listOf(task) }.let { q -> if (q.none { it.id == task.id }) listOf(task) else q }
         val index = entries.indexOfFirst { it.id == task.id }.coerceAtLeast(0)
         val sameQueue = _queue.value.map { it.id } == entries.map { it.id } && c.mediaItemCount == entries.size
+        if (!sameQueue) added.clear()
         _queue.value = entries
         if (!sameQueue || c.currentMediaItem?.mediaId != task.id) {
             val at = if (startAt >= 0) startAt else Positions.resumeAt(task.id)
@@ -171,23 +172,33 @@ object Playback {
         val now = c.currentMediaItemIndex
         val at = _queue.value.indexOfFirst { it.id == task.id }
         if (at == now) return true
+        // "Add to queue" goes to the top of what comes next, behind what was added before it, not
+        // after the rest of the album: the songs right after this one that were added, in turn.
+        var behind = now + 1
+        while (behind < _queue.value.size && _queue.value[behind].id in added && behind != at) behind++
         if (at >= 0) {
-            val to = if (next) (if (at < now) now else now + 1) else _queue.value.lastIndex
-            move(at, to)
+            val to = if (next) now + 1 else behind
+            // Moving down, the entry leaves a gap above where it lands.
+            move(at, if (at < to) to - 1 else to)
+            if (!next) added += task.id
             return true
         }
-        val to = if (next) now + 1 else c.mediaItemCount
+        val to = if (next) now + 1 else behind
         c.addMediaItem(to, item(task, file))
         _queue.value = _queue.value.toMutableList().apply { add(to.coerceAtMost(size), task) }
+        if (!next) added += task.id
         return true
     }
+
+    // What "Add to queue" put in the queue this time it was opened, so the next one lines up behind it.
+    private val added = HashSet<String>()
 
     /** Plays [task] right after what plays now; with nothing playing it just starts. */
     suspend fun playNext(context: Context, task: DownloadTask): Boolean = withContext(Dispatchers.Main.immediate) {
         enqueue(task, next = true) || open(context, task, expand = false)
     }
 
-    /** Puts [task] at the end of what plays; with nothing playing it just starts. */
+    /** Puts [task] after what plays now and what was added before it; with nothing playing it just starts. */
     suspend fun addToQueue(context: Context, task: DownloadTask): Boolean = withContext(Dispatchers.Main.immediate) {
         enqueue(task, next = false) || open(context, task, expand = false)
     }
@@ -321,6 +332,7 @@ object Playback {
         _current.value = null
         _expanded.value = false
         _queue.value = emptyList()
+        added.clear()
         _controller.value?.takeIf { it.isConnected }?.run { pause(); stop(); clearMediaItems() }
     }
 
