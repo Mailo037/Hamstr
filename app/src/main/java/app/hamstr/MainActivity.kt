@@ -162,6 +162,8 @@ class MainActivity : ComponentActivity() {
             combine(Playback.current, Playback.controller) { task, player -> task to player }
                 .collect { (task, player) -> pip.bind(task, player) }
         }
+        // The shared lists (the stash) mark what plays.
+        lifecycleScope.launch { Playback.current.collect { app.hamstr.ui.NowPlaying.id.value = it?.id } }
         if (savedInstanceState == null) take(intent)
         setContent {
             val state by lifecycle.currentStateFlow.collectAsState()
@@ -517,7 +519,7 @@ private fun App(inPip: Boolean) {
                 Tab.Library -> LibraryScreen(
                     visible, padding,
                     onMenu = { menuFor = it }, onPlay = play, onPlayList = playList,
-                    onPlayNext = { enqueue(it, true) }, onFavorite = favorite,
+                    onAddToQueue = { enqueue(it, false) }, onFavorite = favorite,
                     onPlaylist = { playlistFor = it }, onPlaylistMenu = { playlistMenu = it }, onNewPlaylist = { newList = emptyList() }, onAddToPlaylist = { addToList = it },
                     onHide = hide, onDelete = delete, onShare = share,
                 )

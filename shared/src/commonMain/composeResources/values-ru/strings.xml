@@ -805,6 +805,13 @@
     <string name="eq_title">Эквалайзер</string>
     <string name="eq_hint">Меняет звучание всего, что воспроизводит Hamstr.</string>
     <string name="eq_presets">Пресеты</string>
+    <string name="sound_channels">Звук</string>
+    <string name="sound_stereo">Стерео</string>
+    <string name="sound_stereo_hint">Как записано</string>
+    <string name="sound_mono">Моно</string>
+    <string name="sound_mono_hint">Одинаково в ушах</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">Кружит вокруг</string>
     <string name="eq_custom">Свой</string>
     <string name="eq_reset">Сбросить</string>
     <string name="eq_band">%1$s Гц, %2$s дБ</string>
@@ -879,6 +886,13 @@
         <item quantity="other">%1$d загрузок ждут зарядки</item>
     </plurals>
     <string name="stash_held_charger_hint">Начнётся, когда телефон зарядится, или сейчас, если нужно</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="one">%1$d загрузка ждёт Wi-Fi</item>
+        <item quantity="few">%1$d загрузки ждут Wi-Fi</item>
+        <item quantity="many">%1$d загрузок ждут Wi-Fi</item>
+        <item quantity="other">%1$d загрузки ждут Wi-Fi</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Начнётся по Wi-Fi или сейчас через мобильный интернет</string>
     <string name="stash_start_now">Начать сейчас</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d загрузка не удалась</item>

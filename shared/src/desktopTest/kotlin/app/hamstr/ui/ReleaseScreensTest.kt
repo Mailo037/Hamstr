@@ -36,6 +36,7 @@ import app.hamstr.data.Subscription
 import app.hamstr.data.Subscriptions
 import app.hamstr.engine.EngineState
 import app.hamstr.res.*
+import app.hamstr.ui.components.Group
 import app.hamstr.ui.components.IconButton
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.theme.Hamstr
@@ -46,7 +47,7 @@ import javax.imageio.ImageIO
 import kotlin.test.Test
 
 /**
- * The stash with what waits and what failed, and Settings › Following, a whole phone screen each
+ * The stash with what waits and what failed, the sound and equalizer, and Settings › Following, a whole phone screen each
  * (1080 × 2400) into shared/build/release, for a release picture made without an emulator
  * (tools/render_release.py).
  */
@@ -67,9 +68,9 @@ class ReleaseScreensTest {
         )
 
     private val tasks = listOf(
-        task(1, "Rainy Tokyo walk at night", "Night Drive Sessions", Status.Queued, Stage.WaitingForNight),
-        task(2, "Lofi beats to study to", "Lofi Garden", Status.Queued, Stage.WaitingForNight, audio = true),
-        task(3, "Ten-minute ramen", "Tiny Kitchen", Status.Queued, Stage.WaitingForNight),
+        task(1, "Rainy Tokyo walk at night", "Night Drive Sessions", Status.Queued, Stage.WaitingForWifi),
+        task(2, "Lofi beats to study to", "Lofi Garden", Status.Queued, Stage.WaitingForWifi, audio = true),
+        task(3, "Ten-minute ramen", "Tiny Kitchen", Status.Queued, Stage.WaitingForWifi),
         task(4, "Mountain timelapse 4K", "Skyline", Status.Running, progress = 0.42f),
         task(5, "Live set from the harbour", "Harbour FM", Status.Failed, error = "ERROR: [youtube] abc: nsig extraction failed"),
         task(6, "Bike repair basics", "Workshop", Status.Failed, error = "ERROR: Unable to extract player response"),
@@ -83,12 +84,24 @@ class ReleaseScreensTest {
         try {
             Prefs.init(PropertiesFile(file))
             // Titles that decode in from noise would be caught halfway.
-            Prefs.edit { it.copy(nightOnly = true, nightFrom = 60, nightTo = 420, decode = false) }
+            Prefs.edit { it.copy(wifiOnly = true, decode = false, soundChannels = "8d", eqOn = true, eqPreset = "bass") }
             screen("phone_stash.png", check = "Start now") {
                 StashScreen(
                     tasks, EngineState.Ready("test"), PaddingValues(top = 36.dp, bottom = 24.dp), {}, {}, {}, { _, _ -> }, {}, {}, {},
                     clip = ClipOffer("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
                 )
+            }
+            screen("phone_sound.png", check = "8D") {
+                Column(Modifier.padding(horizontal = 12.dp)) {
+                    Spacer(Modifier.height(36.dp))
+                    Row(Modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(Res.drawable.ic_arrow_back, "", {}, tint = Hamstr.colors.ink)
+                        Spacer(Modifier.width(12.dp))
+                        Txt(stringResource(Res.string.eq_title), style = Hamstr.type.title)
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Group { EqualizerBlock() }
+                }
             }
             Subscriptions.replace(
                 listOf(

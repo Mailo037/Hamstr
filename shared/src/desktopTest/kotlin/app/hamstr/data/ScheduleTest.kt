@@ -62,5 +62,8 @@ class ScheduleTest {
         assertTrue(Stage.WaitingForNight.held && Stage.WaitingForNight.waiting)
         assertTrue(Stage.WaitingForCharger.held && Stage.WaitingForCharger.waiting)
         assertTrue(!Stage.WaitingForWifi.held)
+        // "Start now" ends the schedule's hold and waiting for Wi-Fi, nothing else.
+        assertTrue(Stage.WaitingForWifi.startable && Stage.WaitingForNight.startable)
+        assertTrue(!Stage.WaitingForNetwork.startable && !Stage.Retrying.startable)
     }
 }

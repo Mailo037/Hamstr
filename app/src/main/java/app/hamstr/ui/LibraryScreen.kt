@@ -128,7 +128,7 @@ fun LibraryScreen(
     onMenu: (DownloadTask) -> Unit,
     onPlay: (DownloadTask, List<DownloadTask>) -> Unit,
     onPlayList: (DownloadTask, List<DownloadTask>) -> Unit,
-    onPlayNext: (DownloadTask) -> Unit,
+    onAddToQueue: (DownloadTask) -> Unit,
     onFavorite: (DownloadTask) -> Unit,
     onPlaylist: (String) -> Unit,
     /** Holding a playlist: its quick actions. */
@@ -313,7 +313,7 @@ fun LibraryScreen(
                 val gone = t.id in missing
                 val on = t.family in selected
                 SwipeRow(
-                    start = if (selecting || gone) null else playNextAction { onPlayNext(t) },
+                    start = if (selecting || gone) null else addToQueueAction { onAddToQueue(t) },
                     end = if (selecting || gone) null else favoriteAction(t, favorites) { onFavorite(t) },
                     modifier = Modifier.animateItem(fadeInSpec = Specs.listIn(), fadeOutSpec = Specs.listOut()),
                 ) {
@@ -362,7 +362,8 @@ fun LibraryScreen(
                 Spacer(Modifier.height(7.dp))
                 Row(verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
-                        Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2, modifier = Modifier.padding(horizontal = 2.dp))
+                        val now = playing != null && all.any { it.id == playing?.id }
+                        Txt(t.title, style = if (now) Hamstr.type.bodyStrong else Hamstr.type.bodyMedium, color = if (now) c.accent else c.ink, maxLines = 2, modifier = Modifier.padding(horizontal = 2.dp))
                         val size = all.sumOf { it.sizeBytes }.takeIf { it > 0 }?.let(::formatBytes)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (!gone) ChangedMark(t.id, Modifier.padding(start = 2.dp))
@@ -423,7 +424,7 @@ private fun PlaylistRow(p: app.hamstr.data.Playlist, modifier: Modifier, onLongC
 }
 
 @Composable
-private fun playNextAction(run: () -> Unit) = SwipeAction(Res.drawable.ic_play_next, stringResource(R.string.play_next), Hamstr.colors.accent, onTrigger = run)
+private fun addToQueueAction(run: () -> Unit) = SwipeAction(Res.drawable.ic_add_queue, stringResource(R.string.add_to_queue), Hamstr.colors.accent, onTrigger = run)
 
 @Composable
 private fun favoriteAction(t: DownloadTask, favorites: Set<String>, run: () -> Unit): SwipeAction {

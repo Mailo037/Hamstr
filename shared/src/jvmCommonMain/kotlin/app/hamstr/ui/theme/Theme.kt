@@ -80,6 +80,8 @@ data class Type(
     val code: FontFamily = FontFamily.Monospace,
     val body: TextStyle = TextStyle(fontFamily = sans, fontSize = 14.sp, lineHeight = 19.sp),
     val bodyMedium: TextStyle = TextStyle(fontFamily = sans, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 19.sp),
+    // The title of what plays now, in the lists.
+    val bodyStrong: TextStyle = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 19.sp),
     val small: TextStyle = TextStyle(fontFamily = sans, fontSize = 12.sp, lineHeight = 16.sp),
     val section: TextStyle = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, lineHeight = 22.sp),
     val title: TextStyle = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 21.sp, lineHeight = 26.sp),

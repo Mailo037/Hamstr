@@ -783,6 +783,13 @@
     <string name="eq_title">Ekolayzır</string>
     <string name="eq_hint">Hamstr’ın çaldığı her şeyin sesini şekillendirir.</string>
     <string name="eq_presets">Hazır ayarlar</string>
+    <string name="sound_channels">Ses</string>
+    <string name="sound_stereo">Stereo</string>
+    <string name="sound_stereo_hint">Kaydedildiği gibi</string>
+    <string name="sound_mono">Mono</string>
+    <string name="sound_mono_hint">İki kulakta aynı</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">Başının etrafında</string>
     <string name="eq_custom">Özel</string>
     <string name="eq_reset">Sıfırla</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>
@@ -849,6 +856,11 @@
         <item quantity="other">%1$d indirme şarj cihazını bekliyor</item>
     </plurals>
     <string name="stash_held_charger_hint">Telefon şarja takılınca başlar, ya da istersen hemen</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="one">%1$d indirme Wi-Fi bekliyor</item>
+        <item quantity="other">%1$d indirme Wi-Fi bekliyor</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Wi-Fi’da başlar, istersen şimdi mobil veriyle</string>
     <string name="stash_start_now">Şimdi başlat</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d indirme başarısız oldu</item>

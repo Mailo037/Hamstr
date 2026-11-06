@@ -124,6 +124,8 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     var menuAt by remember { mutableStateOf(IntOffset.Zero) }
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
     var playing by remember { mutableStateOf<DownloadTask?>(null) }
+    // The stash and the library mark what plays.
+    LaunchedEffect(playing?.id) { app.hamstr.ui.NowPlaying.id.value = playing?.id }
     var infoFor by remember { mutableStateOf<DownloadTask?>(null) }
     val requests by Nearby.requests.collectAsState()
     // The tour on a first start; HAMSTR_TOUR=<page> opens it on that page, for screenshots.

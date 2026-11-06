@@ -805,6 +805,13 @@
     <string name="eq_title">Korektor</string>
     <string name="eq_hint">Kształtuje brzmienie wszystkiego, co odtwarza Hamstr.</string>
     <string name="eq_presets">Ustawienia gotowe</string>
+    <string name="sound_channels">Dźwięk</string>
+    <string name="sound_stereo">Stereo</string>
+    <string name="sound_stereo_hint">Jak nagrano</string>
+    <string name="sound_mono">Mono</string>
+    <string name="sound_mono_hint">Tak samo w obu uszach</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">Krąży wokół głowy</string>
     <string name="eq_custom">Własne</string>
     <string name="eq_reset">Resetuj</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>
@@ -879,6 +886,13 @@
         <item quantity="other">%1$d pobrań czeka na ładowanie</item>
     </plurals>
     <string name="stash_held_charger_hint">Zacznie się, gdy telefon się naładuje, albo teraz, jeśli wolisz</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="one">%1$d pobieranie czeka na Wi-Fi</item>
+        <item quantity="few">%1$d pobierania czekają na Wi-Fi</item>
+        <item quantity="many">%1$d pobierań czeka na Wi-Fi</item>
+        <item quantity="other">%1$d pobierania czeka na Wi-Fi</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Zacznie przez Wi-Fi albo teraz przez dane komórkowe</string>
     <string name="stash_start_now">Zacznij teraz</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d pobieranie się nie udało</item>

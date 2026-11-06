@@ -37,6 +37,9 @@ enum class Stage {
     /** Waiting because the schedule says so, not because something is missing; "Start now" overrides it. */
     val held get() = this == WaitingForNight || this == WaitingForCharger
 
+    /** What "Start now" can end: the schedule, or waiting for Wi-Fi when mobile data is there. */
+    val startable get() = held || this == WaitingForWifi
+
     companion object {
         /** Cheek's stage events and yt-dlp's post-processor tags. */
         fun fromEngine(name: String): Stage? = when (name.lowercase()) {
@@ -98,6 +101,8 @@ data class DownloadTask(
     val hashedModified: Long = 0,
     // Started now on purpose: the night and the charger (Schedule) don't hold it back.
     val anytime: Boolean = false,
+    // Started now while it waited for Wi-Fi: it may use mobile data even with "Wi-Fi only".
+    val mobileData: Boolean = false,
     // The channel or artist page it came from, to follow it from the player.
     val channelUrl: String? = null,
     // Live only, never saved: what happens besides fetching bytes, and the retry state.
@@ -515,7 +520,7 @@ object DownloadStore {
         put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
         put("uploader", t.uploader); put("mediaKey", t.mediaKey); put("hidden", t.hidden)
         put("sha256", t.sha256); put("hashedSize", t.hashedSize); put("hashedModified", t.hashedModified)
-        put("anytime", t.anytime)
+        put("anytime", t.anytime); put("mobileData", t.mobileData)
         put("channelUrl", t.channelUrl)
     }
 
@@ -556,6 +561,7 @@ object DownloadStore {
         hashedSize = o.optLong("hashedSize"),
         hashedModified = o.optLong("hashedModified"),
         anytime = o.optBoolean("anytime"),
+        mobileData = o.optBoolean("mobileData"),
         channelUrl = o.optStringOrNull("channelUrl"),
     )
 

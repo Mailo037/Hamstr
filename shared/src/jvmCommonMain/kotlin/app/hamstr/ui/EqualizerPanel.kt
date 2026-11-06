@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import app.hamstr.audio.Channels
 import app.hamstr.audio.Equalizer
 import app.hamstr.data.Prefs
 import app.hamstr.res.*
@@ -58,6 +59,15 @@ import kotlin.math.roundToInt
 @Composable
 fun EqualizerBlock() {
     val s by Prefs.settings.collectAsState()
+    SettingBlock(stringResource(Res.string.sound_channels)) {
+        val picked = Channels.of(s.soundChannels)
+        val titles = Channels.entries.associateWith { stringResource(it.title) }
+        val hint = stringResource(picked.hint)
+        Chips(Channels.entries, picked, { titles.getValue(it) }, { if (it == picked) hint else null }) { ch ->
+            Prefs.edit { it.copy(soundChannels = ch.id) }
+        }
+    }
+    Divider()
     FxRow(stringResource(Res.string.eq_title), stringResource(Res.string.eq_hint), s.eqOn) { v -> Prefs.edit { it.copy(eqOn = v) } }
     AnimatedVisibility(s.eqOn, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
         Column {

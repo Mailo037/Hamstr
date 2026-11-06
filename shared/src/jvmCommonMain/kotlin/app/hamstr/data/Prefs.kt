@@ -67,6 +67,8 @@ data class Settings(
     val eqOn: Boolean = false,
     val eqPreset: String = "flat",
     val eqGains: List<Float> = List(10) { 0f },
+    // Stereo, mono or "8d" (app.hamstr.audio.Channels), after the equalizer.
+    val soundChannels: String = "stereo",
     // Seconds one song fades into the next; 0 cuts as before.
     val crossfade: Int = 0,
     // Nearby: other Hamstr apps on the same Wi-Fi or in Bluetooth range. Empty name: the device's own.
@@ -172,6 +174,7 @@ object Prefs {
         eqPreset = sp.getString("eq.preset", "flat")!!,
         eqGains = sp.getString("eq.gains", "")!!.split(',').mapNotNull { it.toFloatOrNull()?.coerceIn(-12f, 12f) }
             .takeIf { it.size == 10 } ?: List(10) { 0f },
+        soundChannels = sp.getString("sound.channels", "stereo")!!,
         crossfade = sp.getInt("crossfade", 0).coerceIn(0, 12),
         nearby = sp.getBoolean("nearby", true),
         nearbyBluetooth = sp.getBoolean("nearbyBluetooth", true),
@@ -286,6 +289,7 @@ object Prefs {
         .putBoolean("eq.on", s.eqOn)
         .putString("eq.preset", s.eqPreset)
         .putString("eq.gains", s.eqGains.joinToString(","))
+        .putString("sound.channels", s.soundChannels)
         .putInt("crossfade", s.crossfade)
         .putBoolean("nearby", s.nearby)
         .putBoolean("nearbyBluetooth", s.nearbyBluetooth)

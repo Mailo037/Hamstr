@@ -571,7 +571,7 @@ internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, on
             onLyrics()
         }
         val eq by Prefs.settings.collectAsState()
-        ModeButton(Res.drawable.ic_equalizer, stringResource(R.string.eq_title), on = eq.eqOn) { EqSheet.open.value = true }
+        ModeButton(Res.drawable.ic_equalizer, stringResource(R.string.eq_title), on = eq.eqOn || eq.soundChannels != "stereo") { EqSheet.open.value = true }
         ModeButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), on = false, onClick = onQueue)
     }
 }

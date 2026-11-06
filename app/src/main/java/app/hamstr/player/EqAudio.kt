@@ -8,7 +8,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import app.hamstr.audio.EqFilter
+import app.hamstr.audio.SoundChain
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -24,19 +24,21 @@ internal class EqRenderers(context: Context) : DefaultRenderersFactory(context) 
 }
 
 /**
- * The shared [EqFilter] on ExoPlayer's decoded sound, 16-bit or float. It stays in the chain
- * while the equalizer is off and passes the sound through, so switching it on needs no new
+ * The shared [SoundChain] (equalizer, then mono or 8D) on ExoPlayer's decoded sound, 16-bit or
+ * float. It stays in the chain while both are off and passes the sound through, so switching on needs no new
  * audio track; other encodings (passthrough, 24-bit) skip it.
  */
 @UnstableApi
 private class EqProcessor : BaseAudioProcessor() {
-    private var filter: EqFilter? = null
+    private var filter: SoundChain? = null
+    private var one = DoubleArray(2)
 
     override fun onConfigure(input: AudioFormat): AudioFormat =
         if (input.encoding == C.ENCODING_PCM_16BIT || input.encoding == C.ENCODING_PCM_FLOAT) input else AudioFormat.NOT_SET
 
     override fun onFlush() {
-        filter = EqFilter(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
+        filter = SoundChain(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
+        one = DoubleArray(inputAudioFormat.channelCount)
     }
 
     override fun onReset() {
@@ -53,16 +55,19 @@ private class EqProcessor : BaseAudioProcessor() {
         } else {
             input.order(ByteOrder.nativeOrder())
             val channels = inputAudioFormat.channelCount
-            var ch = 0
+            val x = one
+            // Whole frames: the channel mix needs every channel of one moment together.
             if (inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT) {
-                while (input.remaining() >= 4) {
-                    out.putFloat(f.next(input.float.toDouble(), ch).toFloat())
-                    if (++ch == channels) ch = 0
+                while (input.remaining() >= 4 * channels) {
+                    for (c in 0 until channels) x[c] = input.float.toDouble()
+                    f.frame(x)
+                    for (c in 0 until channels) out.putFloat(x[c].toFloat())
                 }
             } else {
-                while (input.remaining() >= 2) {
-                    out.putShort((f.next(input.short / 32768.0, ch) * 32767).toInt().coerceIn(-32768, 32767).toShort())
-                    if (++ch == channels) ch = 0
+                while (input.remaining() >= 2 * channels) {
+                    for (c in 0 until channels) x[c] = input.short / 32768.0
+                    f.frame(x)
+                    for (c in 0 until channels) out.putShort((x[c] * 32767).toInt().coerceIn(-32768, 32767).toShort())
                 }
             }
             input.position(input.limit())

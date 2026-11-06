@@ -772,6 +772,13 @@
     <string name="eq_title">均衡器</string>
     <string name="eq_hint">调整 Hamstr 播放的所有声音。</string>
     <string name="eq_presets">预设</string>
+    <string name="sound_channels">声音</string>
+    <string name="sound_stereo">立体声</string>
+    <string name="sound_stereo_hint">保持原样</string>
+    <string name="sound_mono">单声道</string>
+    <string name="sound_mono_hint">双耳相同</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">环绕你的头部</string>
     <string name="eq_custom">自定义</string>
     <string name="eq_reset">重置</string>
     <string name="eq_band">%1$s Hz，%2$s dB</string>
@@ -834,6 +841,10 @@
         <item quantity="other">%1$d 个下载等待充电器</item>
     </plurals>
     <string name="stash_held_charger_hint">手机充电时开始，或者现在开始</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="other">%1$d个下载正在等待 Wi-Fi</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">连上 Wi-Fi 时开始，或现在使用移动数据</string>
     <string name="stash_start_now">立即开始</string>
     <plurals name="stash_failed_all">
         <item quantity="other">%1$d 个下载失败</item>

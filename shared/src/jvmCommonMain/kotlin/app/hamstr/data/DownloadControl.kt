@@ -24,10 +24,12 @@ interface DownloadControl {
     /** [resume] for many (a playlist, "Retry all"): the queues override it to look at the list once, not once each. */
     fun resumeAll(ids: List<String>) = ids.forEach(::resume)
 
-    /** Starts downloads the night or the charger holds back (Schedule) right away. */
+    /** Starts downloads the night or the charger holds back (Schedule), or that wait for Wi-Fi, right away. */
     fun startNow(ids: List<String>) {
         val picked = ids.toHashSet()
-        DownloadStore.updateAll(which = { it.id in picked }) { it.copy(anytime = true) }
+        DownloadStore.updateAll(which = { it.id in picked }) {
+            it.copy(anytime = true, mobileData = it.mobileData || it.stage == Stage.WaitingForWifi)
+        }
         resumeAll(ids)
     }
 

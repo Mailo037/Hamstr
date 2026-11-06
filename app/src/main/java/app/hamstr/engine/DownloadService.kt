@@ -255,7 +255,7 @@ class DownloadService : Service() {
         val hold = Schedule.holds(s, charging, now)
         for (task in queued) {
             // The schedule first: waiting for the night says more than waiting for Wi-Fi.
-            val stage = hold(task) ?: waiting
+            val stage = hold(task) ?: waiting?.takeUnless { it == Stage.WaitingForWifi && task.mobileData }
             if (stage != null) {
                 if (task.stage != stage) holds[task.id] = stage
                 continue
@@ -317,8 +317,11 @@ class DownloadService : Service() {
 
     /** The network went away: running downloads stop and wait instead of failing slowly. */
     private fun holdRunning() {
-        val waiting = if (Network.state.value.online) Stage.WaitingForWifi else Stage.WaitingForNetwork
-        synchronized(this) { jobs.keys.toList() }.forEach { stop(it, Status.Queued, waiting) }
+        val online = Network.state.value.online
+        val waiting = if (online) Stage.WaitingForWifi else Stage.WaitingForNetwork
+        // Started now over mobile data: losing Wi-Fi doesn't stop it, only losing the network does.
+        synchronized(this) { jobs.keys.toList() }.filter { !online || DownloadStore.get(it)?.mobileData != true }
+            .forEach { stop(it, Status.Queued, waiting) }
         pump()
     }
 
@@ -436,7 +439,7 @@ class DownloadService : Service() {
             val s = Prefs.settings.value
             when {
                 // Offline now: no attempt used up, it simply waits for the network.
-                !Network.allows(s.wifiOnly) -> DownloadStore.update(task.id) {
+                !Network.allows(s.wifiOnly && !current.mobileData) -> DownloadStore.update(task.id) {
                     it.copy(status = Status.Queued, stage = if (Network.state.value.online) Stage.WaitingForWifi else Stage.WaitingForNetwork, speed = "", etaSec = -1)
                 }
                 Failures.isNetwork(message) && current.attempts < BACKOFF.size -> DownloadStore.update(task.id) {

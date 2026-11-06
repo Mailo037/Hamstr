@@ -172,7 +172,7 @@ class FfPlayer(private val file: File, start: Double = 0.0) {
             applyVolume()
             if (!paused) l.start()
             val buf = ByteArray(8192)
-            val eq = app.hamstr.audio.EqFilter(RATE, 2)
+            val eq = app.hamstr.audio.SoundChain(RATE, 2)
             p.inputStream.use { input ->
                 while (!stopped) {
                     waitWhilePaused()

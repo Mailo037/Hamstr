@@ -303,11 +303,19 @@ fun StashScreen(
                 }
                 if (held.isNotEmpty()) item(key = "held") {
                     val night = held.any { it.stage == Stage.WaitingForNight }
+                    val charger = !night && held.any { it.stage == Stage.WaitingForCharger }
                     val s by Prefs.settings.collectAsState()
                     Notice(
                         Res.drawable.ic_timer, c.muted,
-                        pluralStringResource(if (night) Res.plurals.stash_held_night else Res.plurals.stash_held_charger, held.size, held.size),
-                        if (night) stringResource(Res.string.stash_held_night_hint, Schedule.clock(s.nightFrom)) else stringResource(Res.string.stash_held_charger_hint),
+                        pluralStringResource(
+                            when { night -> Res.plurals.stash_held_night; charger -> Res.plurals.stash_held_charger; else -> Res.plurals.stash_held_wifi },
+                            held.size, held.size,
+                        ),
+                        when {
+                            night -> stringResource(Res.string.stash_held_night_hint, Schedule.clock(s.nightFrom))
+                            charger -> stringResource(Res.string.stash_held_charger_hint)
+                            else -> stringResource(Res.string.stash_held_wifi_hint)
+                        },
                         stringResource(Res.string.stash_start_now), { Downloads.control.startNow(held.map { it.id }) },
                         modifier = Modifier.animateItem(),
                     )
@@ -428,7 +436,7 @@ internal class StashLists(tasks: List<DownloadTask>) {
                     active += t
                     if (t.status == Status.Running) moving++
                     if (t.status == Status.Failed) failed += t
-                    if (t.status == Status.Queued && t.stage?.held == true) held += t
+                    if (t.status == Status.Queued && t.stage?.startable == true) held += t
                 }
             }
             if (t.status == Status.Queued && t.stage == null) waiting += t.id
@@ -650,7 +658,7 @@ private fun primarySwipe(t: DownloadTask): SwipeAction? {
         Status.Running -> SwipeAction(Res.drawable.ic_pause, stringResource(Res.string.notif_pause), c.muted) { Downloads.control.pause(t.id) }
         Status.Paused -> SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.stash_resume), c.accent) { Downloads.control.resume(t.id) }
         Status.Failed -> SwipeAction(Res.drawable.ic_refresh, stringResource(Res.string.notif_retry), c.accent) { Downloads.control.resume(t.id) }
-        Status.Queued -> if (t.stage?.held == true) SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.stash_start_now), c.accent) { Downloads.control.startNow(listOf(t.id)) } else null
+        Status.Queued -> if (t.stage?.startable == true) SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.stash_start_now), c.accent) { Downloads.control.startNow(listOf(t.id)) } else null
         else -> null
     }
 }
@@ -753,7 +761,10 @@ fun TaskRow(
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            if (t.status.active) DecodeText(t.title, style = Hamstr.type.bodyMedium) else Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1)
+            val playing by NowPlaying.id.collectAsState()
+            val now = playing != null && versions.any { it.id == playing }
+            if (t.status.active) DecodeText(t.title, style = Hamstr.type.bodyMedium)
+            else Txt(t.title, style = if (now) Hamstr.type.bodyStrong else Hamstr.type.bodyMedium, color = if (now) c.accent else c.ink, maxLines = 1)
             Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Badge(versionsBadge(versions))

@@ -772,6 +772,13 @@
     <string name="eq_title">イコライザー</string>
     <string name="eq_hint">Hamstr で再生するすべての音を整えます。</string>
     <string name="eq_presets">プリセット</string>
+    <string name="sound_channels">サウンド</string>
+    <string name="sound_stereo">ステレオ</string>
+    <string name="sound_stereo_hint">録音のまま</string>
+    <string name="sound_mono">モノラル</string>
+    <string name="sound_mono_hint">左右で同じ音</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">頭のまわりを回る</string>
     <string name="eq_custom">カスタム</string>
     <string name="eq_reset">リセット</string>
     <string name="eq_band">%1$s Hz、%2$s dB</string>
@@ -834,6 +841,10 @@
         <item quantity="other">%1$d 件のダウンロードが充電を待機中</item>
     </plurals>
     <string name="stash_held_charger_hint">スマホが充電されたら開始、または今すぐ開始</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="other">%1$d件のダウンロードがWi-Fiを待っています</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Wi-Fiで開始、またはモバイルデータで今すぐ</string>
     <string name="stash_start_now">今すぐ開始</string>
     <plurals name="stash_failed_all">
         <item quantity="other">%1$d 件のダウンロードが失敗</item>

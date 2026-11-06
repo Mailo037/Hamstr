@@ -772,6 +772,13 @@
     <string name="eq_title">이퀄라이저</string>
     <string name="eq_hint">Hamstr에서 재생하는 모든 소리를 조절해요.</string>
     <string name="eq_presets">프리셋</string>
+    <string name="sound_channels">사운드</string>
+    <string name="sound_stereo">스테레오</string>
+    <string name="sound_stereo_hint">녹음 그대로</string>
+    <string name="sound_mono">모노</string>
+    <string name="sound_mono_hint">양쪽 같은 소리</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">머리 주위를 돌아요</string>
     <string name="eq_custom">사용자 설정</string>
     <string name="eq_reset">초기화</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>
@@ -834,6 +841,10 @@
         <item quantity="other">다운로드 %1$d개가 충전기를 기다리는 중</item>
     </plurals>
     <string name="stash_held_charger_hint">휴대폰이 충전되면 시작하거나, 원하면 지금 시작</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="other">%1$d개의 다운로드가 Wi-Fi를 기다리는 중</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Wi-Fi에서 시작하거나 지금 모바일 데이터로</string>
     <string name="stash_start_now">지금 시작</string>
     <plurals name="stash_failed_all">
         <item quantity="other">다운로드 %1$d개 실패</item>

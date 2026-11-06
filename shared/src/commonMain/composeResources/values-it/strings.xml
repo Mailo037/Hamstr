@@ -783,6 +783,13 @@
     <string name="eq_title">Equalizzatore</string>
     <string name="eq_hint">Modella il suono di tutto ciò che riproduce Hamstr.</string>
     <string name="eq_presets">Preimpostazioni</string>
+    <string name="sound_channels">Suono</string>
+    <string name="sound_stereo">Stereo</string>
+    <string name="sound_stereo_hint">Come registrato</string>
+    <string name="sound_mono">Mono</string>
+    <string name="sound_mono_hint">Uguale nelle orecchie</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">Ti gira intorno</string>
     <string name="eq_custom">Personalizzato</string>
     <string name="eq_reset">Ripristina</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>
@@ -849,6 +856,11 @@
         <item quantity="other">%1$d download attendono il caricatore</item>
     </plurals>
     <string name="stash_held_charger_hint">Parte quando il telefono si carica, o subito se preferisci</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="one">%1$d download attende il Wi-Fi</item>
+        <item quantity="other">%1$d download attendono il Wi-Fi</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Parte col Wi-Fi, o subito con i dati mobili</string>
     <string name="stash_start_now">Avvia ora</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d download non riuscito</item>

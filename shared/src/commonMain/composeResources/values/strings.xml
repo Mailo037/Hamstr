@@ -783,6 +783,13 @@
     <string name="eq_title">Equalizer</string>
     <string name="eq_hint">Shapes the sound of everything Hamstr plays.</string>
     <string name="eq_presets">Presets</string>
+    <string name="sound_channels">Sound</string>
+    <string name="sound_stereo">Stereo</string>
+    <string name="sound_stereo_hint">As recorded</string>
+    <string name="sound_mono">Mono</string>
+    <string name="sound_mono_hint">Same in both ears</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">Circles your head</string>
     <string name="eq_custom">Custom</string>
     <string name="eq_reset">Reset</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>
@@ -849,6 +856,11 @@
         <item quantity="other">%1$d downloads wait for the charger</item>
     </plurals>
     <string name="stash_held_charger_hint">Starts once the phone charges, or now if you like</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="one">%1$d download waits for Wi-Fi</item>
+        <item quantity="other">%1$d downloads wait for Wi-Fi</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Starts on Wi-Fi, or now over mobile data</string>
     <string name="stash_start_now">Start now</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d download failed</item>

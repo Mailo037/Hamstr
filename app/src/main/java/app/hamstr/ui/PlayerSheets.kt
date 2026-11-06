@@ -204,7 +204,7 @@ fun QueueSheet(onClose: () -> Unit) {
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Txt(t.title, style = Hamstr.type.bodyMedium, color = if (now) c.accent else c.ink, maxLines = 1)
+                                Txt(t.title, style = if (now) Hamstr.type.bodyStrong else Hamstr.type.bodyMedium, color = if (now) c.accent else c.ink, maxLines = 1)
                                 Spacer(Modifier.height(2.dp))
                                 Txt(
                                     listOfNotNull(

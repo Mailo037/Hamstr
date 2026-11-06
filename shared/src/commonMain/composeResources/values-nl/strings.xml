@@ -783,6 +783,13 @@
     <string name="eq_title">Equalizer</string>
     <string name="eq_hint">Bepaalt het geluid van alles wat Hamstr afspeelt.</string>
     <string name="eq_presets">Voorinstellingen</string>
+    <string name="sound_channels">Geluid</string>
+    <string name="sound_stereo">Stereo</string>
+    <string name="sound_stereo_hint">Zoals opgenomen</string>
+    <string name="sound_mono">Mono</string>
+    <string name="sound_mono_hint">Beide oren gelijk</string>
+    <string name="sound_8d">8D</string>
+    <string name="sound_8d_hint">Draait om je hoofd</string>
     <string name="eq_custom">Aangepast</string>
     <string name="eq_reset">Herstellen</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>
@@ -849,6 +856,11 @@
         <item quantity="other">%1$d downloads wachten op de oplader</item>
     </plurals>
     <string name="stash_held_charger_hint">Start zodra de telefoon oplaadt, of nu als je wilt</string>
+    <plurals name="stash_held_wifi">
+        <item quantity="one">%1$d download wacht op wifi</item>
+        <item quantity="other">%1$d downloads wachten op wifi</item>
+    </plurals>
+    <string name="stash_held_wifi_hint">Start op wifi, of nu via mobiele data</string>
     <string name="stash_start_now">Nu starten</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d download mislukt</item>
