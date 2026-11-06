@@ -45,12 +45,12 @@ class DeviceSheetTest {
         Nearby.inbox = File(dir, "inbox")
         Nearby.init(PropertiesFile(File(dir, "nearby.properties")), dir, DeviceKind.Phone, "Test", emptyList())
         val scale = 2.625f
-        runDesktopComposeUiTest(1080, 2000) {
+        runDesktopComposeUiTest(1080, 2400) {
             setContent {
                 CompositionLocalProvider(LocalDensity provides Density(scale)) {
                     HamstrTheme {
                         Box(
-                            Modifier.size((1080 / scale).dp, (2000 / scale).dp).background(Color.Black).testTag("shot"),
+                            Modifier.size((1080 / scale).dp, (2400 / scale).dp).background(Color.Black).testTag("shot"),
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             Box(Modifier.fillMaxSize().background(Hamstr.colors.canvas.copy(alpha = 0.6f)))
@@ -61,7 +61,10 @@ class DeviceSheetTest {
             }
             mainClock.advanceTimeBy(1_500)
             onNodeWithText("Forget this device", useUnmergedTree = true).assertExists()
-            ImageIO.write(onNodeWithTag("shot").captureToImage().toAwtImage(), "png", File(out, "device_phone.png"))
+            val image = onNodeWithTag("shot").captureToImage().toAwtImage()
+            ImageIO.write(image, "png", File(out, "device_phone.png"))
+            // Also a whole phone screen for a release picture (tools/render_release.py).
+            ImageIO.write(image, "png", File(File("build/release").apply { mkdirs() }, "phone_device.png"))
         }
     }
 }

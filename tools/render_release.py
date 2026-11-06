@@ -12,18 +12,17 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.4"
+VERSION = "0.10.5"
 FEATURES = [
-    ("STEREO, MONO OR 8D", "The song circles your head on headphones"),
-    ("START NOW ON MOBILE DATA", "When a download waits for Wi-Fi"),
-    ("SWIPE TO ADD TO QUEUE", "Right in the library's songs"),
+    ("DOWNLOAD NOW OR TONIGHT", "Right from a download's menu"),
+    ("DEVICES, TIDIED UP", "The device sheet looks like the file menu"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.10.0 to 0.10.4: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
+# 0.10.0 to 0.10.5: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
-SHOTS = [("phone_sound.png", "Sound"), ("phone_stash.png", "Stash")]
+SHOTS = [("phone_device.png", "Devices"), ("phone_stash.png", "Stash")]
 
 
 def sharing_panel(shots):
