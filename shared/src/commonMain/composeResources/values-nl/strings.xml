@@ -689,6 +689,8 @@
     <string name="device_send_link">Link sturen</string>
     <string name="device_send_files">Bestanden sturen</string>
     <string name="device_forget">Dit apparaat vergeten</string>
+    <string name="device_trusted_hint">Links en bestanden komen binnen zonder te vragen</string>
+    <string name="device_ask_hint">Vraagt het je voordat een link of bestand binnenkomt</string>
     <string name="nearby_done">Klaar</string>
     <string name="set_devices_summary_off">Uit</string>
     <string name="set_devices_summary">Zichtbaar als %1$s</string>
@@ -862,6 +864,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">Start op wifi, of nu via mobiele data</string>
     <string name="stash_start_now">Nu starten</string>
+    <string name="menu_download_now">Nu downloaden</string>
+    <string name="menu_tonight">Vannacht</string>
+    <string name="menu_tonight_hint">Begint om %1$s</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d download mislukt</item>
         <item quantity="other">%1$d downloads mislukt</item>

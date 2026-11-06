@@ -709,6 +709,8 @@
     <string name="device_send_link">Отправить ссылку</string>
     <string name="device_send_files">Отправить файлы</string>
     <string name="device_forget">Забыть это устройство</string>
+    <string name="device_trusted_hint">Ссылки и файлы приходят без вопросов</string>
+    <string name="device_ask_hint">Спрашивает, прежде чем принять ссылку или файл</string>
     <string name="nearby_done">Готово</string>
     <string name="set_devices_summary_off">Выключено</string>
     <string name="set_devices_summary">Видно как %1$s</string>
@@ -894,6 +896,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">Начнётся по Wi-Fi или сейчас через мобильный интернет</string>
     <string name="stash_start_now">Начать сейчас</string>
+    <string name="menu_download_now">Скачать сейчас</string>
+    <string name="menu_tonight">Сегодня ночью</string>
+    <string name="menu_tonight_hint">Начнётся в %1$s</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d загрузка не удалась</item>
         <item quantity="few">%1$d загрузки не удались</item>

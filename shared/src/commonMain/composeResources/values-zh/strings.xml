@@ -679,6 +679,8 @@
     <string name="device_send_link">发送链接</string>
     <string name="device_send_files">发送文件</string>
     <string name="device_forget">忘记此设备</string>
+    <string name="device_trusted_hint">无需询问即可接收链接和文件</string>
+    <string name="device_ask_hint">接收链接或文件前先询问你</string>
     <string name="nearby_done">完成</string>
     <string name="set_devices_summary_off">已关闭</string>
     <string name="set_devices_summary">显示为 %1$s</string>
@@ -846,6 +848,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">连上 Wi-Fi 时开始，或现在使用移动数据</string>
     <string name="stash_start_now">立即开始</string>
+    <string name="menu_download_now">立即下载</string>
+    <string name="menu_tonight">今晚</string>
+    <string name="menu_tonight_hint">%1$s 开始</string>
     <plurals name="stash_failed_all">
         <item quantity="other">%1$d 个下载失败</item>
     </plurals>

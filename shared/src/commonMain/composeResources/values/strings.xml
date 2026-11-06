@@ -691,6 +691,8 @@
     <string name="device_send_link">Send link</string>
     <string name="device_send_files">Send files</string>
     <string name="device_forget">Forget this device</string>
+    <string name="device_trusted_hint">Links and files from it come in without asking</string>
+    <string name="device_ask_hint">Asks you before a link or file comes in</string>
     <string name="nearby_done">Done</string>
     <string name="set_devices_summary_off">Off</string>
     <string name="set_devices_summary">Visible as %1$s</string>
@@ -862,6 +864,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">Starts on Wi-Fi, or now over mobile data</string>
     <string name="stash_start_now">Start now</string>
+    <string name="menu_download_now">Download now</string>
+    <string name="menu_tonight">Tonight</string>
+    <string name="menu_tonight_hint">Starts at %1$s</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d download failed</item>
         <item quantity="other">%1$d downloads failed</item>

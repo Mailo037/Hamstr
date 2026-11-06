@@ -85,7 +85,7 @@ object Queue : DownloadControl {
         scope.launch {
             while (true) {
                 delay(60_000)
-                if (DownloadStore.tasks.value.any { it.status == Status.Queued && it.stage == Stage.WaitingForNight } && Schedule.night(Prefs.settings.value)) release()
+                if (DownloadStore.tasks.value.any { it.status == Status.Queued && it.stage == Stage.WaitingForNight } && Schedule.dark(Prefs.settings.value)) release()
                 if (Subscriptions.due()) checkFeedsNow(force = false)
             }
         }

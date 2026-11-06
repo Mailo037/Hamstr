@@ -40,6 +40,10 @@ import app.hamstr.data.DownloadStore
 import androidx.compose.foundation.layout.heightIn
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Status
+import app.hamstr.data.Stage
+import app.hamstr.data.Prefs
+import app.hamstr.data.Schedule
+import app.hamstr.data.Downloads
 import app.hamstr.data.Mode
 import app.hamstr.ui.toInfo
 import app.hamstr.engine.DownloadService
@@ -71,6 +75,9 @@ import app.hamstr.ui.theme.Radii
 import java.io.File
 import app.hamstr.ui.components.Sheet
 import app.hamstr.ui.components.pressable
+import app.hamstr.ui.components.ActionTile
+import app.hamstr.ui.components.MenuGroup
+import app.hamstr.ui.components.MenuRow
 
 internal fun copy(context: android.content.Context, text: String) {
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("Hamstr", text))
@@ -197,6 +204,19 @@ internal fun TaskMenu(
         if (t.status == Status.Failed || t.status == Status.Paused) {
             MenuRow(Res.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
         }
+        // When it downloads: now, past what holds it back, or put off to the night.
+        val now = t.status == Status.Queued && t.stage?.startable == true
+        val later = t.status.active && !t.tonight && t.stage != Stage.WaitingForNight
+        if (now || later) {
+            val s by Prefs.settings.collectAsState()
+            MenuGroup {
+                if (now) MenuRow(Res.drawable.ic_play_arrow, stringResource(R.string.menu_download_now)) { Downloads.control.startNow(listOf(t.id)); onClose() }
+                if (later) MenuRow(Res.drawable.ic_timer, stringResource(R.string.menu_tonight), subtitle = stringResource(R.string.menu_tonight_hint, Schedule.clock(s.nightFrom))) {
+                    Downloads.control.tonight(listOf(t.id)); onClose()
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
         when {
             t.status.active -> MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_cancel)) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
             file != null -> MenuGroup {
@@ -237,25 +257,6 @@ internal fun MenuHeader(t: DownloadTask, showPicture: Boolean) {
             )
             Txt(facts.joinToString(" · ").ifEmpty { t.url }, style = Hamstr.type.mono, color = c.ghost, maxLines = 1)
         }
-    }
-}
-
-/** A button in the menu's top row: icon over a short label. */
-@Composable
-internal fun RowScope.ActionTile(icon: DrawableResource, label: String, accent: Boolean = false, onClick: () -> Unit) {
-    val c = Hamstr.colors
-    Column(
-        Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (accent) c.accent else c.surface)
-            .pressable(onClick)
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icon, tint = if (accent) c.onAccent else c.ink, size = 22.dp)
-        Spacer(Modifier.height(6.dp))
-        Txt(label, style = Hamstr.type.small, color = if (accent) c.onAccent else c.muted, maxLines = 1)
     }
 }
 
@@ -327,32 +328,3 @@ internal fun PlaylistMenu(
     }
 }
 
-/** Rows that belong together, on one panel. */
-@Composable
-internal fun MenuGroup(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Hamstr.colors.surface).padding(4.dp),
-        content = content,
-    )
-}
-
-@Composable
-internal fun MenuRow(icon: DrawableResource, label: String, danger: Boolean = false, subtitle: String? = null, onClick: () -> Unit) {
-    val c = Hamstr.colors
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .heightIn(min = 48.dp)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Icon(icon, tint = if (danger) c.red else c.muted)
-        Column {
-            Txt(label, color = if (danger) c.red else c.ink)
-            if (subtitle != null) Txt(subtitle, style = Hamstr.type.small, color = c.ghost)
-        }
-    }
-}

@@ -1,6 +1,10 @@
 package app.hamstr.ui
 
 import androidx.compose.runtime.key
+import app.hamstr.ui.components.MenuSwitchRow
+import app.hamstr.ui.components.MenuRow
+import app.hamstr.ui.components.MenuGroup
+import app.hamstr.ui.components.ActionTile
 import app.hamstr.ui.components.SwipeAction
 import app.hamstr.ui.components.SwipeRow
 import app.hamstr.ui.components.rememberAmbientClock
@@ -375,40 +379,47 @@ fun DeviceSheet(id: String, clipboardLink: String?, onPickFiles: (suspend () -> 
         SheetHeader(k.name, subtitle = status, leading = { DeviceIcon(k.kind, lit = online) })
         Spacer(Modifier.height(18.dp))
         SheetField(link, { link = it; linkSent = null }, stringResource(Res.string.add_hint), Res.drawable.ic_link, mono = true)
-        Spacer(Modifier.height(8.dp))
-        HButton(
-            sendLabel(linkSent, null) ?: stringResource(Res.string.device_send_link),
-            {
-                val u = url ?: return@HButton
+        Spacer(Modifier.height(10.dp))
+        // What is done most as tiles, as in a file's menu; then whether it may send unasked, then forgetting it.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionTile(
+                Res.drawable.ic_send, sendLabel(linkSent, null) ?: stringResource(Res.string.device_send_link),
+                accent = true, enabled = url != null && linkSent != Sending.Busy,
+            ) {
+                val u = url ?: return@ActionTile
                 linkSent = Sending.Busy
                 scope.launch { linkSent = sendingOf(runCatching { Nearby.send(peer, u, null) }.getOrDefault(SendResult.Failed)) }
-            },
-            Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_send,
-            enabled = url != null && linkSent != Sending.Busy,
-        )
-        if (onPickFiles != null) {
-            Spacer(Modifier.height(8.dp))
-            HButton(
-                sendLabel(filesSent, progress) ?: stringResource(if (takesFiles) Res.string.device_send_files else Res.string.nearby_files_here),
-                {
-                    scope.launch {
-                        val files = onPickFiles()
-                        if (files.isEmpty()) return@launch
-                        filesSent = Sending.Busy
-                        progress = null
-                        filesSent = sendingOf(runCatching { Nearby.sendFiles(peer, files) { progress = it } }.getOrDefault(SendResult.Failed))
-                    }
-                },
-                Modifier.fillMaxWidth(), icon = Res.drawable.ic_description,
+            }
+            if (onPickFiles != null) ActionTile(
+                Res.drawable.ic_description, sendLabel(filesSent, progress) ?: stringResource(Res.string.device_send_files),
                 enabled = takesFiles && filesSent != Sending.Busy,
+            ) {
+                scope.launch {
+                    val files = onPickFiles()
+                    if (files.isEmpty()) return@launch
+                    filesSent = Sending.Busy
+                    progress = null
+                    filesSent = sendingOf(runCatching { Nearby.sendFiles(peer, files) { progress = it } }.getOrDefault(SendResult.Failed))
+                }
+            }
+        }
+        if (onPickFiles != null && !takesFiles) {
+            Txt(
+                stringResource(Res.string.nearby_files_here), style = Hamstr.type.small, color = Hamstr.colors.ghost,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
             )
         }
-        Spacer(Modifier.height(16.dp))
-        val allow = stringResource(Res.string.nearby_always)
-        val ask = stringResource(Res.string.device_always_ask)
-        Segmented(listOf(true, false), k.trusted, { if (it) allow else ask }, { Nearby.trust(peer, it) })
         Spacer(Modifier.height(10.dp))
-        HButton(stringResource(Res.string.device_forget), { onClose(); Nearby.forget(id) }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete)
+        MenuGroup {
+            MenuSwitchRow(
+                Res.drawable.ic_check_circle, stringResource(Res.string.nearby_always), k.trusted,
+                subtitle = stringResource(if (k.trusted) Res.string.device_trusted_hint else Res.string.device_ask_hint),
+            ) { Nearby.trust(peer, it) }
+        }
+        Spacer(Modifier.height(10.dp))
+        MenuGroup {
+            MenuRow(Res.drawable.ic_delete, stringResource(Res.string.device_forget), danger = true) { onClose(); Nearby.forget(id) }
+        }
     }
 }
 

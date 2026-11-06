@@ -69,6 +69,7 @@ object Updater {
     const val REPO = "Mailo037/Hamstr"
     const val UPDATED_FLAG = "--updated="
     private const val CHECK_EVERY = 6 * 60 * 60 * 1000L
+    private const val CHECK_COOLDOWN = 60_000L
     val version: String = System.getProperty("hamstr.version", "dev")
 
     /** The release's name for this system, as release.yml's matrix calls it. */
@@ -129,8 +130,14 @@ object Updater {
         }
     }
 
+    private var lastTry = 0L
+
     fun check() {
         if (job?.isActive == true) return
+        // Cooldown: pressing "Check for updates" again right away keeps the last answer instead of asking GitHub.
+        val now = System.currentTimeMillis()
+        if (now - lastTry < CHECK_COOLDOWN && state.value != UpdateState.Idle) return
+        lastTry = now
         job = scope.launch {
             _state.value = UpdateState.Checking
             _state.value = runCatching { latest()?.let(::signed) }.fold(

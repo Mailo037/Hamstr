@@ -7,7 +7,8 @@ import java.util.Locale
 /**
  * When downloads may start: at any time, or only at night (Settings › Queue), and on the phone
  * only while it charges. A download that is already running finishes; one the user starts
- * with "Start now" ([DownloadTask.anytime]) doesn't wait.
+ * with "Start now" ([DownloadTask.anytime]) doesn't wait, and one put off "Tonight"
+ * ([DownloadTask.tonight]) waits for the night hours even when the rest doesn't.
  */
 object Schedule {
     /** Minutes after midnight at [now], in this device's time zone. */
@@ -24,11 +25,14 @@ object Schedule {
     }
 
     /** It is night by the settings, or they don't ask for it. */
-    fun night(s: Settings, now: Long = System.currentTimeMillis()) = !s.nightOnly || inWindow(minuteOf(now), s.nightFrom, s.nightTo)
+    fun night(s: Settings, now: Long = System.currentTimeMillis()) = !s.nightOnly || dark(s, now)
+
+    /** [now] lies in the night hours of the settings, whether or not they hold every download back. */
+    fun dark(s: Settings, now: Long = System.currentTimeMillis()) = inWindow(minuteOf(now), s.nightFrom, s.nightTo)
 
     /** When the next night begins, in milliseconds; [now] while it is night already. */
     fun nextNight(s: Settings, now: Long = System.currentTimeMillis()): Long {
-        if (night(s, now)) return now
+        if (dark(s, now)) return now
         val start = Calendar.getInstance().apply {
             timeInMillis = now
             set(Calendar.HOUR_OF_DAY, s.nightFrom / 60)
@@ -45,11 +49,12 @@ object Schedule {
 
     /** [hold] for a whole queue: whether it is night is worked out once, not once per waiting download. */
     fun holds(s: Settings, charging: Boolean, now: Long = System.currentTimeMillis()): (DownloadTask) -> Stage? {
-        val night = night(s, now)
+        val dark = dark(s, now)
+        val night = !s.nightOnly || dark
         return { t ->
             when {
                 t.anytime -> null
-                !night -> Stage.WaitingForNight
+                !night || t.tonight && !dark -> Stage.WaitingForNight
                 s.chargingOnly && !charging -> Stage.WaitingForCharger
                 else -> null
             }

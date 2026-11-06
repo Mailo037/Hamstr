@@ -28,9 +28,20 @@ interface DownloadControl {
     fun startNow(ids: List<String>) {
         val picked = ids.toHashSet()
         DownloadStore.updateAll(which = { it.id in picked }) {
-            it.copy(anytime = true, mobileData = it.mobileData || it.stage == Stage.WaitingForWifi)
+            it.copy(anytime = true, tonight = false, mobileData = it.mobileData || it.stage == Stage.WaitingForWifi)
         }
         resumeAll(ids)
+    }
+
+    /** Puts downloads off to the night hours (Settings › Queue), running ones too; "Start now" undoes it. */
+    fun tonight(ids: List<String>) {
+        val picked = ids.toHashSet()
+        val running = DownloadStore.tasks.value.filter { it.id in picked && it.status == Status.Running }.map { it.id }
+        DownloadStore.updateAll(which = { it.id in picked }) { it.copy(tonight = true, anytime = false) }
+        // A running one stops where it is and picks up from there at night; one by one, so each
+        // resume comes after its pause.
+        running.forEach { pause(it); resume(it) }
+        resumeAll(ids.filter { it !in running })
     }
 
     /** Reads a channel or playlist without its formats, for Subscriptions. */

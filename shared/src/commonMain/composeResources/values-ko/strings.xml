@@ -679,6 +679,8 @@
     <string name="device_send_link">링크 보내기</string>
     <string name="device_send_files">파일 보내기</string>
     <string name="device_forget">이 기기 잊기</string>
+    <string name="device_trusted_hint">링크와 파일을 묻지 않고 받아요</string>
+    <string name="device_ask_hint">링크나 파일을 받기 전에 물어봐요</string>
     <string name="nearby_done">완료</string>
     <string name="set_devices_summary_off">꺼짐</string>
     <string name="set_devices_summary">%1$s(으)로 보임</string>
@@ -846,6 +848,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">Wi-Fi에서 시작하거나 지금 모바일 데이터로</string>
     <string name="stash_start_now">지금 시작</string>
+    <string name="menu_download_now">지금 다운로드</string>
+    <string name="menu_tonight">오늘 밤</string>
+    <string name="menu_tonight_hint">%1$s에 시작</string>
     <plurals name="stash_failed_all">
         <item quantity="other">다운로드 %1$d개 실패</item>
     </plurals>

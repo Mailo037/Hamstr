@@ -66,6 +66,7 @@ object Updater {
     const val REPO = "Mailo037/Hamstr"
     internal const val CH_UPDATES = "updates"
     private const val LAUNCH_CHECK_EVERY = 6 * 60 * 60 * 1000L
+    private const val CHECK_COOLDOWN = 60_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -97,8 +98,14 @@ object Updater {
         check(context)
     }
 
+    private var lastTry = 0L
+
     fun check(context: Context) {
         if (job?.isActive == true || state.value is UpdateState.Downloading || state.value is UpdateState.Installing || state.value is UpdateState.Ready) return
+        // Cooldown: tapping "Check for updates" again right away keeps the last answer instead of asking GitHub.
+        val now = System.currentTimeMillis()
+        if (now - lastTry < CHECK_COOLDOWN && state.value !is UpdateState.Idle) return
+        lastTry = now
         job = scope.launch {
             _state.value = UpdateState.Checking
             _state.value = runCatching { latest() }.fold(

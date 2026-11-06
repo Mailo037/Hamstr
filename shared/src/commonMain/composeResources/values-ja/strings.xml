@@ -679,6 +679,8 @@
     <string name="device_send_link">リンクを送る</string>
     <string name="device_send_files">ファイルを送る</string>
     <string name="device_forget">この端末を削除</string>
+    <string name="device_trusted_hint">リンクやファイルを確認なしで受け取ります</string>
+    <string name="device_ask_hint">リンクやファイルを受け取る前に確認します</string>
     <string name="nearby_done">完了</string>
     <string name="set_devices_summary_off">オフ</string>
     <string name="set_devices_summary">%1$s として表示</string>
@@ -846,6 +848,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">Wi-Fiで開始、またはモバイルデータで今すぐ</string>
     <string name="stash_start_now">今すぐ開始</string>
+    <string name="menu_download_now">今すぐダウンロード</string>
+    <string name="menu_tonight">今夜</string>
+    <string name="menu_tonight_hint">%1$sに開始</string>
     <plurals name="stash_failed_all">
         <item quantity="other">%1$d 件のダウンロードが失敗</item>
     </plurals>

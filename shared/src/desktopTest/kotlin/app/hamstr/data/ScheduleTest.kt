@@ -58,6 +58,18 @@ class ScheduleTest {
     }
 
     @Test
+    fun oneDownloadPutOffTonightWaitsAlone() {
+        // "Only at night" is off; the night hours still say when "Tonight" begins.
+        val s = Settings(nightOnly = false, nightFrom = 60, nightTo = 420)
+        val later = task().copy(tonight = true)
+        assertEquals(Stage.WaitingForNight, Schedule.hold(later, s, charging = true, now = at(15)))
+        assertNull(Schedule.hold(task(), s, charging = true, now = at(15)))
+        assertNull(Schedule.hold(later, s, charging = true, now = at(2)))
+        // Started now after all.
+        assertNull(Schedule.hold(later.copy(anytime = true), s, charging = true, now = at(15)))
+    }
+
+    @Test
     fun heldStagesWait() {
         assertTrue(Stage.WaitingForNight.held && Stage.WaitingForNight.waiting)
         assertTrue(Stage.WaitingForCharger.held && Stage.WaitingForCharger.waiting)

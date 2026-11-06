@@ -689,6 +689,8 @@
     <string name="device_send_link">Enviar enlace</string>
     <string name="device_send_files">Enviar archivos</string>
     <string name="device_forget">Olvidar este dispositivo</string>
+    <string name="device_trusted_hint">Sus enlaces y archivos llegan sin preguntar</string>
+    <string name="device_ask_hint">Te pregunta antes de recibir un enlace o archivo</string>
     <string name="nearby_done">Listo</string>
     <string name="set_devices_summary_off">Desactivado</string>
     <string name="set_devices_summary">Visible como %1$s</string>
@@ -862,6 +864,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">Empieza con wifi, o ahora con datos móviles</string>
     <string name="stash_start_now">Empezar ahora</string>
+    <string name="menu_download_now">Descargar ahora</string>
+    <string name="menu_tonight">Esta noche</string>
+    <string name="menu_tonight_hint">Empieza a las %1$s</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d descarga falló</item>
         <item quantity="other">%1$d descargas fallaron</item>

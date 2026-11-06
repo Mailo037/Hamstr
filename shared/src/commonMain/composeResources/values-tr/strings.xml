@@ -689,6 +689,8 @@
     <string name="device_send_link">Bağlantı gönder</string>
     <string name="device_send_files">Dosya gönder</string>
     <string name="device_forget">Bu cihazı unut</string>
+    <string name="device_trusted_hint">Bağlantılar ve dosyalar sormadan gelir</string>
+    <string name="device_ask_hint">Bir bağlantı ya da dosya gelmeden önce sorar</string>
     <string name="nearby_done">Tamam</string>
     <string name="set_devices_summary_off">Kapalı</string>
     <string name="set_devices_summary">%1$s olarak görünür</string>
@@ -862,6 +864,9 @@
     </plurals>
     <string name="stash_held_wifi_hint">Wi-Fi’da başlar, istersen şimdi mobil veriyle</string>
     <string name="stash_start_now">Şimdi başlat</string>
+    <string name="menu_download_now">Şimdi indir</string>
+    <string name="menu_tonight">Bu gece</string>
+    <string name="menu_tonight_hint">%1$s’de başlar</string>
     <plurals name="stash_failed_all">
         <item quantity="one">%1$d indirme başarısız oldu</item>
         <item quantity="other">%1$d indirme başarısız oldu</item>

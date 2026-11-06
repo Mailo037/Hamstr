@@ -37,7 +37,7 @@ object Wakeups {
         // Only by day: at night the queue runs anyway. And not by the stage alone, which lives in
         // memory; the process may have gone since.
         val night = Schedule.nextNight(s, now).takeIf {
-            s.nightOnly && !Schedule.night(s, now) && DownloadStore.tasks.value.any { t -> t.status == Status.Queued && !t.anytime }
+            !Schedule.dark(s, now) && DownloadStore.tasks.value.any { t -> t.status == Status.Queued && !t.anytime && (s.nightOnly || t.tonight) }
         }
         // One that is overdue (no network last time) comes again in a quarter of an hour, not at once;
         // rounded up to five minutes, so planning again a moment later asks for the same time.

@@ -103,6 +103,8 @@ data class DownloadTask(
     val anytime: Boolean = false,
     // Started now while it waited for Wi-Fi: it may use mobile data even with "Wi-Fi only".
     val mobileData: Boolean = false,
+    // Put off to the night from its menu: it waits for the night hours even with "Only at night" off.
+    val tonight: Boolean = false,
     // The channel or artist page it came from, to follow it from the player.
     val channelUrl: String? = null,
     // Live only, never saved: what happens besides fetching bytes, and the retry state.
@@ -520,7 +522,7 @@ object DownloadStore {
         put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
         put("uploader", t.uploader); put("mediaKey", t.mediaKey); put("hidden", t.hidden)
         put("sha256", t.sha256); put("hashedSize", t.hashedSize); put("hashedModified", t.hashedModified)
-        put("anytime", t.anytime); put("mobileData", t.mobileData)
+        put("anytime", t.anytime); put("mobileData", t.mobileData); put("tonight", t.tonight)
         put("channelUrl", t.channelUrl)
     }
 
@@ -562,6 +564,7 @@ object DownloadStore {
         hashedModified = o.optLong("hashedModified"),
         anytime = o.optBoolean("anytime"),
         mobileData = o.optBoolean("mobileData"),
+        tonight = o.optBoolean("tonight"),
         channelUrl = o.optStringOrNull("channelUrl"),
     )
 
