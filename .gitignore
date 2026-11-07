@@ -21,3 +21,7 @@ __pycache__/
 
 # Built by cargo directly in the Bluetooth helper
 desktop/ble/target/
+
+# JVM crash logs
+hs_err_pid*.log
+replay_pid*.log

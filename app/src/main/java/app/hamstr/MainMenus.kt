@@ -157,14 +157,16 @@ internal fun TaskMenu(
                     onClose()
                 }
             }
-            Spacer(Modifier.height(6.dp))
             t.error?.let { err ->
-                MenuRow(Res.drawable.ic_content_paste, stringResource(R.string.err_copy)) { copy(context, err); onCopied(resources.getString(R.string.err_copied)) }
+                Spacer(Modifier.height(10.dp))
+                MenuGroup { MenuRow(Res.drawable.ic_content_paste, stringResource(R.string.err_copy)) { copy(context, err); onCopied(resources.getString(R.string.err_copied)) } }
             }
+            Spacer(Modifier.height(10.dp))
         }
         if (gone && t.status == Status.Done) {
             Txt(stringResource(R.string.file_gone_long), style = Hamstr.type.small, color = c.muted, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
-            MenuRow(Res.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) }
+            MenuGroup { MenuRow(Res.drawable.ic_refresh, stringResource(R.string.download_again)) { onAgain(t) } }
+            Spacer(Modifier.height(10.dp))
         }
         if (file != null) {
             val kind = kindOf(t)
@@ -198,11 +200,16 @@ internal fun TaskMenu(
                 MenuRow(Res.drawable.ic_info, stringResource(R.string.menu_info)) { onInfo(t) }
             }
             Spacer(Modifier.height(10.dp))
-        } else {
-            if (t.url.startsWith("http")) MenuRow(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { onShare(t) }
         }
-        if (t.status == Status.Failed || t.status == Status.Paused) {
-            MenuRow(Res.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
+        // Still on its way: share its link, try it again.
+        val share = file == null && t.url.startsWith("http")
+        val retry = t.status == Status.Failed || t.status == Status.Paused
+        if (share || retry) {
+            MenuGroup {
+                if (retry) MenuRow(Res.drawable.ic_refresh, stringResource(R.string.err_try_again)) { DownloadService.send(context, DownloadService.ACTION_RESUME, t.id); onClose() }
+                if (share) MenuRow(Res.drawable.ic_share, stringResource(R.string.menu_tile_share)) { onShare(t) }
+            }
+            Spacer(Modifier.height(10.dp))
         }
         // When it downloads: now, past what holds it back, or put off to the night.
         val now = t.status == Status.Queued && t.stage?.startable == true
@@ -218,7 +225,9 @@ internal fun TaskMenu(
             Spacer(Modifier.height(10.dp))
         }
         when {
-            t.status.active -> MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_cancel)) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
+            t.status.active -> MenuGroup {
+                MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_cancel), danger = true) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
+            }
             file != null -> MenuGroup {
                 // Opened from Settings › Hidden, the file comes back instead.
                 if (t.hidden) MenuRow(Res.drawable.ic_restore, stringResource(R.string.hidden_restore)) {
@@ -228,7 +237,7 @@ internal fun TaskMenu(
                 } else MenuRow(Res.drawable.ic_visibility_off, stringResource(R.string.menu_hide), subtitle = stringResource(R.string.menu_hide_hint)) { onHide(listOf(t)) }
                 MenuRow(Res.drawable.ic_delete, stringResource(R.string.menu_delete), danger = true) { onDelete(t) }
             }
-            else -> MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_remove)) { onHide(listOf(t)) }
+            else -> MenuGroup { MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_remove), danger = true) { onHide(listOf(t)) } }
         }
     }
 }

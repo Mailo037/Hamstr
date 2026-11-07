@@ -3,13 +3,11 @@ package app.hamstr.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.LaunchedEffect
-import org.jetbrains.compose.resources.DrawableResource
 import app.hamstr.ui.components.Segmented
 import app.hamstr.ui.components.Sheet
 import app.hamstr.ui.components.SheetHeader
@@ -53,6 +51,8 @@ import app.hamstr.ui.components.HButton
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.IconButton
 import app.hamstr.ui.components.SettingRow
+import app.hamstr.ui.components.MenuGroup
+import app.hamstr.ui.components.MenuRow
 import app.hamstr.ui.components.SheetField
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.theme.Hamstr
@@ -208,36 +208,30 @@ fun FollowSheet(
             background = Hamstr.colors.surface,
         )
         url?.let { u ->
-            Spacer(Modifier.height(10.dp))
-            if (onBrowse != null) SheetAction(Res.drawable.ic_queue_music, stringResource(Res.string.follow_browse)) { onBrowse(Subscriptions.feedUrl(u)) }
-            SheetAction(Res.drawable.ic_open_in_new, stringResource(Res.string.info_open_link)) { onOpen(u) }
-            SheetAction(Res.drawable.ic_share, stringResource(Res.string.follow_share)) { onShare(u) }
-            if (sub != null && !sub.pending) SheetAction(Res.drawable.ic_refresh, stringResource(Res.string.follow_check_now)) {
-                Downloads.control.checkFeeds()
-                onClose()
+            Spacer(Modifier.height(12.dp))
+            // Like a file's menu: what it does on one panel, stopping on its own in red.
+            MenuGroup {
+                if (onBrowse != null) MenuRow(Res.drawable.ic_queue_music, stringResource(Res.string.follow_browse)) { onBrowse(Subscriptions.feedUrl(u)) }
+                MenuRow(Res.drawable.ic_open_in_new, stringResource(Res.string.info_open_link)) { onOpen(u) }
+                MenuRow(Res.drawable.ic_share, stringResource(Res.string.follow_share)) { onShare(u) }
+                if (sub != null && !sub.pending) MenuRow(Res.drawable.ic_refresh, stringResource(Res.string.follow_check_now)) {
+                    Downloads.control.checkFeeds()
+                    onClose()
+                }
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
         if (sub != null) {
-            HButton(stringResource(Res.string.follow_remove), { Subscriptions.unfollow(sub.id); onClose() }, Modifier.fillMaxWidth(), icon = Res.drawable.ic_close)
+            MenuGroup {
+                MenuRow(Res.drawable.ic_close, stringResource(Res.string.follow_remove), danger = true) { Subscriptions.unfollow(sub.id); onClose() }
+            }
         } else {
+            Spacer(Modifier.height(4.dp))
             HButton(
                 stringResource(Res.string.follow_button), { url?.let { u -> Subscriptions.follow(u, mode) { Downloads.control.feed(it) } } },
                 Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_add, enabled = url != null,
             )
         }
-    }
-}
-
-@Composable
-private fun SheetAction(icon: DrawableResource, label: String, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Icon(icon, tint = Hamstr.colors.muted)
-        Txt(label)
     }
 }
 
