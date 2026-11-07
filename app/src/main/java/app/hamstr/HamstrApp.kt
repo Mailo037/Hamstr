@@ -53,6 +53,8 @@ class HamstrApp : Application() {
         Updater.init(this)
         Widgets.start(this)
         app.hamstr.nearby.PhoneNearby.start(this)
+        // Other Hamstr apps can play here ("Play on"), into the app's own player.
+        app.hamstr.player.PhoneStage.install(this)
         app.hamstr.ui.AppIcon.shortcuts(this, Prefs.settings.value.accent)
         watchSchedule()
     }

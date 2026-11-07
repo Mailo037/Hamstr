@@ -48,15 +48,19 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun remember(player: Player) {
-        val id = player.currentMediaItem?.mediaId ?: return
+        val id = player.currentMediaItem?.mediaId?.takeUnless { it.startsWith(app.hamstr.cast.HamstrCast.REMOTE) } ?: return
         if (player.duration > 0) Positions.save(id, player.currentPosition, player.duration)
     }
 
     private val attributes = AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build()
     private val crossfade = Crossfade(handler, active = { session?.player as? ExoPlayer }, spawn = { newPlayer(main = false) }, swap = ::swap)
 
-    /** A player with the equalizer. Only the one the session holds takes the audio focus and stops for unplugged headphones. */
+    /**
+     * A player with the equalizer. Only the one the session holds takes the audio focus and stops
+     * for unplugged headphones. Plain http goes to [LanDataSource]: only streams another Hamstr plays here.
+     */
     private fun newPlayer(main: Boolean): ExoPlayer = ExoPlayer.Builder(this, EqRenderers(this))
+        .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(androidx.media3.datasource.DefaultDataSource.Factory(this, LanDataSource.Factory())))
         .setAudioAttributes(attributes, /* handleAudioFocus = */ main)
         .setHandleAudioBecomingNoisy(main)
         .setSeekBackIncrementMs(10_000)
@@ -133,6 +137,8 @@ class PlaybackService : MediaSessionService() {
             // Played to the end and on to the next one: the last one starts over next time.
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) last?.let(Positions::clear)
             last = mediaItem?.mediaId
+            // A stream from another Hamstr keeps the Wi-Fi awake while it plays, screen off too.
+            (session?.player as? ExoPlayer)?.setWakeMode(if (mediaItem?.mediaId?.startsWith(app.hamstr.cast.HamstrCast.REMOTE) == true) C.WAKE_MODE_NETWORK else C.WAKE_MODE_NONE)
         }
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED) session?.player?.currentMediaItem?.mediaId?.let(Positions::clear)

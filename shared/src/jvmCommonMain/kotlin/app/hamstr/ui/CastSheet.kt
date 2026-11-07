@@ -48,7 +48,7 @@ import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * "Play on": the TVs and speakers on this network, and the one something plays on now with
+ * "Play on": the TVs and speakers on this network, the other Hamstr apps there, and the one something plays on now with
  * its volume. Picking one moves what plays there; the player stays the remote. [onOutputs]
  * opens the phone's own output switcher (Bluetooth, cars), which the computer doesn't have.
  */
@@ -198,7 +198,12 @@ private fun describe(d: CastDevice, status: CastStatus?): String {
     return listOfNotNull(state, model, d.protocol.label).joinToString(" · ")
 }
 
-private fun iconOf(d: CastDevice): DrawableResource = if (d.video) Res.drawable.ic_tv else Res.drawable.ic_speaker
+private fun iconOf(d: CastDevice): DrawableResource = when {
+    d.hamstr == app.hamstr.nearby.DeviceKind.Phone -> Res.drawable.ic_smartphone
+    d.hamstr == app.hamstr.nearby.DeviceKind.Desktop -> Res.drawable.ic_computer
+    d.video -> Res.drawable.ic_tv
+    else -> Res.drawable.ic_speaker
+}
 
 @Composable
 private fun CastIcon(icon: DrawableResource, lit: Boolean) {

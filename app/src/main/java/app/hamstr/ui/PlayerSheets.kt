@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -84,11 +85,30 @@ private val QUEUE_GAP = 2.dp
  */
 @Composable
 fun QueueSheet(onClose: () -> Unit) {
+    val queue by Playback.queue.collectAsState()
+    val current by Playback.current.collectAsState()
+    LaunchedEffect(queue.isEmpty()) { if (queue.isEmpty()) onClose() }
+    val at = queue.indexOfFirst { it.id == current?.id }
+    Sheet(scroll = false) {
+        SheetHeader(
+            stringResource(R.string.queue_title),
+            subtitle = if (queue.size > 1) stringResource(R.string.queue_position, at + 1, queue.size) else pluralStringResource(R.plurals.lib_files, queue.size, queue.size),
+        )
+        Spacer(Modifier.height(10.dp))
+        QueueList(fill = false, onClose = onClose)
+    }
+}
+
+/**
+ * The rows of the queue and, under them, the way to close the player: in [QueueSheet] and in
+ * the player's pulled-up drawer. With [fill] the list takes all the height it is given.
+ */
+@Composable
+fun ColumnScope.QueueList(fill: Boolean, onClose: () -> Unit) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val queue by Playback.queue.collectAsState()
     val current by Playback.current.collectAsState()
-    LaunchedEffect(queue.isEmpty()) { if (queue.isEmpty()) onClose() }
     // A local copy moves under the finger; the player hears about it once the row is let go.
     var rows by remember { mutableStateOf(queue) }
     var dragKey by remember { mutableStateOf<String?>(null) }
@@ -141,93 +161,86 @@ fun QueueSheet(onClose: () -> Unit) {
             follow()
         }
     }
-    Sheet(scroll = false) {
-        SheetHeader(
-            stringResource(R.string.queue_title),
-            subtitle = if (rows.size > 1) stringResource(R.string.queue_position, at + 1, rows.size) else pluralStringResource(R.plurals.lib_files, rows.size, rows.size),
-        )
-        Spacer(Modifier.height(10.dp))
-        LazyColumn(
-            Modifier.weight(1f, fill = false).edgeFade(list, Orientation.Vertical, length = 22.dp),
-            state = list,
-            verticalArrangement = Arrangement.spacedBy(QUEUE_GAP),
-        ) {
-            itemsIndexed(rows, key = { _, t -> t.id }) { i, t ->
-                val dragging = t.id == dragKey
-                val now = t.id == current?.id
-                Box(
-                    if (dragging) Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset; scaleX = 1.02f; scaleY = 1.02f }
-                    else Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut()),
+    LazyColumn(
+        Modifier.weight(1f, fill = fill).edgeFade(list, Orientation.Vertical, length = 22.dp),
+        state = list,
+        verticalArrangement = Arrangement.spacedBy(QUEUE_GAP),
+    ) {
+        itemsIndexed(rows, key = { _, t -> t.id }) { i, t ->
+            val dragging = t.id == dragKey
+            val now = t.id == current?.id
+            Box(
+                if (dragging) Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset; scaleX = 1.02f; scaleY = 1.02f }
+                else Modifier.animateItem(fadeInSpec = Specs.listIn(), placementSpec = Specs.place, fadeOutSpec = Specs.listOut()),
+            ) {
+                SwipeRow(
+                    start = null,
+                    end = SwipeAction(Res.drawable.ic_close, stringResource(R.string.queue_remove), c.red, removes = true) {
+                        Playback.removeAt(queue.indexOfFirst { it.id == t.id })
+                    },
                 ) {
-                    SwipeRow(
-                        start = null,
-                        end = SwipeAction(Res.drawable.ic_close, stringResource(R.string.queue_remove), c.red, removes = true) {
-                            Playback.removeAt(queue.indexOfFirst { it.id == t.id })
-                        },
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(QUEUE_ROW)
+                            .clip(RoundedCornerShape(Radii.row))
+                            .background(if (now || dragging) c.surface else c.overlay)
+                            .swipeActions()
+                            .clickable { Playback.jumpTo(queue.indexOfFirst { it.id == t.id }) },
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
+                        // The handle: drag it up or down.
+                        Box(
                             Modifier
-                                .fillMaxWidth()
-                                .height(QUEUE_ROW)
-                                .clip(RoundedCornerShape(Radii.row))
-                                .background(if (now || dragging) c.surface else c.overlay)
-                                .swipeActions()
-                                .clickable { Playback.jumpTo(queue.indexOfFirst { it.id == t.id }) },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            // The handle: drag it up or down.
-                            Box(
-                                Modifier
-                                    .size(width = 40.dp, height = QUEUE_ROW)
-                                    .pointerInput(t.id) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                                dragKey = t.id; dragOffset = 0f; dragFrom = rows.indexOfFirst { it.id == t.id }
-                                            },
-                                            onDragEnd = {
-                                                val to = rows.indexOfFirst { it.id == dragKey }
-                                                if (dragFrom >= 0 && to >= 0 && to != dragFrom) Playback.move(dragFrom, to)
-                                                dragKey = null; dragOffset = 0f
-                                            },
-                                            onDragCancel = { rows = queue; dragKey = null; dragOffset = 0f },
-                                        ) { change, drag ->
-                                            change.consume()
-                                            dragOffset += drag.y
-                                            follow()
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Res.drawable.ic_drag_handle, tint = c.ghost, size = 20.dp) }
-                            Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
-                                AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(44.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Txt(t.title, style = if (now) Hamstr.type.bodyStrong else Hamstr.type.bodyMedium, color = if (now) c.accent else c.ink, maxLines = 1)
-                                Spacer(Modifier.height(2.dp))
-                                Txt(
-                                    listOfNotNull(
-                                        if (now) stringResource(R.string.queue_now) else null,
-                                        t.uploader?.let(Lyrics::cleanArtist) ?: t.source,
-                                        formatDuration(t.durationSec).takeIf { t.durationSec > 0 },
-                                    ).joinToString(" · "),
-                                    style = Hamstr.type.small, color = if (now) c.accent else c.ghost, maxLines = 1,
-                                )
-                            }
-                            IconButton(
-                                Res.drawable.ic_close, stringResource(R.string.queue_remove),
-                                { Playback.removeAt(queue.indexOfFirst { it.id == t.id }) },
-                                tint = c.ghost, background = Color.Transparent, size = 36.dp,
+                                .size(width = 40.dp, height = QUEUE_ROW)
+                                .pointerInput(t.id) {
+                                    detectDragGestures(
+                                        onDragStart = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            dragKey = t.id; dragOffset = 0f; dragFrom = rows.indexOfFirst { it.id == t.id }
+                                        },
+                                        onDragEnd = {
+                                            val to = rows.indexOfFirst { it.id == dragKey }
+                                            if (dragFrom >= 0 && to >= 0 && to != dragFrom) Playback.move(dragFrom, to)
+                                            dragKey = null; dragOffset = 0f
+                                        },
+                                        onDragCancel = { rows = queue; dragKey = null; dragOffset = 0f },
+                                    ) { change, drag ->
+                                        change.consume()
+                                        dragOffset += drag.y
+                                        follow()
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Res.drawable.ic_drag_handle, tint = c.ghost, size = 20.dp) }
+                        Box(Modifier.size(44.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
+                            AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(44.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Txt(t.title, style = if (now) Hamstr.type.bodyStrong else Hamstr.type.bodyMedium, color = if (now) c.accent else c.ink, maxLines = 1)
+                            Spacer(Modifier.height(2.dp))
+                            Txt(
+                                listOfNotNull(
+                                    if (now) stringResource(R.string.queue_now) else null,
+                                    t.uploader?.let(Lyrics::cleanArtist) ?: t.source,
+                                    formatDuration(t.durationSec).takeIf { t.durationSec > 0 },
+                                ).joinToString(" · "),
+                                style = Hamstr.type.small, color = if (now) c.accent else c.ghost, maxLines = 1,
                             )
                         }
+                        IconButton(
+                            Res.drawable.ic_close, stringResource(R.string.queue_remove),
+                            { Playback.removeAt(queue.indexOfFirst { it.id == t.id }) },
+                            tint = c.ghost, background = Color.Transparent, size = 36.dp,
+                        )
                     }
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        HButton(stringResource(R.string.player_close), { Playback.close(); onClose() }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_close)
     }
+    Spacer(Modifier.height(10.dp))
+    HButton(stringResource(R.string.player_close), { Playback.close(); onClose() }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_close)
 }
 
 /** Stops playback after a while, or when the song that plays now ends. */

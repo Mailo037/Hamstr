@@ -61,6 +61,7 @@ data class Settings(
     // Playback
     val playbackShuffle: Boolean = false,
     val playbackRepeat: Int = 0, // Media3: off (0), one (1), all (2).
+    val desktopVolume: Float = 1f,
     val resumeAfterVideos: Boolean = true,
     val iconFollowsAccent: Boolean = true,
     // The equalizer (app.hamstr.audio.Equalizer): on or off, a preset's id, and the bands of "custom" in dB.
@@ -172,6 +173,7 @@ object Prefs {
         haptics = sp.getBoolean("fx.haptics", true),
         playbackShuffle = sp.getBoolean("playbackShuffle", false),
         playbackRepeat = sp.getInt("playbackRepeat", 0).takeIf { it in 0..2 } ?: 0,
+        desktopVolume = validDesktopVolume(runCatching { sp.getString("desktopVolume", null)?.toFloatOrNull() }.getOrNull()),
         resumeAfterVideos = sp.getBoolean("resumeAfterVideos", true),
         iconFollowsAccent = sp.getBoolean("iconFollowsAccent", true),
         eqOn = sp.getBoolean("eq.on", false),
@@ -199,6 +201,8 @@ object Prefs {
         clipSeen = sp.getLong("clipSeen", 0),
     )
 
+    private fun validDesktopVolume(value: Float?): Float = value?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 1f
+
     // The keys as last handed to [sp]; empty after an apply that threw, so the next edit writes every key.
     private var written: Map<String, Any?> = emptyMap()
 
@@ -210,7 +214,10 @@ object Prefs {
     @Synchronized
     fun edit(block: (Settings) -> Settings) {
         val before = _settings.value
-        val after = _settings.updateAndGet(block)
+        val after = _settings.updateAndGet { current ->
+            val updated = block(current)
+            updated.copy(desktopVolume = validDesktopVolume(updated.desktopVolume))
+        }
         if (after == before && written.isNotEmpty()) return
         val now = encode(after)
         val e = sp.edit()
@@ -290,6 +297,7 @@ object Prefs {
         .putBoolean("fx.haptics", s.haptics)
         .putBoolean("playbackShuffle", s.playbackShuffle)
         .putInt("playbackRepeat", s.playbackRepeat)
+        .putString("desktopVolume", validDesktopVolume(s.desktopVolume).toString())
         .putBoolean("resumeAfterVideos", s.resumeAfterVideos)
         .putBoolean("iconFollowsAccent", s.iconFollowsAccent)
         .putBoolean("eq.on", s.eqOn)

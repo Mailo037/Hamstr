@@ -3,6 +3,8 @@ package app.hamstr.desktop
 import app.hamstr.Log
 import app.hamstr.engine.Versions
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 
 /**
@@ -65,24 +67,39 @@ object Tools {
     }
 
     /** Copies the bundled tools in place when this version of the app hasn't yet. */
+    @Synchronized
     fun install() {
-        dir.mkdirs()
         val bundled = System.getProperty("compose.application.resources.dir")?.let(::File)?.takeIf { it.isDirectory }
         if (bundled == null) {
             Log.w(TAG, "No bundled tools; run ./gradlew :desktop:fetchTools")
             return
         }
-        val files = bundled.listFiles().orEmpty().filter { it.isFile }
+        install(bundled, dir, System.getProperty("hamstr.version", "dev"))
+    }
+
+    internal fun install(bundled: File, destination: File, appVersion: String) {
+        destination.mkdirs()
+        val files = bundled.listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }
         // A new app version (or a new bundle) brings its own tools; yt-dlp's updates in between stay.
-        val stamp = File(dir, "bundle.txt")
-        val bundle = System.getProperty("hamstr.version", "dev") + " " + files.joinToString(",") { "${it.name}:${it.length()}" }
-        if (stamp.isFile && stamp.readText() == bundle && files.all { File(dir, it.name).isFile }) return
+        val stamp = File(destination, "bundle.txt")
+        val bundle = appVersion + " " + files.joinToString(",") { "${it.name}:${it.length()}" }
+        if (stamp.isFile && stamp.readText() == bundle && files.all { File(destination, it.name).isFile }) return
         files.forEach { f ->
-            val target = File(dir, f.name)
+            val target = File(destination, f.name)
+            // Windows locks running executables, including Nearby's helper. An app update
+            // often brings exactly the same tool; leave that copy (and its process) alone.
+            if (target.isFile && Files.mismatch(f.toPath(), target.toPath()) == -1L) return@forEach
             // A yt-dlp that updated itself since this app was built is newer than the one it brings.
             if (f.name == ytDlp.name && target.isFile && keepsNewer(target, f)) return@forEach
-            f.copyTo(target, overwrite = true)
-            target.setExecutable(true)
+            val staged = Files.createTempFile(destination.toPath(), f.name, ".tmp")
+            try {
+                Files.copy(f.toPath(), staged, StandardCopyOption.REPLACE_EXISTING)
+                check(staged.toFile().setExecutable(true)) { "Couldn't mark ${f.name} as executable" }
+                // Never truncate the installed copy if replacing it fails (e.g. it is in use).
+                Files.move(staged, target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                Files.deleteIfExists(staged)
+            }
         }
         stamp.writeText(bundle)
         Log.i(TAG, "Installed ${files.size} tools from $bundled")

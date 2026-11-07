@@ -560,17 +560,17 @@ private fun App(inPip: Boolean) {
                     .clip(RoundedCornerShape(22.dp)).background(c.overlay).padding(5.dp),
             )
             if (!inPip) PlayerHost(
-                miniBottom = bottom + 9.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
-                onShare = { share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
-                onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
+                miniBottom = bottom + 9.dp, inPip = false, onMenu = { if (mine(it)) menuFor = it }, onQuality = { if (mine(it)) qualityFor = it },
+                onShare = { if (mine(it)) share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
+                onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { if (mine(it)) lyricsFor = it },
                 miniStart = sideStart + 5.dp, miniWidth = SIDEBAR - 10.dp,
             )
         } else {
             TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
             if (!inPip) PlayerHost(
-                miniBottom = bottom + 78.dp, inPip = false, onMenu = { menuFor = it }, onQuality = { qualityFor = it },
-                onShare = { share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
-                onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { lyricsFor = it },
+                miniBottom = bottom + 78.dp, inPip = false, onMenu = { if (mine(it)) menuFor = it }, onQuality = { if (mine(it)) qualityFor = it },
+                onShare = { if (mine(it)) share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
+                onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { if (mine(it)) lyricsFor = it },
             )
         }
 
@@ -822,6 +822,9 @@ private fun App(inPip: Boolean) {
         if (!introDone) Intro(onDone = { introDone = true })
         // Always cover the entire app in PiP, even if playback stops during the transition.
         // Keep the normal UI composed underneath so tabs and scroll positions survive.
-        if (inPip) PlayerHost(miniBottom = 0.dp, inPip = true, onMenu = { menuFor = it }, onQuality = { qualityFor = it })
+        if (inPip) PlayerHost(miniBottom = 0.dp, inPip = true, onMenu = { if (mine(it)) menuFor = it }, onQuality = { if (mine(it)) qualityFor = it })
     }
 }
+
+/** A download of this phone's, not what another Hamstr plays here ("Play on"), which has no menu. */
+private fun mine(t: DownloadTask) = !t.id.startsWith(app.hamstr.cast.HamstrCast.REMOTE)

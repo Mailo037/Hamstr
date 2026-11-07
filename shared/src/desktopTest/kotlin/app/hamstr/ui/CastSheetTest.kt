@@ -37,6 +37,8 @@ import app.hamstr.cast.CastMedia
 import app.hamstr.cast.CastProtocol
 import app.hamstr.cast.CastSession
 import app.hamstr.cast.CastStatus
+import app.hamstr.cast.HamstrCast
+import app.hamstr.nearby.DeviceKind
 import app.hamstr.res.*
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.Txt
@@ -54,6 +56,7 @@ class CastSheetTest {
     private val tv = CastDevice("cast:1", "Living room TV", CastProtocol.Chromecast, "192.168.1.50", 8009, model = "Google TV Streamer")
     private val devices = listOf(
         tv,
+        CastDevice(HamstrCast.PREFIX + "laptop", "Laptop", CastProtocol.Hamstr, "192.168.1.30", 0, hamstr = DeviceKind.Desktop),
         CastDevice("uuid:2", "[TV] Samsung Q80", CastProtocol.Dlna, "192.168.1.51", 9197, model = "Samsung QE55Q80"),
         CastDevice("uuid:3", "Kitchen", CastProtocol.Dlna, "192.168.1.52", 1400, model = "Sonos One", video = false),
         CastDevice("airplay:4", "Bedroom", CastProtocol.AirPlay, "192.168.1.53", 7000, model = "AppleTV3,2"),

@@ -153,6 +153,23 @@ object Playback {
     }
 
     /**
+     * Plays what another Hamstr sends here ([PhoneStage]): [item] is its stream, [task] how the
+     * player shows it. A queue of one; nothing of it goes into the library or the positions.
+     */
+    suspend fun openStream(context: Context, task: DownloadTask, item: MediaItem, startAt: Long, play: Boolean) = withContext(Dispatchers.Main.immediate) {
+        ++openGeneration
+        cancelSleep()
+        setLoop(null)
+        added.clear()
+        _current.value = task
+        _queue.value = listOf(task)
+        val c = connect(context)
+        c.setMediaItem(item, startAt)
+        c.prepare()
+        if (play) c.play() else c.pause()
+    }
+
+    /**
      * A voice assistant set [queue] on the session itself, starting at [start]: the app's
      * player follows it as if it had been opened here.
      */

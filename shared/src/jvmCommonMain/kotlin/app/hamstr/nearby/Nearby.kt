@@ -2,6 +2,7 @@ package app.hamstr.nearby
 
 import app.hamstr.Log
 import app.hamstr.data.AtomicJson
+import app.hamstr.data.DownloadStore
 import app.hamstr.data.KeyValues
 import app.hamstr.data.Prefs
 import kotlinx.coroutines.CompletableDeferred
@@ -55,6 +56,8 @@ data class Peer(
     val via: Set<Via> = emptySet(),
     /** Its links go straight into the queue, without asking. */
     val trusted: Boolean = false,
+    /** It plays what another Hamstr sends it ("Play on"), from 0.10.11 on. */
+    val plays: Boolean = false,
 ) {
     val online get() = via.isNotEmpty()
 }
@@ -64,9 +67,9 @@ data class Offer(val name: String, val size: Long)
 
 /**
  * A link (or, with [files], some files) another device wants to send, waiting for "Accept"
- * because the sender isn't trusted yet.
+ * because the sender isn't trusted yet. With [play] it wants to play something here instead.
  */
-data class Request(val id: String, val from: Peer, val url: String, val title: String?, val files: List<Offer> = emptyList())
+data class Request(val id: String, val from: Peer, val url: String, val title: String?, val files: List<Offer> = emptyList(), val play: Boolean = false)
 
 /** What happened to a link or files sent with [Nearby.send] or [Nearby.sendFiles]. */
 enum class SendResult { Sent, Queued, Failed, Declined }
@@ -149,10 +152,15 @@ object Nearby {
 
     /** Called with a link to stash, from a trusted device or after "Accept". */
     var onLink: (url: String, title: String?, from: Peer) -> Unit = { _, _, _ -> }
-    /** Called with files that arrived complete, each with the name the sender gave it. */
-    var onFiles: (files: List<Pair<File, String>>, from: Peer) -> Unit = { files, _ -> files.forEach { it.first.delete() } }
+    /** Called only after all file bytes and negotiated metadata arrived complete. */
+    var onFiles: (files: List<ReceivedFile>, from: Peer) -> Unit = { files, _ -> files.forEach { it.delete() } }
     /** Called when an untrusted device asks; the app tells the user (a notification, the window). */
     var onRequest: (Request) -> Unit = {}
+    /**
+     * Called with a "Play on" command from another Hamstr ([app.hamstr.cast.HamstrCast]); what it
+     * returns goes back in the signed receipt, null refuses.
+     */
+    var onPlay: (from: Peer, m: JSONObject) -> JSONObject? = { _, _ -> null }
 
     private val _peers = MutableStateFlow<Map<String, Peer>>(emptyMap())
     /** Devices around now first, then remembered ones that are away. */
@@ -248,15 +256,18 @@ object Nearby {
         ts.isNotEmpty() && ts.none { it.via == Via.Wifi }
     }
 
-    /** A transport heard a device whose [hello] checked out. Its waiting links go out now. */
-    fun seen(id: String, name: String, kind: DeviceKind, key: String, via: Via) {
+    /**
+     * A transport heard a device whose [hello] checked out. Its waiting links go out now.
+     * [plays] is what its network beacon says; Bluetooth's hello doesn't say, so it keeps the last.
+     */
+    fun seen(id: String, name: String, kind: DeviceKind, key: String, via: Via, plays: Boolean? = null) {
         if (id == this.id || idOf(unb64(key) ?: return) != id) return
         val now = System.currentTimeMillis()
         var fresh = false
         _peers.update { all ->
             val old = all[id]
             fresh = old == null || via !in old.via
-            all + (id to Peer(id, name, kind, key, now, (old?.via ?: emptySet()) + via, trusted = trusted(id)))
+            all + (id to Peer(id, name, kind, key, now, (old?.via ?: emptySet()) + via, trusted = trusted(id), plays = plays ?: old?.plays ?: false))
         }
         synchronized(devices) {
             devices[id]?.let { k -> if (k.name != name) { devices[id] = k.copy(name = name); save() } }
@@ -296,6 +307,45 @@ object Nearby {
         return false
     }
 
+    /** Where [id] was last heard on the shared network, for "Play on". */
+    fun address(id: String): java.net.InetAddress? = transports.filterIsInstance<LanTransport>().firstNotNullOfOrNull { it.address(id) }
+
+    /**
+     * A "Play on" command for [peer], over the shared network only: sealed and signed like a link,
+     * answered by a signed receipt that carries the reply's fields (as `x_<name>`). Null when it
+     * didn't arrive or was refused. [timeout] is how long the other side may take (it may ask its
+     * user first).
+     */
+    suspend fun command(peer: Peer, body: JSONObject, timeout: Int = 8_000): JSONObject? = scope.async {
+        val lan = transports.filterIsInstance<StreamTransport>().firstOrNull { it.via == Via.Wifi && it.reaches(peer.id) } ?: return@async null
+        val publicKey = Seal.publicKey(peer.key) ?: return@async null
+        val nonce = nonce()
+        val message = Seal.seal(publicKey, sign(body.put("t", "play").put("to", peer.id), nonce)).bytes
+        var answer: JSONObject? = null
+        runCatching {
+            lan.exchange(peer.id) { wire ->
+                wire.write(message)
+                wire.timeout = timeout
+                answer = receipt(wire.read(MAX_REPLY), peer.id, nonce) ?: return@exchange false
+                true
+            }
+        }.onFailure { Log.d(TAG, "Play command to ${peer.name} failed", it) }
+        answer?.takeIf { it.optBoolean("ok") }
+    }.await()
+
+    /** Asks the user whether [from] may play [title] here, for up to two minutes; "Always allow" trusts it. Blocks. */
+    fun askToPlay(from: Peer, title: String?): Boolean {
+        val r = Request(UUID.randomUUID().toString(), from, "", title, play = true)
+        val decision = CompletableDeferred<Boolean>()
+        synchronized(decisions) { decisions[r.id] = decision }
+        _requests.update { it + r }
+        onRequest(r)
+        val answer = runBlocking { withTimeoutOrNull(ASK_FOR) { decision.await() } } ?: false
+        synchronized(decisions) { decisions.remove(r.id) }
+        _requests.update { list -> list.filterNot { it.id == r.id } }
+        return answer
+    }
+
     /**
      * Sends [files] over the shared network, or over Bluetooth when there is none. A device that
      * doesn't trust this one yet asks first; [progress] runs from 0 to 1 while the bytes go.
@@ -307,10 +357,16 @@ object Nearby {
         if (present.isEmpty()) return@async SendResult.Failed
         remember(peer)
         val nonce = nonce()
-        val list = JSONArray(present.map { JSONObject().put("name", it.name).put("size", it.length()) })
+        val sizes = present.map { it.length() }
+        // The list is newest first. Duplicate entries for one file must not pick older details;
+        // File keys also respect the platform's path case rules (unlike String keys on Windows).
+        val tasks = DownloadStore.tasks.value.asReversed().filter { it.filePath != null }.associateBy { File(it.filePath!!).absoluteFile.normalize() }
+        val list = JSONArray(present.mapIndexed { i, f -> JSONObject().put("name", f.name).put("size", sizes[i]) })
         // The list goes in as text: a signature has to cover exactly what was sent.
-        val sealed = Seal.seal(publicKey, sign(JSONObject().put("t", "files").put("to", peer.id).put("files", list.toString()), nonce))
-        val total = present.sumOf { it.length() }.coerceAtLeast(1)
+        // Old receivers ignore metadata; only a signed opt-in adds attachment streams.
+        val sealed = Seal.seal(publicKey, sign(JSONObject().put("t", "files").put("to", peer.id).put("files", list.toString()).put("metadata", 1), nonce))
+        if (sealed.bytes.size > Ble.MAX_MESSAGE) return@async SendResult.Failed
+        val total = sizes.sum().coerceAtLeast(1)
         var result = SendResult.Failed
         runCatching {
             lan.exchange(peer.id) { wire ->
@@ -326,17 +382,30 @@ object Nearby {
                 val chunk = lan.chunk.coerceIn(1024, CHUNK)
                 val buf = ByteArray(chunk)
                 var sent = 0L
-                for (f in present) {
-                    val size = f.length()
-                    var left = size
+                for ((i, f) in present.withIndex()) {
+                    var left = sizes[i]
                     f.inputStream().use { input ->
                         do {
-                            val n = fill(input, buf, minOf(chunk.toLong(), left).toInt())
+                            val wanted = minOf(chunk.toLong(), left).toInt()
+                            val n = fill(input, buf, wanted)
+                            check(n == wanted) { "File changed while sending" }
                             left -= n
-                            wire.write(frames.seal(buf, n, last = left <= 0 || n == 0))
+                            // Check EOF before ending the stream: the receiver may adopt it as soon
+                            // as it sees the last frame, even if this side then discovers extra bytes.
+                            if (left == 0L) check(input.read() == -1) { "File changed while sending" }
+                            wire.write(frames.seal(buf, n, last = left == 0L))
                             sent += n
                             progress((sent.toFloat() / total).coerceIn(0f, 1f))
-                        } while (left > 0 && n > 0)
+                        } while (left > 0)
+                    }
+                    if (answer.optLong("x_metadata") == 1L) {
+                        val attachment = FileAttachment.encode(tasks[f.absoluteFile.normalize()])
+                        var at = 0
+                        do {
+                            val n = minOf(chunk, attachment.size - at)
+                            wire.write(frames.seal(attachment.copyOfRange(at, at + n), n, last = at + n == attachment.size))
+                            at += n
+                        } while (at < attachment.size)
                     }
                 }
                 wire.timeout = 60_000
@@ -405,6 +474,10 @@ object Nearby {
                 takeFiles(peer, m, opened.dataKey, wire)
                 ByteArray(0)
             }
+            "play" -> {
+                val reply = runCatching { onPlay(peer, m) }.onFailure { Log.w(TAG, "Play command from ${from.name}", it) }.getOrNull()
+                receipt(from.id, m.optString("n"), ok = reply != null, extra = reply)
+            }
             else -> null
         }
     }
@@ -417,8 +490,9 @@ object Nearby {
             List(a.length()) { i -> a.getJSONObject(i).let { Offer(safeName(it.getString("name")), it.getLong("size")) } }
         }.getOrNull()?.takeIf { list -> list.isNotEmpty() && list.all { it.size >= 0 } }
         val dir = inbox
-        val total = offers?.sumOf { it.size } ?: 0
-        if (offers == null || dir == null || !dir.apply { mkdirs() }.isDirectory || dir.usableSpace < total + 64L * 1024 * 1024) {
+        val metadata = m.optLong("metadata") == 1L
+        val total = runCatching { offers?.fold(0L) { sum, offer -> Math.addExact(sum, Math.addExact(offer.size, if (metadata) FileAttachment.MAX_COVER.toLong() else 0L)) } }.getOrNull()
+        if (offers == null || total == null || dir == null || !dir.apply { mkdirs() }.isDirectory || total > (dir.usableSpace - 64L * 1024 * 1024).coerceAtLeast(0)) {
             wire.write(receipt(from.id, nonce, ok = false))
             return
         }
@@ -433,31 +507,41 @@ object Nearby {
             _requests.update { list -> list.filterNot { it.id == r.id } }
             answer
         }
-        wire.write(receipt(from.id, nonce, ok = accepted))
+        wire.write(receipt(from.id, nonce, ok = accepted, extra = if (metadata) JSONObject().put("metadata", 1) else null))
         if (!accepted) return
         val frames = Frames(dataKey)
-        val parts = mutableListOf<Pair<File, String>>()
+        val parts = mutableListOf<ReceivedFile>()
         try {
             wire.timeout = 30_000
             for (offer in offers) {
                 val part = File(dir, "${UUID.randomUUID()}.part")
-                parts += part to offer.name
+                parts += ReceivedFile(part, offer.name)
                 var got = 0L
                 part.outputStream().buffered(CHUNK).use { out ->
                     while (true) {
                         val (data, last) = frames.open(wire.read(CHUNK + 64))
+                        check(data.size.toLong() <= offer.size - got) { "More than offered" }
                         got += data.size
-                        check(got <= offer.size) { "More than offered" }
                         out.write(data)
                         if (last) break
                     }
                 }
                 check(got == offer.size) { "Cut short" }
+                if (metadata) {
+                    val attachment = java.io.ByteArrayOutputStream()
+                    while (true) {
+                        val (data, last) = frames.open(wire.read(CHUNK + 64))
+                        check(data.size <= FileAttachment.MAX_BYTES - attachment.size()) { "Metadata too large" }
+                        attachment.write(data)
+                        if (last) break
+                    }
+                    parts[parts.lastIndex] = FileAttachment.decode(attachment.toByteArray(), parts.last(), dir)
+                }
             }
             wire.write(receipt(from.id, nonce, ok = true, done = true))
         } catch (e: Exception) {
             Log.w(TAG, "Files from ${from.name} didn't arrive", e)
-            parts.forEach { it.first.delete() }
+            parts.forEach { it.delete() }
             return
         }
         onFiles(parts, from)
@@ -472,7 +556,7 @@ object Nearby {
     fun answer(r: Request, accept: Boolean, always: Boolean = false) {
         _requests.update { list -> list.filterNot { it.id == r.id } }
         if (accept && always) trust(r.from, true) else if (accept) remember(r.from)
-        if (r.files.isNotEmpty()) {
+        if (r.files.isNotEmpty() || r.play) {
             synchronized(decisions) { decisions[r.id] }?.complete(accept)
             return
         }
@@ -509,7 +593,8 @@ object Nearby {
      * [port] is where links go on the network; [bye] says it is leaving.
      */
     fun hello(port: Int? = null, bye: Boolean = false): JSONObject = sign(JSONObject().put("hamstr", PROTOCOL).put("t", "hello").apply {
-        if (port != null) put("port", port)
+        // "play": it takes "Play on" from other Hamstr apps; older ones don't look at it.
+        if (port != null) put("port", port).put("play", 1)
         if (bye) put("bye", true)
     })
 
@@ -554,7 +639,7 @@ object Nearby {
         }.getOrDefault(false)
         if (!ok) return null
         val kind = runCatching { DeviceKind.valueOf(m.optString("kind")) }.getOrDefault(DeviceKind.Phone)
-        return Peer(id, m.optString("name").take(60).ifBlank { "Hamstr" }, kind, m.optString("key"))
+        return Peer(id, m.optString("name").take(60).ifBlank { "Hamstr" }, kind, m.optString("key"), plays = m.optInt("play") >= 1)
     }
 
     /** True the first time a nonce shows up within [MAX_AGE]. */
@@ -572,8 +657,9 @@ object Nearby {
     }
 
     /** This device's signed answer to message [nonce] from [to]. */
-    private fun receipt(to: String, nonce: String, ok: Boolean, done: Boolean = false): ByteArray =
-        sign(JSONObject().put("t", "ack").put("to", to).put("re", nonce).put("ok", ok).apply { if (done) put("done", true) }).bytes()
+    private fun receipt(to: String, nonce: String, ok: Boolean, done: Boolean = false, extra: JSONObject? = null): ByteArray =
+        sign(JSONObject().apply { extra?.keys()?.forEach { k -> put("x_$k", extra.get(k)) } }
+            .put("t", "ack").put("to", to).put("re", nonce).put("ok", ok).apply { if (done) put("done", true) }).bytes()
 
     /** The receipt in [reply], when [from] signed it for this device's message [nonce]. */
     private fun receipt(reply: ByteArray, from: String, nonce: String): JSONObject? {

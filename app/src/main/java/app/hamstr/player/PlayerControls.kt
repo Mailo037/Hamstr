@@ -106,8 +106,9 @@ internal fun Transport(
     onLyrics: () -> Unit,
     onQueue: () -> Unit,
     onSleep: () -> Unit,
+    drawer: Boolean = false,
 ) {
-    if (!video && lyrics != null) return SongTransport(controller, ui, lyrics, onLyrics, onQueue, onSleep)
+    if (!video && lyrics != null) return SongTransport(controller, ui, lyrics, onLyrics, onQueue, onSleep, drawer)
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val queue by Playback.queue.collectAsState()
@@ -499,11 +500,13 @@ internal fun rememberCoverColor(url: String?): Color {
 
 /**
  * A song's controls, laid out like a music app's: the timeline, then shuffle, previous,
- * play, next and repeat in one row, and under it the sleep timer and speed on the left,
- * lyrics and the queue on the right. A lit mode is accent with a dot under it.
+ * play, next and repeat in one row. Under it, upright with the [drawer] (where the queue and
+ * the lyrics are pulled up from), the sleep timer, speed and equalizer sit centred as three
+ * chips; otherwise sleep and speed are on the left, lyrics, equalizer, cast and the queue on
+ * the right. A lit mode is accent.
  */
 @Composable
-internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onLyrics: () -> Unit, onQueue: () -> Unit, onSleep: () -> Unit) {
+internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onLyrics: () -> Unit, onQueue: () -> Unit, onSleep: () -> Unit, drawer: Boolean = false) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val queue by Playback.queue.collectAsState()
@@ -517,31 +520,20 @@ internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, on
         IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 52.dp, tint = c.ink, background = Color.Transparent)
         PlayPause(ui.isPlaying, size = 72.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
         IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 52.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
-        ModeButton(
-            if (ui.repeat == Player.REPEAT_MODE_ONE) Res.drawable.ic_repeat_one else Res.drawable.ic_repeat,
-            stringResource(
-                when (ui.repeat) {
-                    Player.REPEAT_MODE_ONE -> R.string.player_repeat_one
-                    Player.REPEAT_MODE_ALL -> R.string.player_repeat_all
-                    else -> R.string.player_repeat_off
-                },
-            ),
-            on = ui.repeat != Player.REPEAT_MODE_OFF,
-        ) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            controller.repeatMode = when (ui.repeat) {
-                Player.REPEAT_MODE_OFF -> if (queue.size > 1) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_ONE
-                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                else -> Player.REPEAT_MODE_OFF
-            }
-        }
+        RepeatButton(controller, ui, queue.size)
     }
     Spacer(Modifier.height(14.dp))
     val sleep by Playback.sleep.collectAsState()
     val now by produceState(System.currentTimeMillis(), sleep) {
         while (sleep is Playback.Sleep.At) { value = System.currentTimeMillis(); delay(1000) }
     }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    val eq by Prefs.settings.collectAsState()
+    val eqOn = eq.eqOn || eq.soundChannels != "stereo" || eq.soundLevel != "normal" || eq.normalize
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = if (drawer) Arrangement.Center else Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         ToggleChip(
             Res.drawable.ic_timer,
             when (val s = sleep) {
@@ -565,16 +557,44 @@ internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, on
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) { Txt("${if (ui.speed % 1f == 0f) ui.speed.toInt() else ui.speed}×", style = Hamstr.type.mono, color = if (abs(ui.speed - 1f) > 0.01f) c.accent else c.muted) }
+        if (drawer) {
+            Spacer(Modifier.width(8.dp))
+            ToggleChip(Res.drawable.ic_equalizer, stringResource(R.string.eq_title), on = eqOn) { EqSheet.open.value = true }
+            return@Row
+        }
         Spacer(Modifier.weight(1f))
         ModeButton(Res.drawable.ic_lyrics, stringResource(R.string.lyrics), on = lyrics) {
             haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             onLyrics()
         }
-        val eq by Prefs.settings.collectAsState()
-        ModeButton(Res.drawable.ic_equalizer, stringResource(R.string.eq_title), on = eq.eqOn || eq.soundChannels != "stereo" || eq.soundLevel != "normal" || eq.normalize) { EqSheet.open.value = true }
+        ModeButton(Res.drawable.ic_equalizer, stringResource(R.string.eq_title), on = eqOn) { EqSheet.open.value = true }
         val casting by app.hamstr.cast.Cast.session.collectAsState()
         ModeButton(Res.drawable.ic_cast, stringResource(R.string.cast_button), on = casting != null) { CastSheetState.open.value = true }
         ModeButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), on = false, onClick = onQueue)
+    }
+}
+
+/** Repeat as a [ModeButton]: off, then all (in a queue), then this one, then off again. */
+@Composable
+internal fun RepeatButton(controller: Player, ui: PlayerUi, queueSize: Int) {
+    val haptics = LocalHapticFeedback.current
+    ModeButton(
+        if (ui.repeat == Player.REPEAT_MODE_ONE) Res.drawable.ic_repeat_one else Res.drawable.ic_repeat,
+        stringResource(
+            when (ui.repeat) {
+                Player.REPEAT_MODE_ONE -> R.string.player_repeat_one
+                Player.REPEAT_MODE_ALL -> R.string.player_repeat_all
+                else -> R.string.player_repeat_off
+            },
+        ),
+        on = ui.repeat != Player.REPEAT_MODE_OFF,
+    ) {
+        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        controller.repeatMode = when (ui.repeat) {
+            Player.REPEAT_MODE_OFF -> if (queueSize > 1) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_ONE
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
     }
 }
 

@@ -1,6 +1,10 @@
 package app.hamstr.nearby
 
+import app.hamstr.data.DownloadStore
+import app.hamstr.data.DownloadTask
+import app.hamstr.data.Mode
 import app.hamstr.data.Prefs
+import app.hamstr.data.Status
 import app.hamstr.data.PropertiesFile
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -13,7 +17,9 @@ import java.security.spec.ECGenParameterSpec
 import java.util.Base64
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.FutureTask
 import kotlin.concurrent.thread
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -23,6 +29,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NearbyTest {
+    @AfterTest
+    fun clearDownloads() {
+        DownloadStore.replace(emptyList())
+        DownloadStore.close()
+    }
+
     /** Another Hamstr, played by the test: its own keys, signing the way the app signs. */
     private class Other(val name: String = "Other") {
         val keys: KeyPair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
@@ -43,8 +55,11 @@ class NearbyTest {
             return Seal.seal(Seal.publicKey(Nearby.publicKey)!!, m.toString().toByteArray()).bytes
         }
 
-        fun receipt(re: String, ok: Boolean = true, done: Boolean = false, signer: KeyPair = keys) =
-            sign(JSONObject().put("t", "ack").put("to", Nearby.id).put("re", re).put("ok", ok).apply { if (done) put("done", true) }, signer = signer)
+        fun receipt(re: String, ok: Boolean = true, done: Boolean = false, signer: KeyPair = keys, metadata: Boolean = false) =
+            sign(JSONObject().put("t", "ack").put("to", Nearby.id).put("re", re).put("ok", ok).apply {
+                if (done) put("done", true)
+                if (metadata) put("x_metadata", 1)
+            }, signer = signer)
                 .toString().toByteArray()
 
         fun open(bytes: ByteArray) = Seal.open(keys.private, bytes)!!
@@ -94,6 +109,8 @@ class NearbyTest {
 
     private fun setUp(transports: List<Transport> = emptyList()): File {
         val dir = File(System.getProperty("java.io.tmpdir"), "hamstr-nearby-" + System.nanoTime()).apply { mkdirs() }
+        DownloadStore.close()
+        DownloadStore.init(dir)
         Prefs.init(PropertiesFile(File(dir, "settings.properties")))
         Prefs.edit { it.copy(nearby = false) }
         Nearby.inbox = File(dir, "inbox")
@@ -188,6 +205,8 @@ class NearbyTest {
         val dir = setUp(listOf(Loop(pipe) { error("no links here") }))
         val content = ByteArray(700_000) { (it % 251).toByte() }
         val source = File(dir, "clip.mp4").apply { writeBytes(content) }
+        // A legacy receiver must still get only the original media, even when metadata exists.
+        DownloadStore.add(media(source, File(dir, "cover.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }))
 
         // Out: the other device reads the offer, accepts and gets the bytes in sealed frames.
         val received = java.io.ByteArrayOutputStream()
@@ -212,7 +231,7 @@ class NearbyTest {
 
         // In: from a trusted device the files land in the inbox under the sender's (cleaned) name.
         Nearby.trust(other.peer, true)
-        var landed: List<Pair<File, String>> = emptyList()
+        var landed: List<ReceivedFile> = emptyList()
         Nearby.onFiles = { files, _ -> landed = files }
         val offer = other.sign(JSONObject().put("t", "files").put("to", Nearby.id)
             .put("files", JSONArray().put(JSONObject().put("name", "../../evil/song.opus").put("size", content.size)).toString()))
@@ -228,13 +247,307 @@ class NearbyTest {
         }
         assertContentEquals(ByteArray(0), Nearby.receive(sealed.bytes, pipe.a))
         sender.join()
-        assertEquals("song.opus", landed.single().second)
-        assertContentEquals(content, landed.single().first.readBytes())
+        assertEquals("song.opus", landed.single().name)
+        assertContentEquals(content, landed.single().file.readBytes())
+        assertNull(landed.single().metadata)
+        assertNull(landed.single().cover)
+    }
+
+    private fun media(file: File, cover: File? = null) = DownloadTask(
+        url = "https://example.com/original", title = "Original ${file.name}",
+        thumbnail = cover?.toURI()?.toString(), source = "Youtube", uploader = "Original artist",
+        durationSec = 183, videoHeight = 1080, mediaKey = "Youtube:original", channelUrl = "https://example.com/artist",
+        choice = Prefs.settings.value.defaultChoice().copy(mode = Mode.Audio, open = true),
+        status = Status.Done, filePath = file.absolutePath, hidden = true, anytime = true, group = "sender-group",
+    )
+
+    private fun readStream(frames: Frames, wire: Wire): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        while (true) {
+            val (data, last) = frames.open(wire.read(512 * 1024))
+            out.write(data)
+            if (last) return out.toByteArray()
+        }
+    }
+
+    /** Feed a signed offer and sealed streams without a socket or waiting on a broken sender. */
+    private fun incoming(
+        other: Other,
+        content: List<ByteArray>,
+        attachments: List<ByteArray>? = null,
+        sizes: List<Long> = content.map { it.size.toLong() },
+        metadataVersion: Long? = if (attachments == null) null else 1L,
+        edit: (MutableList<ByteArray>) -> Unit = {},
+    ): List<JSONObject> {
+        val list = JSONArray(content.mapIndexed { i, _ -> JSONObject().put("name", "song$i.opus").put("size", sizes[i]) })
+        val offer = other.sign(JSONObject().put("t", "files").put("to", Nearby.id).put("files", list.toString()).apply {
+            metadataVersion?.let { put("metadata", it) }
+        })
+        val sealed = Seal.seal(Seal.publicKey(Nearby.publicKey)!!, offer.toString().toByteArray())
+        val frames = Frames(sealed.dataKey)
+        val input = mutableListOf<ByteArray>()
+        content.forEachIndexed { i, bytes ->
+            input += frames.seal(bytes, bytes.size, last = true)
+            attachments?.get(i)?.let { attachment ->
+                attachment.toList().chunked(50_000).forEachIndexed { at, chunk ->
+                    input += frames.seal(chunk.toByteArray(), chunk.size, last = (at + 1) * 50_000 >= attachment.size)
+                }
+            }
+        }
+        edit(input)
+        val replies = mutableListOf<JSONObject>()
+        val wire = object : Wire {
+            override var timeout = 10_000
+            override fun read(max: Int) = input.removeAt(0).also { check(it.size <= max) }
+            override fun write(bytes: ByteArray) { replies += JSONObject(String(bytes)) }
+        }
+        assertContentEquals(ByteArray(0), Nearby.receive(sealed.bytes, wire))
+        return replies
+    }
+
+    @Test
+    fun metadataAndCoversFollowTheirFilesOnlyAfterNegotiation() = runBlocking {
+        val other = Other()
+        val pipe = Pipe()
+        val dir = setUp(listOf(Loop(pipe) { error("no links here") }))
+        val files = listOf(
+            File(dir, "one.opus").apply { writeBytes(ByteArray(70_000) { it.toByte() }) },
+            File(dir, "two.opus").apply { writeBytes(byteArrayOf(4, 5, 6)) },
+        )
+        val cover = File(dir, "private-cover.jpg").apply { writeBytes(ByteArray(350_000) { (it % 251).toByte() }) }
+        val tasks = files.map { media(it, cover) }
+        // A second entry for the same physical file must not overwrite the newest details.
+        DownloadStore.add(tasks.first().copy(id = "older-entry", title = "Old title", uploader = "Old artist", thumbnail = null))
+        DownloadStore.addAll(tasks)
+        val remote = FutureTask {
+            val offer = other.open(pipe.b.read(64 * 1024))
+            val m = JSONObject(String(offer.plain))
+            assertEquals(1, m.getInt("metadata"))
+            assertFalse(String(offer.plain).contains("private-cover"))
+            pipe.b.write(other.receipt(m.getString("n"), metadata = true))
+            val frames = Frames(offer.dataKey)
+            val attachments = files.map { file ->
+                assertContentEquals(file.readBytes(), readStream(frames, pipe.b))
+                readStream(frames, pipe.b)
+            }
+            pipe.b.write(other.receipt(m.getString("n"), done = true))
+            attachments
+        }
+        thread { remote.run() }
+        assertEquals(SendResult.Sent, Nearby.sendFiles(other.peer, files))
+        val attachments = remote.get(10, TimeUnit.SECONDS)
+
+        Nearby.trust(other.peer, true)
+        var landed = emptyList<ReceivedFile>()
+        Nearby.onFiles = { received, _ -> landed = received }
+        val replies = incoming(other, files.map { it.readBytes() }, attachments)
+        assertEquals(1, replies.first().getInt("x_metadata"))
+        assertTrue(replies.last().getBoolean("done"))
+        assertEquals(2, landed.size)
+        landed.forEachIndexed { i, received ->
+            assertContentEquals(files[i].readBytes(), received.file.readBytes())
+            assertContentEquals(cover.readBytes(), assertNotNull(received.cover).readBytes())
+            val local = media(received.file).copy(id = "local-$i", title = "fallback", uploader = null, source = other.name,
+                url = received.file.toURI().toString(), durationSec = 0, videoHeight = 0, mediaKey = null, channelUrl = null,
+                hidden = false, anytime = false, group = "local-group", choice = Prefs.settings.value.defaultChoice())
+            val adopted = assertNotNull(received.metadata).applyTo(local)
+            assertEquals(tasks[i].title, adopted.title)
+            assertEquals(tasks[i].uploader, adopted.uploader)
+            assertEquals(tasks[i].url, adopted.url)
+            assertEquals(tasks[i].source, adopted.source)
+            assertEquals(tasks[i].durationSec, adopted.durationSec)
+            assertEquals(tasks[i].videoHeight, adopted.videoHeight)
+            assertEquals(tasks[i].mediaKey, adopted.mediaKey)
+            assertEquals(tasks[i].channelUrl, adopted.channelUrl)
+            assertEquals(Mode.Audio, adopted.choice.mode)
+            assertEquals(local.id, adopted.id)
+            assertEquals(local.filePath, adopted.filePath)
+            assertEquals(local.group, adopted.group)
+            assertFalse(adopted.hidden || adopted.anytime || adopted.choice.open)
+            assertNull(adopted.thumbnail, "A sender-local cover path must not be adopted")
+            received.delete()
+        }
+    }
+
+    @Test
+    fun incompleteOrTamperedAttachmentsNeverReachTheImporter() {
+        val dir = setUp()
+        val other = Other()
+        Nearby.trust(other.peer, true)
+        var delivered = false
+        Nearby.onFiles = { _, _ -> delivered = true }
+        val attachment = JSONObject().put("cover", Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3))).toString().toByteArray()
+        for (tamper in listOf(false, true)) {
+            val replies = incoming(other, listOf(byteArrayOf(1), byteArrayOf(2)), listOf(attachment, attachment)) { frames ->
+                if (tamper) frames[frames.lastIndex][20] = (frames.last()[20].toInt() xor 1).toByte()
+                else frames.removeAt(frames.lastIndex)
+            }
+            assertTrue(replies.first().getBoolean("ok"))
+            assertFalse(replies.any { it.optBoolean("done") })
+            assertFalse(delivered)
+            assertTrue(File(dir, "inbox").listFiles().orEmpty().isEmpty(), "All media and cover parts must be discarded")
+        }
+    }
+
+    @Test
+    fun malformedAttachmentsNeverReachTheImporter() {
+        val dir = setUp()
+        val other = Other()
+        Nearby.trust(other.peer, true)
+        var delivered = false
+        Nearby.onFiles = { _, _ -> delivered = true }
+        for (attachment in listOf("not json", "{\"cover\":\"not base64!\"}")) {
+            val replies = incoming(other, listOf(byteArrayOf(1)), listOf(attachment.toByteArray()))
+            assertFalse(replies.any { it.optBoolean("done") })
+            assertFalse(delivered)
+            assertTrue(File(dir, "inbox").listFiles().orEmpty().isEmpty())
+        }
+    }
+
+    @Test
+    fun emptyFilesWithEmptyAttachmentsStillArriveComplete() {
+        setUp()
+        val other = Other()
+        Nearby.trust(other.peer, true)
+        var landed = emptyList<ReceivedFile>()
+        Nearby.onFiles = { files, _ -> landed = files }
+        val replies = incoming(other, listOf(byteArrayOf()), listOf("{}".toByteArray()))
+        try {
+            assertTrue(replies.last().getBoolean("done"))
+            assertTrue(landed.single().file.isFile)
+            assertEquals(0L, landed.single().file.length())
+            assertNull(landed.single().metadata)
+            assertNull(landed.single().cover)
+        } finally { landed.forEach { it.delete() } }
+    }
+
+    @Test
+    fun unknownMetadataVersionsKeepTheLegacyFileOnlyStream() {
+        setUp()
+        val other = Other()
+        Nearby.trust(other.peer, true)
+        var landed = emptyList<ReceivedFile>()
+        Nearby.onFiles = { files, _ -> landed = files }
+        for (version in listOf(2L, 4_294_967_297L)) {
+            val bytes = byteArrayOf(1, 2, 3)
+            val replies = incoming(other, listOf(bytes), metadataVersion = version)
+            try {
+                assertFalse(replies.first().has("x_metadata"))
+                assertTrue(replies.last().getBoolean("done"))
+                assertContentEquals(bytes, landed.single().file.readBytes())
+                assertNull(landed.single().metadata)
+                assertNull(landed.single().cover)
+            } finally { landed.forEach { it.delete() } }
+        }
+    }
+
+    @Test
+    fun fileSizesStillHaveToMatchAndCannotOverflow() {
+        val dir = setUp()
+        val other = Other()
+        Nearby.trust(other.peer, true)
+        var delivered = false
+        Nearby.onFiles = { _, _ -> delivered = true }
+        for (size in listOf(0L, 2L, Long.MAX_VALUE)) {
+            val replies = incoming(other, listOf(byteArrayOf(1)), listOf("{}".toByteArray()), sizes = listOf(size))
+            assertFalse(replies.any { it.optBoolean("done") })
+            assertFalse(delivered)
+            assertTrue(File(dir, "inbox").listFiles().orEmpty().isEmpty())
+        }
+    }
+
+    @Test
+    fun metadataCannotImportSenderPathsOrTaskState() {
+        val dir = setUp()
+        val file = File(dir, "local.opus").apply { writeBytes(byteArrayOf(1)) }
+        val local = media(file).copy(status = Status.Done, hidden = false, anytime = false, group = "local-group")
+        val data = JSONObject().put("title", "Real title").put("url", "file:///private/sender.opus")
+            .put("thumbnail", "file:///private/cover.jpg").put("channelUrl", "content://private")
+            .put("filePath", "/private/sender.opus").put("id", "sender-id").put("status", "Queued")
+            .put("hidden", true).put("group", "sender-group").put("duration", -4)
+        val adopted = FileMetadata.read(data).applyTo(local)
+        assertEquals("Real title", adopted.title)
+        assertEquals(local.url, adopted.url)
+        assertEquals(local.filePath, adopted.filePath)
+        assertEquals(local.id, adopted.id)
+        assertEquals(local.status, adopted.status)
+        assertEquals(local.group, adopted.group)
+        assertEquals(local.durationSec, adopted.durationSec)
+        assertEquals(local.channelUrl, adopted.channelUrl)
+        assertNull(adopted.thumbnail)
+        assertFalse(adopted.hidden)
+    }
+
+    @Test
+    fun embeddedArtworkSurvivesWhenTheSenderHasOnlyARemoteThumbnail() {
+        val dir = setUp()
+        val local = media(File(dir, "local.opus")).copy(thumbnail = File(dir, "embedded.jpg").toURI().toString())
+        val data = JSONObject().put("thumbnail", "https://example.com/cover.jpg")
+            .put("duration", 4_294_967_297L).put("videoHeight", Long.MAX_VALUE).put("height", -1)
+        val adopted = FileMetadata.read(data).applyTo(local)
+        assertEquals(local.thumbnail, adopted.thumbnail)
+        assertEquals(local.durationSec, adopted.durationSec)
+        assertEquals(local.videoHeight, adopted.videoHeight)
+        assertEquals(local.choice.height, adopted.choice.height)
+        assertEquals("https://example.com/cover.jpg", FileMetadata.read(data).applyTo(local.copy(thumbnail = null)).thumbnail)
+    }
+
+    @Test
+    fun changedFilesNeverSendACompleteStream() = runBlocking {
+        // Mutate after the offer's length is signed but before the first file is read. No receiver
+        // may see a final frame for either a shortened or a grown file, including an empty file.
+        for ((before, after) in listOf(4 to 2, 4 to 6, 0 to 1)) {
+            val other = Other()
+            val offered = ByteArray(before) { it.toByte() }
+            var source: File? = null
+            var frames: Frames? = null
+            var re: String? = null
+            var finalFrame = false
+            var reads = 0
+            val wire = object : Wire {
+                override var timeout = 10_000
+                override fun write(bytes: ByteArray) {
+                    if (frames == null) {
+                        val offer = other.open(bytes)
+                        val m = JSONObject(String(offer.plain))
+                        assertEquals(before.toLong(), JSONArray(m.getString("files")).getJSONObject(0).getLong("size"))
+                        frames = Frames(offer.dataKey)
+                        re = m.getString("n")
+                    } else {
+                        finalFrame = finalFrame || assertNotNull(frames).open(bytes).second
+                    }
+                }
+                override fun read(max: Int): ByteArray {
+                    reads++
+                    if (reads == 1) {
+                        assertNotNull(source).writeBytes(ByteArray(after) { it.toByte() })
+                        return other.receipt(assertNotNull(re))
+                    }
+                    return other.receipt(assertNotNull(re), done = true)
+                }
+            }
+            val transport = object : StreamTransport {
+                override val via = Via.Wifi
+                override fun start(scope: kotlinx.coroutines.CoroutineScope) {}
+                override fun stop() {}
+                override fun reaches(id: String) = true
+                override suspend fun send(id: String, message: ByteArray, accept: (ByteArray) -> Boolean) = error("no links here")
+                override suspend fun exchange(id: String, block: (Wire) -> Boolean) = block(wire)
+            }
+            val dir = setUp(listOf(transport))
+            val file = File(dir, "changing.opus").apply { writeBytes(offered) }
+            source = file
+            try {
+                assertEquals(SendResult.Failed, Nearby.sendFiles(other.peer, listOf(file)))
+                assertFalse(finalFrame, "A changed file must not be importable")
+                assertEquals(1, reads, "A changed file must not wait for a completion receipt")
+            } finally { file.delete() }
+        }
     }
 
     @Test
     fun linksAndFilesCrossBluetooth() = runBlocking {
-        setUp()
+        val dir = setUp()
         val other = Other()
         val link = FakeLink(BleServer())
         // Who this device is, in a long read.
@@ -251,21 +564,28 @@ class NearbyTest {
 
         // A file on the stream: offer, answer, frames and the receipt for all of it.
         val content = ByteArray(100_000) { (it % 241).toByte() }
-        var landed: List<Pair<File, String>> = emptyList()
+        var landed: List<ReceivedFile> = emptyList()
         Nearby.onFiles = { files, _ -> landed = files }
-        val offer = other.sign(JSONObject().put("t", "files").put("to", Nearby.id)
+        val offer = other.sign(JSONObject().put("t", "files").put("to", Nearby.id).put("metadata", 1)
             .put("files", JSONArray().put(JSONObject().put("name", "clip.mp4").put("size", content.size)).toString()))
         val sealed = Seal.seal(Seal.publicKey(Nearby.publicKey)!!, offer.toString().toByteArray())
         val wire = Ble.wire(link)
         wire.write(sealed.bytes)
-        assertTrue(JSONObject(String(wire.read(64 * 1024))).getBoolean("ok"))
+        val accepted = JSONObject(String(wire.read(64 * 1024)))
+        assertTrue(accepted.getBoolean("ok"))
+        assertEquals(1, accepted.getInt("x_metadata"))
         val frames = Frames(sealed.dataKey)
         val parts = content.toList().chunked(Ble.CHUNK)
         parts.forEachIndexed { i, part -> wire.write(frames.seal(part.toByteArray(), part.size, last = i == parts.lastIndex)) }
+        val cover = File(dir, "bluetooth-cover.jpg").apply { writeBytes(ByteArray(60_000) { it.toByte() }) }
+        val attachment = FileAttachment.encode(media(File(dir, "clip.mp4"), cover)).toList().chunked(Ble.CHUNK)
+        attachment.forEachIndexed { i, part -> wire.write(frames.seal(part.toByteArray(), part.size, last = i == attachment.lastIndex)) }
         assertTrue(JSONObject(String(wire.read(64 * 1024))).getBoolean("done"))
         val deadline = System.currentTimeMillis() + 5_000
         while (landed.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(20)
-        assertEquals("clip.mp4", landed.single().second)
-        assertContentEquals(content, landed.single().first.readBytes())
+        assertEquals("clip.mp4", landed.single().name)
+        assertContentEquals(content, landed.single().file.readBytes())
+        assertNotNull(landed.single().metadata)
+        assertContentEquals(cover.readBytes(), assertNotNull(landed.single().cover).readBytes())
     }
 }

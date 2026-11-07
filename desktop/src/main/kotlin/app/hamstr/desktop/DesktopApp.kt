@@ -124,6 +124,10 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     var menuAt by remember { mutableStateOf(IntOffset.Zero) }
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
     var playing by remember { mutableStateOf<DownloadTask?>(null) }
+    // What another Hamstr plays here ("Play on") takes the player's place; playing something here ends it.
+    val staged by DesktopStage.now.collectAsState()
+    LaunchedEffect(staged != null) { if (staged != null) playing = null }
+    LaunchedEffect(playing) { if (playing != null) DesktopStage.close() }
     // The stash and the library mark what plays.
     LaunchedEffect(playing?.id) { app.hamstr.ui.NowPlaying.id.value = playing?.id }
     var infoFor by remember { mutableStateOf<DownloadTask?>(null) }
@@ -131,7 +135,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     // The tour on a first start; HAMSTR_TOUR=<page> opens it on that page, for screenshots.
     val tourAt = remember { System.getenv("HAMSTR_TOUR")?.toIntOrNull() }
     var touring by remember { mutableStateOf(tourAt != null || TourGate.due()) }
-    val sheetOpen = touring || adding || menuFor != null || sharing != null || playing != null || infoFor != null || requests.isNotEmpty()
+    val sheetOpen = touring || adding || menuFor != null || sharing != null || playing != null || staged != null || infoFor != null || requests.isNotEmpty()
 
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
     // Back in the window with a link copied elsewhere: the stash offers it, once per link.
@@ -275,6 +279,9 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
         var castSheet by remember { mutableStateOf(false) }
         Overlay(playing != null, onDismiss = { playing = null }) {
             playing?.let { t -> DesktopPlayer(t, onCast = { castSheet = true }) { playing = null } }
+        }
+        Overlay(staged != null, onDismiss = DesktopStage::close) {
+            staged?.let { s -> DesktopPlayer(s.task, stream = s.player, onClose = DesktopStage::close) }
         }
         Overlay(castSheet, onDismiss = { castSheet = false }) {
             DesktopSheet { app.hamstr.ui.CastSheet { castSheet = false } }

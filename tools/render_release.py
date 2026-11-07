@@ -12,17 +12,17 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.10"
+VERSION = "0.10.11"
 FEATURES = [
-    ("NORMALIZE WITHOUT PUMPING", "The voice stays when the bass comes in"),
-    ("BASS PEAKS TAMED IN THE BASS", "Only the boom gets quieter"),
+    ("PLAY ON ANOTHER HAMSTR", "Phone to computer and back, both steer it"),
+    ("QUEUE PULLS UP FROM BELOW", "Lyrics next to it, fewer buttons around play"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.10.0 to 0.10.10: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
+# 0.10.0 to 0.10.11: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
-SHOTS = [("phone_eq.png", "Playback")]
+SHOTS = [("phone_cast_devices.png", "Play on")]
 
 
 def sharing_panel(shots):

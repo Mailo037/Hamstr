@@ -20,7 +20,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Playing on a TV or speaker on the same network ("Play on"), on the phone and the computer.
- * While a sheet asks ([discover]) Hamstr looks for Chromecast, DLNA (Sonos too), MPD and AirPlay devices; [connect]
+ * While a sheet asks ([discover]) Hamstr looks for Chromecast, DLNA (Sonos too), MPD and AirPlay devices, and
+ * the other Hamstr apps Nearby hears on the same network ([HamstrCast]); [connect]
  * starts a [CastSession], which the players see and hand what plays over to.
  */
 object Cast {
@@ -55,6 +56,16 @@ object Cast {
         if (watchers > 0 && looking == null) {
             looking = scope.launch {
                 runCatching { multicast(true) }
+                runCatching { app.hamstr.nearby.Nearby.discover(true) }
+                // Hamstr apps show as soon as Nearby hears them, and go when it stops.
+                launch {
+                    HamstrCast.devices().collect { list ->
+                        val ids = list.map { it.id }.toSet()
+                        seen.keys.removeIf { it.startsWith(HamstrCast.PREFIX) && it !in ids && it != _session.value?.device?.id }
+                        list.forEach(::found)
+                        publish()
+                    }
+                }
                 try {
                     while (isActive) {
                         val dlna = launch { runInterruptible { runCatching { Dlna.search(5_000, ::found) }.onFailure { Log.d(TAG, "ssdp: ${it.message}") } } }
@@ -75,12 +86,13 @@ object Cast {
                         dlna.join(); cast.join()
                         // Gone a minute: off, or left the network.
                         val now = System.currentTimeMillis()
-                        seen.entries.removeIf { now - it.value.second > 60_000 && it.key != _session.value?.device?.id }
+                        seen.entries.removeIf { now - it.value.second > 60_000 && it.key != _session.value?.device?.id && !it.key.startsWith(HamstrCast.PREFIX) }
                         publish()
                         delay(6_000)
                     }
                 } finally {
                     runCatching { multicast(false) }
+                    runCatching { app.hamstr.nearby.Nearby.discover(false) }
                 }
             }
         } else if (watchers == 0) {
@@ -91,7 +103,9 @@ object Cast {
 
     private fun found(d: CastDevice) {
         // A TV that speaks several ways shows once, by the best one: Cast, then DLNA, then AirPlay, then MPD.
-        val twin = seen.values.firstOrNull { (o, _) -> o.host == d.host && o.protocol != d.protocol }?.first
+        // Hamstr is an app of its own beside them (a computer may run Kodi too), so it always shows.
+        val twin = if (d.protocol == CastProtocol.Hamstr) null
+            else seen.values.firstOrNull { (o, _) -> o.host == d.host && o.protocol != d.protocol && o.protocol != CastProtocol.Hamstr }?.first
         if (twin != null && RANK.indexOf(twin.protocol) < RANK.indexOf(d.protocol)) {
             seen[twin.id] = twin to System.currentTimeMillis()
             return
@@ -116,6 +130,7 @@ object Cast {
             CastProtocol.Dlna -> Dlna.Link(device)
             CastProtocol.Mpd -> Mpd.Link(device)
             CastProtocol.AirPlay -> AirPlay.Link(device)
+            CastProtocol.Hamstr -> HamstrCast.Link(device)
         }
         runCatching { link.connect() }
             .onFailure { link.close(); Log.w(TAG, "connect to ${device.name}", it) }
@@ -183,7 +198,7 @@ class CastSession internal constructor(val device: CastDevice, private val link:
                         // A command that went out meanwhile knows better.
                         if (inFlight.get() == 0 && quietUntil < asked) _status.value = s.copy(duration = s.duration.takeIf { it > 0 } ?: _status.value.duration)
                     }
-                    .onFailure { failures++ }
+                    .onFailure { e -> if (e is CastLink.Released) failures = 99 else failures++ }
                 if (failures >= 6) {
                     Log.w("Cast", "lost ${device.name}")
                     Cast.lost(this@CastSession)

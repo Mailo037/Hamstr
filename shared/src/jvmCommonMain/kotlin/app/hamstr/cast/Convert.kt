@@ -59,6 +59,8 @@ object Convert {
 
     /** What to do with [p] for [protocol]; [picture] false when only the sound should go (a speaker, a song). */
     fun plan(protocol: CastProtocol, p: Probe, picture: Boolean): Plan {
+        // Another Hamstr plays whatever Hamstr downloads.
+        if (protocol == CastProtocol.Hamstr) return Plan.Direct
         if (protocol == CastProtocol.Mpd) return if (p.video == null) Plan.Direct else Plan.Sound(copy = false, ext = "m4a")
         val audioOk = p.audio == null || p.audio in AUDIO.getValue(protocol)
         if (!picture || p.video == null) {

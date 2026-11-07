@@ -1,9 +1,15 @@
 package app.hamstr.desktop
 
+import androidx.compose.ui.graphics.toArgb
 import app.hamstr.Log
 import app.hamstr.data.Prefs
 import app.hamstr.engine.ReleaseKeys
 import app.hamstr.engine.Versions
+import app.hamstr.res.Res
+import app.hamstr.res.set_update_installing
+import app.hamstr.ui.theme.paletteFor
+import org.jetbrains.compose.resources.getString
+import androidx.compose.ui.graphics.Color as ComposeColor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -174,14 +180,16 @@ object Updater {
                 when (kind) {
                     Kind.Setup -> {
                         // /OUTOFJOB: the helper is outside Hamstr's job already (see hamstr.iss).
-                        startOutside(windowsScript(release.version) {
+                        startOutside(windowsScript(release.version, splash(release)) {
                             "try { \$code = (Start-Process -FilePath ${ps(file.path)} -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/OUTOFJOB' -Wait -PassThru).ExitCode } catch {}"
                         })
+                        awaitSplash()
                         quit()
                     }
                     Kind.Portable -> {
                         val fresh = unzip(file)
-                        startOutside(windowsScript(release.version) { portableSteps(launcher!!.parentFile, fresh) })
+                        startOutside(windowsScript(release.version, splash(release)) { portableSteps(launcher!!.parentFile, fresh) })
+                        awaitSplash()
                         quit()
                     }
                     Kind.Dmg -> {
@@ -228,16 +236,70 @@ object Updater {
 
     private fun encoded(script: String) = Base64.getEncoder().encodeToString(script.toByteArray(Charsets.UTF_16LE))
 
+    /** Written by the helper once its window is up (or couldn't be); Hamstr quits after that. */
+    private val splashReady get() = File(updates, "splash.txt")
+
     /**
-     * The helper: waits until this Hamstr is gone (its JVM and the launcher around it), runs
-     * [steps], which set $code, notes the code for the next start and starts Hamstr again.
+     * The window the helper shows while Hamstr is gone: the start window (Splash.kt) with
+     * "Installing <version> …" under the name, in the colours from Settings › Appearance. It is
+     * C# (UpdateSplash.cs) the helper compiles; its icon and fonts go into updates/splash, since
+     * the helper can't read them from Hamstr's jar. Returns the PowerShell that shows it.
      */
-    private fun windowsScript(version: String, steps: () -> String): String {
+    private suspend fun splash(release: Release): String {
+        val dir = File(updates, "splash").apply { mkdirs() }
+        splashReady.delete()
+        val loader = Thread.currentThread().contextClassLoader ?: Updater::class.java.classLoader
+        mapOf(
+            "UpdateSplash.cs" to "UpdateSplash.cs",
+            "hamstr_window.png" to "icon.png",
+            "composeResources/app.hamstr.res/font/inter_600.ttf" to "inter_600.ttf",
+            "composeResources/app.hamstr.res/font/inter_500.ttf" to "inter_500.ttf",
+        ).forEach { (from, to) ->
+            loader.getResourceAsStream(from)?.use { input -> File(dir, to).outputStream().use { input.copyTo(it) } }
+        }
+        // Compiled here: a PowerShell started through WMI takes ten seconds and more for it.
+        val source = ps(File(dir, "UpdateSplash.cs").path)
+        val dll = File(dir, "UpdateSplash.dll")
+        runCatching {
+            val p = ProcessBuilder(
+                "powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                encoded("Add-Type -Path $source -ReferencedAssemblies System.Windows.Forms, System.Drawing -OutputAssembly ${ps(dll.path)} -OutputType Library"),
+            ).redirectErrorStream(true).start()
+            p.inputStream.bufferedReader().use { it.readText() }
+            p.waitFor()
+        }.onFailure { Log.w(TAG, "Couldn't compile the update window", it) }
+        val text = getString(Res.string.set_update_installing, release.version)
+        val s = Prefs.settings.value
+        val p = paletteFor(s.base, ComposeColor(s.accent))
+        val colours = listOf(p.canvas, p.line, p.ink, p.muted, p.accent, p.surface).joinToString(", ") { it.toArgb().toString() }
+        return listOf(
+            "try {",
+            if (dll.exists()) "  Add-Type -Path ${ps(dll.path)} -ErrorAction Stop"
+            else "  Add-Type -Path $source -ReferencedAssemblies System.Windows.Forms, System.Drawing -ErrorAction Stop",
+            "  [HamstrUpdateSplash]::Start(${ps(dir.path)}, ${ps(text)}, $colours)",
+            "} catch {}",
+            "Set-Content -LiteralPath ${ps(splashReady.path)} -Value 1",
+        ).joinToString("\n")
+    }
+
+    /** Hamstr stays until the helper's window is up, so there's no moment with nothing on screen. */
+    private suspend fun awaitSplash() {
+        val until = System.currentTimeMillis() + 20_000
+        while (!splashReady.exists() && System.currentTimeMillis() < until) delay(100)
+    }
+
+    /**
+     * The helper: shows [splash], waits until this Hamstr is gone (its JVM and the launcher
+     * around it), runs [steps], which set $code, notes the code for the next start and starts
+     * Hamstr again; the window goes once the new Hamstr shows its own start window.
+     */
+    private fun windowsScript(version: String, splash: String, steps: () -> String): String {
         val me = ProcessHandle.current()
         val launcherPid = me.parent().orElse(null)?.takeIf { p -> p.info().command().orElse("").endsWith("Hamstr.exe", ignoreCase = true) }?.pid()
         val pids = listOfNotNull(me.pid(), launcherPid).joinToString(",")
         return listOf(
             "\$ErrorActionPreference = 'SilentlyContinue'",
+            splash,
             "foreach (\$id in @($pids)) { \$p = Get-Process -Id \$id; if (\$p -and -not \$p.WaitForExit(30000)) { Stop-Process -Id \$id -Force } }",
             "Start-Sleep -Milliseconds 300",
             "\$code = 1",
@@ -245,7 +307,8 @@ object Updater {
             "Set-Content -LiteralPath ${ps(result.path)} -Value \$code",
             // A Hamstr with its own data folder keeps it (WMI starts the helper with the user's plain environment).
             dataEnv?.let { "\$env:HAMSTR_DATA = ${ps(it)}" }.orEmpty(),
-            "Start-Process -FilePath ${ps(launcher!!.path)} -ArgumentList ${ps(UPDATED_FLAG + version)}",
+            "\$new = Start-Process -FilePath ${ps(launcher!!.path)} -ArgumentList ${ps(UPDATED_FLAG + version)} -PassThru",
+            "try { [void][HamstrUpdateSplash]::WaitForHamstr(${ps(launcher.parentFile.path)}, \$new.Id, 30000); [HamstrUpdateSplash]::Finish() } catch {}",
         ).joinToString("\n")
     }
 

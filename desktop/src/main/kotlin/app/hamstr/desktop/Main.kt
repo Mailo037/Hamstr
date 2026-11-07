@@ -83,6 +83,8 @@ fun main(args: Array<String>) {
         defaultName = System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "Computer",
         transports = listOf(LanTransport(), DesktopBluetooth),
     )
+    // Other Hamstr apps can play here ("Play on"), into the window's player.
+    app.hamstr.cast.HamstrCast.install(DesktopStage)
     val icon = Thread.currentThread().contextClassLoader.getResourceAsStream("hamstr_window.png")?.use { BitmapPainter(loadImageBitmap(it)) }
     CoroutineScope(Dispatchers.IO).launch {
         Prefs.settings.map { it.startWithSystem }.distinctUntilChanged().collect(Autostart::set)

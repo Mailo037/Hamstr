@@ -4,9 +4,10 @@ import java.io.File
 
 /**
  * How Hamstr talks to a device: Google Cast (Chromecast, Google TV, Nest speakers), DLNA/UPnP
- * (most smart TVs, receivers, Sonos, Kodi), MPD (music servers) or AirPlay (without pairing).
+ * (most smart TVs, receivers, Sonos, Kodi), MPD (music servers), AirPlay (without pairing) or
+ * another Hamstr app on the same network ([HamstrCast]).
  */
-enum class CastProtocol(val label: String) { Chromecast("Chromecast"), Dlna("DLNA"), Mpd("MPD"), AirPlay("AirPlay") }
+enum class CastProtocol(val label: String) { Chromecast("Chromecast"), Dlna("DLNA"), Mpd("MPD"), AirPlay("AirPlay"), Hamstr("Hamstr") }
 
 /** A TV or speaker on the same network that can play what Hamstr sends it. */
 data class CastDevice(
@@ -23,6 +24,8 @@ data class CastDevice(
     /** DLNA: where AVTransport and RenderingControl take their commands. */
     val transport: String? = null,
     val rendering: String? = null,
+    /** Another Hamstr: a phone or a computer. */
+    val hamstr: app.hamstr.nearby.DeviceKind? = null,
 )
 
 /** One file as the device gets it. */
@@ -66,4 +69,7 @@ interface CastLink {
     /** Stops what plays there and lets go of the device. */
     suspend fun stop()
     fun close()
+
+    /** The device plays something else now (its user picked another song there): the session ends. */
+    class Released : java.io.IOException("released")
 }

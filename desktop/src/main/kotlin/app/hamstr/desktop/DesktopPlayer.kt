@@ -26,7 +26,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -83,13 +82,15 @@ import java.io.File
  * much of the window as fits while it keeps its shape, with the bar and the buttons under it;
  * a song is a card, the cover beside its title, the bar and the buttons. Space, ← and → work,
  * Esc closes. It carries on where the file was left and remembers where it stops, like the
- * phone's, and holding the bar marks an A-B loop the same way.
+ * phone's, and holding the bar marks an A-B loop the same way. With [stream] it plays what
+ * another Hamstr sends here ([DesktopStage]), which owns that player.
  */
 @Composable
-fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit) {
+fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, stream: FfPlayer? = null, onClose: () -> Unit) {
     val c = Hamstr.colors
-    val prepared by key(t.id, t.filePath) {
-        produceState<FfPlayer?>(null) {
+    val prepared by key(t.id, t.filePath, stream) {
+        produceState(stream) {
+            if (stream != null) return@produceState
             val file = t.filePath?.let(::File) ?: return@produceState
             value = runInterruptible(Dispatchers.IO) { FfPlayer(file, Positions.resumeAt(t.id) / 1000.0) }
         }
@@ -97,7 +98,7 @@ fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit)
     val player = prepared ?: return
     // Playing on a TV or speaker: the file goes there and this player is its remote.
     val remote by Cast.session.collectAsState()
-    val cast = remote
+    val cast = remote.takeIf { stream == null }
     val castStatus by (cast?.status ?: remember { MutableStateFlow(CastStatus()) }).collectAsState()
     val castMedia by (cast?.media ?: remember { MutableStateFlow<CastMedia?>(null) }).collectAsState()
     val there = cast != null && castMedia?.id == t.id
@@ -119,6 +120,7 @@ fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit)
     }
     LaunchedEffect(there, castStatus, tick) { if (there) lastThere = castStatus.positionNow() }
     DisposableEffect(player) {
+        if (stream != null) return@DisposableEffect onDispose { }
         if (Cast.session.value == null) player.play()
         onDispose {
             val s = Cast.session.value
@@ -136,13 +138,16 @@ fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit)
     val playing = if (there) castStatus.state == CastStatus.State.Playing else localPlaying
     val ended = if (there) castStatus.state == CastStatus.State.Finished else localEnded
     val duration = castStatus.duration.takeIf { there && it > 0 } ?: player.info?.duration ?: 0.0
-    var localVolume by remember { mutableFloatStateOf(1f) }
+    val localVolume by player.loudness.collectAsState()
     val volume = if (there) castStatus.volume ?: 1f else localVolume
     val toggle = { if (there) cast!!.toggle() else player.toggle() }
     val seek = { s: Double -> if (there) cast!!.seek(s.coerceIn(0.0, duration.takeIf { it > 0 } ?: Double.MAX_VALUE)) else player.seek(s) }
+    val seekNow by rememberUpdatedState(seek)
+    val toggleNow by rememberUpdatedState(toggle)
+    val positionNow by rememberUpdatedState(position)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    LaunchedEffect(ended) { if (ended) Positions.clear(t.id) }
+    LaunchedEffect(ended) { if (ended && stream == null) Positions.clear(t.id) }
     var loop by remember(t.id) { mutableStateOf<AbLoop?>(null) }
     val setLoop = { l: AbLoop? -> loop = l; if (l?.b != null) seek(l.a / 1000.0) }
     LaunchedEffect(loop, there) {
@@ -180,9 +185,11 @@ fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit)
     }
     val sound = @Composable {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CastButton(cast != null, onCast)
-            Spacer(Modifier.width(6.dp))
-            Volume(volume) { v -> if (there) cast!!.setVolume(v) else { localVolume = v; player.setVolume(v) } }
+            if (stream == null) {
+                CastButton(cast != null, onCast)
+                Spacer(Modifier.width(6.dp))
+            }
+            Volume(volume) { v -> if (there) cast!!.setVolume(v) else player.setVolume(v) }
         }
     }
     val close = @Composable {
@@ -198,7 +205,7 @@ fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit)
             Column(Modifier.width(width + 24.dp).clip(RoundedCornerShape(Radii.sheet)).background(c.overlay).then(keys).padding(12.dp)) {
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(Radii.row)).background(Color.Black)
-                        .pointerInput(there) { detectTapGestures(onTap = { toggle() }, onDoubleTap = { offset -> seek(position + if (offset.x < size.width / 2) -10 else 10) }) },
+                        .pointerInput(there) { detectTapGestures(onTap = { toggleNow() }, onDoubleTap = { offset -> seekNow(positionNow + if (offset.x < size.width / 2) -10 else 10) }) },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (cast != null) {
@@ -209,6 +216,7 @@ fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit)
                     error?.let { Txt(it, style = Hamstr.type.small, color = Color.White, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) }
                 }
                 Row(Modifier.padding(start = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (stream != null) t.source?.let { Badge(stringResource(Res.string.cast_from, it)); Spacer(Modifier.width(8.dp)) }
                     Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 1, modifier = Modifier.weight(1f))
                     close()
                 }
@@ -235,7 +243,7 @@ fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit)
             Column(Modifier.weight(1f).height(COVER)) {
                 Row(verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f).padding(top = 6.dp)) {
-                        t.source?.let { Badge(it) }
+                        t.source?.let { Badge(if (stream != null) stringResource(Res.string.cast_from, it) else it) }
                         Spacer(Modifier.height(6.dp))
                         Txt(t.title, style = Hamstr.type.section, maxLines = 2)
                         (t.uploader ?: t.source)?.let {
@@ -298,17 +306,18 @@ private fun SeekBar(fraction: Float, loop: AbLoop? = null, durationMs: Long = 0,
     var dragging by remember { mutableStateOf<Float?>(null) }
     val hold = rememberLoopHold()
     val fractionNow by rememberUpdatedState(fraction)
+    val onSeekNow by rememberUpdatedState(onSeek)
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
             .height(22.dp)
             .pointerInput(Unit) {
-                detectTapGestures { onSeek((it.x / size.width).coerceIn(0f, 1f)) }
+                detectTapGestures { onSeekNow((it.x / size.width).coerceIn(0f, 1f)) }
             }
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { dragging = (it.x / size.width).coerceIn(0f, 1f) },
-                    onDragEnd = { dragging?.let(onSeek); dragging = null },
+                    onDragEnd = { dragging?.let(onSeekNow); dragging = null },
                     onDragCancel = { dragging = null },
                 ) { change, _ -> dragging = (change.position.x / size.width).coerceIn(0f, 1f) }
             }

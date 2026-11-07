@@ -10,6 +10,7 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.provider.OpenableColumns
 import app.hamstr.engine.Engine
+import app.hamstr.nearby.ReceivedFile
 import app.hamstr.player.Kind
 import app.hamstr.player.kindOf
 import kotlinx.coroutines.Dispatchers
@@ -75,7 +76,7 @@ object Importer {
      * Files another device sent, each with the name it gave: they move into the Hamstr folder
      * and onto the list, together when there are several. Returns the ones that made it.
      */
-    suspend fun adopt(context: Context, files: List<Pair<File, String>>, from: String): List<File> = withContext(Dispatchers.IO) {
+    suspend fun adopt(context: Context, files: List<ReceivedFile>, from: String): List<File> = withContext(Dispatchers.IO) {
         val group = if (files.size > 1) UUID.randomUUID().toString() to from else null
         val start = System.currentTimeMillis()
         files.withIndex().mapNotNull { (i, f) ->
@@ -87,13 +88,13 @@ object Importer {
                     part.copyTo(target)
                     part.delete()
                 }
-                register(context, target, Uri.fromFile(target).toString(), from, group, start + i)
+                register(context, target, Uri.fromFile(target).toString(), if (f.metadata == null) from else null, group, start + i, f)
                 target
-            }.onFailure { part.delete() }.getOrNull()
+            }.onFailure { part.delete() }.also { f.cover?.delete() }.getOrNull()
         }
     }
 
-    private suspend fun register(context: Context, target: File, url: String, source: String, group: Pair<String, String>?, createdAt: Long) {
+    private suspend fun register(context: Context, target: File, url: String, source: String?, group: Pair<String, String>?, createdAt: Long, received: ReceivedFile? = null) {
         val kind = kindOf(target)
         var duration = 0
         var thumbnail: String? = if (kind == Kind.Image) Uri.fromFile(target).toString() else null
@@ -111,25 +112,25 @@ object Importer {
             }
         }
         val contentUri = scan(context, target)
-        DownloadStore.add(
-            DownloadTask(
-                url = url,
-                title = target.nameWithoutExtension,
-                thumbnail = thumbnail,
-                source = source,
-                durationSec = duration,
-                choice = Prefs.settings.value.defaultChoice().copy(mode = if (kind == Kind.Audio) Mode.Audio else Mode.Video, container = target.extension),
-                status = Status.Done,
-                progress = 1f,
-                filePath = target.absolutePath,
-                contentUri = contentUri?.toString(),
-                sizeBytes = target.length(),
-                createdAt = createdAt,
-                finishedAt = System.currentTimeMillis(),
-                group = group?.first,
-                groupTitle = group?.second,
-            ),
+        val task = DownloadTask(
+            url = url,
+            title = target.nameWithoutExtension,
+            thumbnail = thumbnail,
+            source = source,
+            durationSec = duration,
+            choice = Prefs.settings.value.defaultChoice().copy(mode = if (kind == Kind.Audio) Mode.Audio else Mode.Video, container = target.extension),
+            status = Status.Done,
+            progress = 1f,
+            filePath = target.absolutePath,
+            contentUri = contentUri?.toString(),
+            sizeBytes = target.length(),
+            createdAt = createdAt,
+            finishedAt = System.currentTimeMillis(),
+            group = group?.first,
+            groupTitle = group?.second,
         )
+        val described = received?.metadata?.applyTo(task) ?: task
+        DownloadStore.add(described.copy(thumbnail = received?.keepCover(File(context.filesDir, "posters")) ?: described.thumbnail))
     }
 
     /** Embedded cover art, or a frame a third into the video, saved for the library cards. */

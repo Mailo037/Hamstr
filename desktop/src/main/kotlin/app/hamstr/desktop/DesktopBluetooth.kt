@@ -81,6 +81,15 @@ object DesktopBluetooth : StreamTransport {
     }
 
     private suspend fun supervise() {
+        // Queue prepares the same bundle in parallel. Wait for it before starting an
+        // old helper, which Windows would then refuse to replace during an app update.
+        try {
+            Tools.install()
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't prepare the Bluetooth helper", e)
+            _state.value = State.Missing
+            return
+        }
         var backoff = 2_000L
         var waited = 0
         while (true) {

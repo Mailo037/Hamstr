@@ -3,6 +3,7 @@ package app.hamstr.player
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
+import androidx.media3.common.audio.AudioProcessor.StreamMetadata
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -29,20 +30,31 @@ internal class EqRenderers(context: Context) : DefaultRenderersFactory(context) 
  * audio track; other encodings (passthrough, 24-bit) skip it.
  */
 @UnstableApi
-private class EqProcessor : BaseAudioProcessor() {
+internal class EqProcessor : BaseAudioProcessor() {
     private var filter: SoundChain? = null
+    private var format = AudioFormat.NOT_SET
+    private var period: Any? = null
     private var one = DoubleArray(2)
 
     override fun onConfigure(input: AudioFormat): AudioFormat =
         if (input.encoding == C.ENCODING_PCM_16BIT || input.encoding == C.ENCODING_PCM_FLOAT) input else AudioFormat.NOT_SET
 
-    override fun onFlush() {
-        filter = SoundChain(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
-        one = DoubleArray(inputAudioFormat.channelCount)
+    override fun onFlush(streamMetadata: StreamMetadata) {
+        if (filter == null || format != inputAudioFormat || period != streamMetadata.periodUid) {
+            filter = SoundChain(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
+            one = DoubleArray(inputAudioFormat.channelCount)
+        } else {
+            // Speed changes flush too. Clear delayed samples, not the song's learned volume.
+            filter?.reset()
+        }
+        format = inputAudioFormat
+        period = streamMetadata.periodUid
     }
 
     override fun onReset() {
         filter = null
+        format = AudioFormat.NOT_SET
+        period = null
     }
 
     override fun queueInput(input: ByteBuffer) {

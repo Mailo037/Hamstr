@@ -8,6 +8,7 @@ import app.hamstr.data.FileChecks
 import app.hamstr.data.FileNames
 import app.hamstr.data.Mode
 import app.hamstr.data.Status
+import app.hamstr.nearby.ReceivedFile
 import app.hamstr.player.Kind
 import app.hamstr.player.kindOf
 import java.util.UUID
@@ -93,33 +94,36 @@ object Files {
     }
 
     /** Files another device sent, each with the name it gave: they move into the downloads folder. */
-    fun adopt(files: List<Pair<File, String>>, from: String): List<File> {
+    fun adopt(files: List<ReceivedFile>, from: String): List<File> {
         val group = groupFor(files.size, from)
-        return files.mapIndexedNotNull { i, (part, name) ->
+        return files.mapIndexedNotNull { i, received ->
+            val (part, name) = received
             runCatching {
                 val target = FileNames.freeName(Paths.downloads.apply { mkdirs() }, name)
                 runCatching { java.nio.file.Files.move(part.toPath(), target.toPath()) }.getOrElse {
                     part.copyTo(target)
                     part.delete()
                 }
-                register(target, target.toURI().toString(), group, i, source = from)
+                register(target, target.toURI().toString(), group, i, source = if (received.metadata == null) from else null, received = received)
                 target
-            }.onFailure { Log.w(TAG, "Couldn't keep $name", it); part.delete() }.getOrNull()
+            }.onFailure { Log.w(TAG, "Couldn't keep $name", it); part.delete() }.also { received.cover?.delete() }.getOrNull()
         }.also { FileChecks.refresh() }
     }
 
     private fun groupFor(count: Int, title: String? = null) =
         if (count > 1) UUID.randomUUID().toString() to (title ?: java.text.SimpleDateFormat("d MMM, HH:mm").format(java.util.Date())) else null
 
-    private fun register(file: File, url: String, group: Pair<String, String>?, index: Int, source: String? = null) {
+    private fun register(file: File, url: String, group: Pair<String, String>?, index: Int, source: String? = null, received: ReceivedFile? = null) {
         val now = System.currentTimeMillis()
         val audio = kindOf(file) == Kind.Audio
-        DownloadStore.add(DownloadTask(
+        val task = DownloadTask(
             url = url, title = file.nameWithoutExtension, thumbnail = null, source = source, durationSec = 0,
             choice = Choice(if (audio) Mode.Audio else Mode.Video, null, file.extension, if (audio) file.extension else "", false),
             status = Status.Done, progress = 1f, filePath = file.path, sizeBytes = file.length(),
             createdAt = now + index, finishedAt = now, group = group?.first, groupTitle = group?.second,
-        ))
+        )
+        val described = received?.metadata?.applyTo(task) ?: task
+        DownloadStore.add(described.copy(thumbnail = received?.keepCover(File(Paths.data, "posters")) ?: described.thumbnail))
     }
 
     /** The system's folder picker; null when it was closed without a choice. */

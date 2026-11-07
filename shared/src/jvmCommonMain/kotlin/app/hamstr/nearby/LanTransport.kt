@@ -106,6 +106,9 @@ class LanTransport(private val onStart: () -> Unit = {}, private val onStop: () 
 
     override fun reaches(id: String) = places(id).isNotEmpty()
 
+    /** The address [id] was heard at last. */
+    fun address(id: String): InetAddress? = places(id).firstOrNull()?.address
+
     override suspend fun send(id: String, message: ByteArray, accept: (ByteArray) -> Boolean): Boolean =
         exchange(id) { wire -> wire.write(message); accept(wire.read(MAX_REPLY)) }
 
@@ -153,7 +156,7 @@ class LanTransport(private val onStart: () -> Unit = {}, private val onStop: () 
         places[address] = System.currentTimeMillis()
         // Places not heard from in a minute go; a moved device leaves its old one behind.
         places.entries.removeIf { System.currentTimeMillis() - it.value > 60_000 }
-        Nearby.seen(peer.id, peer.name, peer.kind, peer.key, via)
+        Nearby.seen(peer.id, peer.name, peer.kind, peer.key, via, plays = peer.plays)
         // A newcomer hears back at once instead of waiting for the next beacon.
         if (first) beacon(from)
     }

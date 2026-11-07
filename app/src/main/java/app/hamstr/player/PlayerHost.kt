@@ -241,6 +241,10 @@ fun PlayerHost(
     var fullscreen by remember { mutableStateOf(false) }
     var lyricsOn by remember { mutableStateOf(false) }
     var lyricsFull by remember { mutableStateOf(false) }
+    // A song's drawer on an upright phone: the queue and the lyrics, pulled up from the foot.
+    val drawer = remember { Animatable(0f) }
+    var drawerTab by remember { mutableStateOf(DrawerTab.Queue) }
+    LaunchedEffect(expandedTarget) { if (!expandedTarget) drawer.snapTo(0f) }
     val queue by Playback.queue.collectAsState()
     val previous = queue.getOrNull(ui.previousIndex)?.takeIf { queue.size > 1 && it.id != t.id }
     val next = queue.getOrNull(ui.nextIndex)?.takeIf { queue.size > 1 && it.id != t.id }
@@ -385,6 +389,7 @@ fun PlayerHost(
         }
         val ev = e.value.coerceIn(0f, 1f)
         val media = miniMedia.towards(fullMedia, ev)
+        val useDrawer = kind == Kind.Audio && !landscape && controller != null
         SideEffect {
             videoArea = if (kind == Kind.Video && !immersive) androidx.compose.ui.geometry.Rect(fullMedia.x, fullMedia.y, fullMedia.x + fullMedia.w, fullMedia.y + fullMedia.h)
                 else androidx.compose.ui.geometry.Rect.Zero
@@ -424,7 +429,11 @@ fun PlayerHost(
                         stringResource(when (kind) { Kind.Video -> R.string.player_video; Kind.Audio -> R.string.player_now_playing; Kind.Image -> R.string.player_image; Kind.Other -> R.string.player_file }),
                         style = Hamstr.type.bodyMedium, color = c.muted, modifier = Modifier.weight(1f),
                     )
-                    if (kind == Kind.Video || kind == Kind.Audio) IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue)
+                    if (useDrawer) {
+                        // The queue is in the drawer; casting moves up here.
+                        val casting by app.hamstr.cast.Cast.session.collectAsState()
+                        IconButton(Res.drawable.ic_cast, stringResource(R.string.cast_button), { CastSheetState.open.value = true }, tint = if (casting != null) c.accent else c.muted)
+                    } else if (kind == Kind.Video || kind == Kind.Audio) IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue)
                     else IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
                     IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(t) })
                     IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
@@ -438,7 +447,7 @@ fun PlayerHost(
                     Modifier
                         .offset { IntOffset(infoX.roundToInt(), (infoY + (1f - ev) * px(60.dp)).roundToInt()) }
                         .width(with(density) { (W - infoX).toDp() })
-                        .height(with(density) { (H - infoY - navBottom).coerceAtLeast(0f).toDp() })
+                        .height(with(density) { (H - infoY - navBottom - if (useDrawer) px(DRAWER_CLOSED) else 0f).coerceAtLeast(0f).toDp() })
                         .graphicsLayer { alpha = ((ev - 0.4f) / 0.6f).coerceIn(0f, 1f) }
                         .edgeFade(infoScroll, Orientation.Vertical, length = 22.dp)
                         .verticalScroll(infoScroll, enabled = infoScroll.maxValue in 1 until Int.MAX_VALUE)
@@ -483,7 +492,7 @@ fun PlayerHost(
                             if (controller != null) Transport(
                                 controller!!, ui, video = kind == Kind.Video, onFullscreen = { fullscreen = true },
                                 lyrics = if (kind == Kind.Audio) lyricsOn else null, onLyrics = { lyricsOn = !lyricsOn },
-                                onQueue = onQueue, onSleep = onSleep,
+                                onQueue = onQueue, onSleep = onSleep, drawer = useDrawer,
                             )
                         }
                         Kind.Image -> {}
@@ -666,7 +675,7 @@ fun PlayerHost(
                 // The crossfade keeps to the morphing box: one that eased its own size would lag
                 // behind it while the player is pulled down, and show at the bottom and the side.
                 Kind.Audio -> AnimatedContent(
-                    lyricsOn && ev > 0.98f,
+                    lyricsOn && ev > 0.98f && !useDrawer,
                     Modifier.fillMaxSize(),
                     transitionSpec = { (fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear())).using(null) },
                     label = "lyrics",
@@ -681,6 +690,19 @@ fun PlayerHost(
                         if (ev > 0.5f) Badge(file?.extension ?: stringResource(R.string.player_file), accent = true)
                     }
                 }
+            }
+        }
+
+        // ---- the drawer: queue and lyrics, pulled up over the song ----------------------
+        if (useDrawer && ev > 0.001f) {
+            Box(Modifier.graphicsLayer { alpha = ((ev - 0.4f) / 0.6f).coerceIn(0f, 1f); translationY = (1f - ev) * px(60.dp) }) {
+                UpNextDrawer(
+                    t, controller!!, ui, drawer, drawerTab, { drawerTab = it },
+                    width = W, height = H,
+                    closedTop = H - navBottom - px(DRAWER_CLOSED), openTop = top + px(76.dp), navBottom = navBottom,
+                    backEnabled = !lyricsOver,
+                    onEditLyrics = { onEditLyrics(t) }, onLyricsFullscreen = { lyricsFull = true },
+                )
             }
         }
 

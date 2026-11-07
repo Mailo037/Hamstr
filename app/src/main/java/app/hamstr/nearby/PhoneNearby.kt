@@ -25,6 +25,9 @@ import app.hamstr.data.keyValues
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import app.hamstr.cast.Cast
+import app.hamstr.cast.CastProtocol
+import app.hamstr.cast.HamstrCast
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -62,10 +65,18 @@ object PhoneNearby {
                 BleTransport(app),
             ),
         )
+        // Listening while the app is open, and while it plays on another Hamstr or another one
+        // plays here ("Play on"), so the screen going off doesn't cut that off.
+        val foreground = kotlinx.coroutines.flow.MutableStateFlow(false)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = Nearby.setAvailable(true)
-            override fun onStop(owner: LifecycleOwner) = Nearby.setAvailable(false)
+            override fun onStart(owner: LifecycleOwner) { foreground.value = true }
+            override fun onStop(owner: LifecycleOwner) { foreground.value = false }
         })
+        scope.launch {
+            combine(foreground, HamstrCast.incoming, Cast.session) { open, incoming, cast ->
+                open || incoming != null || cast?.device?.protocol == CastProtocol.Hamstr
+            }.distinctUntilChanged().collect(Nearby::setAvailable)
+        }
         Nearby.onLink = { url, title, from ->
             if (MediaLinks.needsEpisodeSelection(url)) {
                 notify(app, url.hashCode(), app.getString(R.string.nearby_received, from.name), title ?: url, share(app, url))
@@ -81,7 +92,8 @@ object PhoneNearby {
             }
         }
         Nearby.onRequest = { r ->
-            notify(app, r.id.hashCode(), app.getString(R.string.nearby_ask_title, r.from.name), app.getString(R.string.nearby_ask_notify), open(app))
+            val title = app.getString(if (r.play) R.string.nearby_play_title else R.string.nearby_ask_title, r.from.name)
+            notify(app, r.id.hashCode(), title, app.getString(R.string.nearby_ask_notify), open(app))
         }
         // The remembered devices show in Android's share sheet, drawn in the accent like the other shortcuts.
         scope.launch {

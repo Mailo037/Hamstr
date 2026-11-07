@@ -244,11 +244,14 @@ private fun kindIcon(kind: DeviceKind): DrawableResource = when (kind) {
 fun RequestSheet(r: Request, onDone: () -> Unit) {
     val c = Hamstr.colors
     Sheet {
-        val subtitle = if (r.files.isNotEmpty()) {
-            pluralStringResource(Res.plurals.nearby_files_offer, r.files.size, r.files.size, formatBytes(r.files.sumOf { it.size }))
-        } else r.title ?: r.url
-        SheetHeader(stringResource(Res.string.nearby_ask_title, r.from.name), subtitle = subtitle, leading = { DeviceIcon(r.from.kind) })
-        if (r.files.isNotEmpty()) {
+        val subtitle = when {
+            r.play -> stringResource(if (Platform.desktop) Res.string.nearby_play_offer_desktop else Res.string.nearby_play_offer)
+            r.files.isNotEmpty() -> pluralStringResource(Res.plurals.nearby_files_offer, r.files.size, r.files.size, formatBytes(r.files.sumOf { it.size }))
+            else -> r.title ?: r.url
+        }
+        SheetHeader(stringResource(if (r.play) Res.string.nearby_play_title else Res.string.nearby_ask_title, r.from.name), subtitle = subtitle, leading = { DeviceIcon(r.from.kind) })
+        if (r.play) Unit
+        else if (r.files.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             r.files.take(4).forEach { f ->
                 Txt("${f.name} · ${formatBytes(f.size)}", style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp))
@@ -259,14 +262,14 @@ fun RequestSheet(r: Request, onDone: () -> Unit) {
             Txt(r.url, style = Hamstr.type.mono, color = c.ghost, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp))
         }
         Spacer(Modifier.height(16.dp))
-        HButton(stringResource(Res.string.nearby_always), { Nearby.answer(r, accept = true, always = true); onDone() }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = Res.drawable.ic_download)
+        HButton(stringResource(Res.string.nearby_always), { Nearby.answer(r, accept = true, always = true); onDone() }, Modifier.fillMaxWidth(), kind = ButtonKind.Primary, icon = if (r.play) Res.drawable.ic_play_arrow else Res.drawable.ic_download)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HButton(stringResource(Res.string.nearby_once), { Nearby.answer(r, accept = true); onDone() }, Modifier.weight(1f))
             HButton(stringResource(Res.string.nearby_decline), { Nearby.answer(r, accept = false); onDone() }, Modifier.weight(1f), kind = ButtonKind.Ghost)
         }
         Spacer(Modifier.height(12.dp))
-        Txt(stringResource(Res.string.nearby_ask_hint), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp))
+        Txt(stringResource(if (r.play) Res.string.nearby_play_hint else Res.string.nearby_ask_hint), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
 
