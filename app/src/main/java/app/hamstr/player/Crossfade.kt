@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import app.hamstr.data.Positions
@@ -29,6 +30,18 @@ internal class Crossfade(
     private class Fade(val old: ExoPlayer, val next: ExoPlayer, val started: Long, val length: Long)
 
     private var fading: Fade? = null
+
+    // Picking another song, skipping or seeking while the sound crosses over ends the fade at
+    // once: the old song stops and the new one plays at full volume, instead of both together.
+    private val takeover = object : Player.Listener {
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = finish()
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+            if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) finish()
+        }
+        override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+            if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT) finish()
+        }
+    }
 
     private val check = object : Runnable {
         override fun run() {
@@ -92,6 +105,8 @@ internal class Crossfade(
         old.currentMediaItem?.mediaId?.let(Positions::clear)
         swap(old, next)
         fading = Fade(old, next, SystemClock.uptimeMillis(), left)
+        // Added after the queue is set, so its own events above don't count as a takeover.
+        next.addListener(takeover)
         handler.post(ramp)
     }
 
@@ -99,6 +114,7 @@ internal class Crossfade(
         val f = fading ?: return
         fading = null
         handler.removeCallbacks(ramp)
+        f.next.removeListener(takeover)
         f.next.volume = 1f
         f.old.release()
     }
