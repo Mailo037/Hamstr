@@ -272,8 +272,12 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                 }
             }
         }
+        var castSheet by remember { mutableStateOf(false) }
         Overlay(playing != null, onDismiss = { playing = null }) {
-            playing?.let { t -> DesktopPlayer(t) { playing = null } }
+            playing?.let { t -> DesktopPlayer(t, onCast = { castSheet = true }) { playing = null } }
+        }
+        Overlay(castSheet, onDismiss = { castSheet = false }) {
+            DesktopSheet { app.hamstr.ui.CastSheet { castSheet = false } }
         }
         val request = requests.firstOrNull()
         Overlay(request != null, onDismiss = { request?.let { Nearby.answer(it, accept = false) } }) {

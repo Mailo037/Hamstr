@@ -36,6 +36,14 @@ class HamstrApp : Application() {
         Playlists.init(this)
         app.hamstr.data.Lyrics.init(this)
         Network.init(this)
+        // Finding TVs and speakers listens for multicast, which Wi-Fi drops unless held.
+        val castLock = getSystemService(android.net.wifi.WifiManager::class.java)?.createMulticastLock("hamstr-cast")?.apply { setReferenceCounted(false) }
+        app.hamstr.cast.Cast.multicast = { on -> runCatching { if (on) castLock?.acquire() else castLock?.release() } }
+        // Files a TV doesn't play go there as a copy made by the bundled FFmpeg.
+        app.hamstr.cast.Cast.ffmpeg = { args ->
+            ProcessBuilder(listOf(app.hamstr.engine.Cheek.ffmpeg.absolutePath) + args).apply { environment()["LD_LIBRARY_PATH"] = app.hamstr.engine.Cheek.libraryPath }
+        }
+        app.hamstr.cast.Cast.cache = java.io.File(cacheDir, "cast")
         DownloadStore.init(this)
         DownloadFiles.finishPending(this)
         DownloadFiles.fixAudioKinds()

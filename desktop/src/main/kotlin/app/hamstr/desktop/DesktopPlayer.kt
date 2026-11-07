@@ -47,7 +47,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
+import app.hamstr.cast.Cast
+import app.hamstr.cast.CastMedia
+import app.hamstr.cast.CastStatus
 import app.hamstr.data.DownloadTask
+import kotlinx.coroutines.flow.MutableStateFlow
 import app.hamstr.data.Positions
 import app.hamstr.player.AbLoop
 import app.hamstr.res.*
@@ -82,7 +86,7 @@ import java.io.File
  * phone's, and holding the bar marks an A-B loop the same way.
  */
 @Composable
-fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
+fun DesktopPlayer(t: DownloadTask, onCast: () -> Unit = {}, onClose: () -> Unit) {
     val c = Hamstr.colors
     val prepared by key(t.id, t.filePath) {
         produceState<FfPlayer?>(null) {
@@ -91,27 +95,59 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
         }
     }
     val player = prepared ?: return
+    // Playing on a TV or speaker: the file goes there and this player is its remote.
+    val remote by Cast.session.collectAsState()
+    val cast = remote
+    val castStatus by (cast?.status ?: remember { MutableStateFlow(CastStatus()) }).collectAsState()
+    val castMedia by (cast?.media ?: remember { MutableStateFlow<CastMedia?>(null) }).collectAsState()
+    val there = cast != null && castMedia?.id == t.id
+    var lastThere by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(cast) {
+        if (cast != null) {
+            val at = player.position.value
+            player.pause()
+            val file = t.filePath?.let(::File)
+            if (cast.media.value?.id != t.id && file != null) {
+                val video = player.info?.video == true
+                cast.load(CastMedia(t.id, file, t.title, t.uploader ?: t.source, castMime(file, video), video, t.thumbnail), at, true)
+            }
+        } else lastThere?.let { at -> player.seek(at); lastThere = null }
+    }
+    // While it plays there, the clock moves on between the device's reports.
+    val tick by produceState(0L, there, castStatus) {
+        while (there && castStatus.state == CastStatus.State.Playing) { value = System.currentTimeMillis(); kotlinx.coroutines.delay(500) }
+    }
+    LaunchedEffect(there, castStatus, tick) { if (there) lastThere = castStatus.positionNow() }
     DisposableEffect(player) {
-        player.play()
+        if (Cast.session.value == null) player.play()
         onDispose {
-            player.info?.let { Positions.save(t.id, (player.position.value * 1000).toLong(), (it.duration * 1000).toLong()) }
+            val s = Cast.session.value
+            val at = if (s != null && s.media.value?.id == t.id) s.status.value.positionNow().also { s.pause() } else player.position.value
+            player.info?.let { Positions.save(t.id, (at * 1000).toLong(), (it.duration * 1000).toLong()) }
             player.close()
         }
     }
     val frame by player.frame.collectAsState()
-    val position by player.position.collectAsState()
-    val playing by player.playing.collectAsState()
-    val ended by player.ended.collectAsState()
+    val localPosition by player.position.collectAsState()
+    val localPlaying by player.playing.collectAsState()
+    val localEnded by player.ended.collectAsState()
     val error by player.error.collectAsState()
-    val duration = player.info?.duration ?: 0.0
-    var volume by remember { mutableFloatStateOf(1f) }
+    val position = if (there) { tick; castStatus.positionNow() } else localPosition
+    val playing = if (there) castStatus.state == CastStatus.State.Playing else localPlaying
+    val ended = if (there) castStatus.state == CastStatus.State.Finished else localEnded
+    val duration = castStatus.duration.takeIf { there && it > 0 } ?: player.info?.duration ?: 0.0
+    var localVolume by remember { mutableFloatStateOf(1f) }
+    val volume = if (there) castStatus.volume ?: 1f else localVolume
+    val toggle = { if (there) cast!!.toggle() else player.toggle() }
+    val seek = { s: Double -> if (there) cast!!.seek(s.coerceIn(0.0, duration.takeIf { it > 0 } ?: Double.MAX_VALUE)) else player.seek(s) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     LaunchedEffect(ended) { if (ended) Positions.clear(t.id) }
     var loop by remember(t.id) { mutableStateOf<AbLoop?>(null) }
-    val setLoop = { l: AbLoop? -> loop = l; if (l?.b != null) player.seek(l.a / 1000.0) }
-    LaunchedEffect(loop) {
+    val setLoop = { l: AbLoop? -> loop = l; if (l?.b != null) seek(l.a / 1000.0) }
+    LaunchedEffect(loop, there) {
         val l = loop ?: return@LaunchedEffect
+        if (there) return@LaunchedEffect
         player.position.collect { at -> l.jumpFrom((at * 1000).toLong()).takeIf { it >= 0 }?.let { player.seek(it / 1000.0) } }
     }
     val keys = Modifier
@@ -120,15 +156,15 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
         .onPreviewKeyEvent { e ->
             if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             when (e.key) {
-                Key.Spacebar, Key.K -> { player.toggle(); true }
-                Key.DirectionLeft, Key.J -> { player.seek(position - 10); true }
-                Key.DirectionRight, Key.L -> { player.seek(position + 10); true }
+                Key.Spacebar, Key.K -> { toggle(); true }
+                Key.DirectionLeft, Key.J -> { seek(position - 10); true }
+                Key.DirectionRight, Key.L -> { seek(position + 10); true }
                 Key.Escape -> { onClose(); true }
                 else -> false
             }
         }
     val bar = @Composable {
-        SeekBar(if (duration > 0) (position / duration).toFloat() else 0f, loop, (duration * 1000).toLong(), setLoop) { f -> player.seek(f * duration) }
+        SeekBar(if (duration > 0) (position / duration).toFloat() else 0f, loop, (duration * 1000).toLong(), setLoop) { f -> seek(f * duration) }
     }
     val times = @Composable {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -138,11 +174,17 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
         }
     }
     val buttons = @Composable {
-        PlayerButton(Res.drawable.ic_replay_10, stringResource(Res.string.player_back_10)) { player.seek(position - 10) }
-        PlayerButton(if (playing) Res.drawable.ic_pause else Res.drawable.ic_play_arrow, stringResource(if (playing) Res.string.player_pause else Res.string.player_play), big = true) { player.toggle() }
-        PlayerButton(Res.drawable.ic_forward_10, stringResource(Res.string.player_forward_10)) { player.seek(position + 10) }
+        PlayerButton(Res.drawable.ic_replay_10, stringResource(Res.string.player_back_10)) { seek(position - 10) }
+        PlayerButton(if (playing) Res.drawable.ic_pause else Res.drawable.ic_play_arrow, stringResource(if (playing) Res.string.player_pause else Res.string.player_play), big = true) { toggle() }
+        PlayerButton(Res.drawable.ic_forward_10, stringResource(Res.string.player_forward_10)) { seek(position + 10) }
     }
-    val sound = @Composable { Volume(volume) { v -> volume = v; player.setVolume(v) } }
+    val sound = @Composable {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CastButton(cast != null, onCast)
+            Spacer(Modifier.width(6.dp))
+            Volume(volume) { v -> if (there) cast!!.setVolume(v) else { localVolume = v; player.setVolume(v) } }
+        }
+    }
     val close = @Composable {
         IconButton(Res.drawable.ic_close, stringResource(Res.string.player_close), onClose, tint = c.muted, background = Color.Transparent, size = 34.dp)
     }
@@ -156,10 +198,14 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
             Column(Modifier.width(width + 24.dp).clip(RoundedCornerShape(Radii.sheet)).background(c.overlay).then(keys).padding(12.dp)) {
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(Radii.row)).background(Color.Black)
-                        .pointerInput(Unit) { detectTapGestures(onTap = { player.toggle() }, onDoubleTap = { offset -> player.seek(position + if (offset.x < size.width / 2) -10 else 10) }) },
+                        .pointerInput(there) { detectTapGestures(onTap = { toggle() }, onDoubleTap = { offset -> seek(position + if (offset.x < size.width / 2) -10 else 10) }) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    frame?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+                    if (cast != null) {
+                        val preparing by cast.preparing.collectAsState()
+                        app.hamstr.ui.CastingCard(cast.device, preparing = preparing)
+                    }
+                    else frame?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
                     error?.let { Txt(it, style = Hamstr.type.small, color = Color.White, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) }
                 }
                 Row(Modifier.padding(start = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -212,6 +258,23 @@ fun DesktopPlayer(t: DownloadTask, onClose: () -> Unit) {
             }
         }
     }
+}
+
+/** The cast button: accent while something plays on a TV or speaker. */
+@Composable
+private fun CastButton(on: Boolean, onClick: () -> Unit) {
+    val c = Hamstr.colors
+    val tip = rememberTip()
+    Box(Modifier.hoverTip(tip)) {
+        IconButton(Res.drawable.ic_cast, stringResource(Res.string.cast_button), onClick, tint = if (on) c.accent else c.muted, background = Color.Transparent, size = 34.dp)
+        Tip(tip, stringResource(Res.string.cast_button))
+    }
+}
+
+/** What a TV is told the file is; the sound of a video file goes as sound. */
+private fun castMime(file: File, video: Boolean): String {
+    val m = app.hamstr.player.mimeOf(file)
+    return if (!video && m.startsWith("video/")) m.replace("video/", "audio/") else m
 }
 
 // What a video's modal needs besides the picture: padding, the title row, the bar and the buttons.

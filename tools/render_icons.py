@@ -38,6 +38,7 @@ ICONS = {
     "restore": "clock-counter-clockwise-bold", "search": "magnifying-glass-bold", "select_all": "checks-bold",
     "send": "paper-plane-tilt-fill", "settings": "gear-six-fill", "share": "share-network-fill",
     "shuffle": "shuffle-bold", "skip_next": "skip-forward-fill", "skip_previous": "skip-back-fill",
+    "cast": "screencast-bold", "tv": "television-simple-fill", "speaker": "speaker-hifi-fill", "headphones": "headphones-fill",
     "smartphone": "device-mobile-fill", "sort": "funnel-simple-bold", "timer": "timer-fill",
     "upload": "upload-simple-bold", "visibility_off": "eye-slash-fill", "wifi": "wifi-high-bold",
 }

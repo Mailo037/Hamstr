@@ -173,7 +173,7 @@ private fun NearbyTargets(
 
 /** A mono scan line under the header: a dot runs back and forth while Hamstr looks around. */
 @Composable
-private fun Looking() {
+internal fun Looking(text: String = stringResource(Res.string.nearby_looking)) {
     val c = Hamstr.colors
     // The dot only has nine places, so ten steps a second are plenty.
     val clock by rememberAmbientClock(10)
@@ -184,7 +184,7 @@ private fun Looking() {
     val line = (0 until width).joinToString(" ") { if (it == pos) "●" else "·" }
     Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Txt("[ $line ]", style = Hamstr.type.mono, color = c.accent, maxLines = 1)
-        Txt(stringResource(Res.string.nearby_looking), style = Hamstr.type.small, color = c.ghost, maxLines = 1)
+        Txt(text, style = Hamstr.type.small, color = c.ghost, maxLines = 1)
     }
 }
 

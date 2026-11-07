@@ -570,6 +570,7 @@ private fun PlayScene(active: Boolean, modifier: Modifier) {
                 ModeChip(Res.drawable.ic_lyrics, stringResource(Res.string.lyrics), on = true)
                 ModeChip(Res.drawable.ic_queue_music, stringResource(Res.string.queue_title))
                 ModeChip(Res.drawable.ic_timer, null)
+                ModeChip(Res.drawable.ic_cast, null)
             }
         }
     }

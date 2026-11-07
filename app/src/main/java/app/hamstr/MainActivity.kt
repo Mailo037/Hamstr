@@ -622,6 +622,10 @@ private fun App(inPip: Boolean) {
         Overlay(visible = eqSheet && playing != null, onDismiss = { app.hamstr.player.EqSheet.open.value = false }) {
             app.hamstr.ui.EqualizerSheet()
         }
+        val castSheet by app.hamstr.player.CastSheetState.open.collectAsState()
+        Overlay(visible = castSheet, onDismiss = { app.hamstr.player.CastSheetState.open.value = false }) {
+            app.hamstr.ui.CastSheet(onOutputs = { app.hamstr.player.Outputs.show(context) }) { app.hamstr.player.CastSheetState.open.value = false }
+        }
         Overlay(visible = sleepSheet, onDismiss = { sleepSheet = false }) {
             SleepSheet { label ->
                 sleepSheet = false

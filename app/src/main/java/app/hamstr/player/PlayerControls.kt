@@ -572,6 +572,8 @@ internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, on
         }
         val eq by Prefs.settings.collectAsState()
         ModeButton(Res.drawable.ic_equalizer, stringResource(R.string.eq_title), on = eq.eqOn || eq.soundChannels != "stereo" || eq.soundLevel != "normal" || eq.normalize) { EqSheet.open.value = true }
+        val casting by app.hamstr.cast.Cast.session.collectAsState()
+        ModeButton(Res.drawable.ic_cast, stringResource(R.string.cast_button), on = casting != null) { CastSheetState.open.value = true }
         ModeButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), on = false, onClick = onQueue)
     }
 }

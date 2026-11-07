@@ -80,3 +80,8 @@ private class EqProcessor : BaseAudioProcessor() {
 object EqSheet {
     val open = kotlinx.coroutines.flow.MutableStateFlow(false)
 }
+
+/** "Play on" over the player: its cast button opens it, MainActivity shows it. */
+object CastSheetState {
+    val open = kotlinx.coroutines.flow.MutableStateFlow(false)
+}

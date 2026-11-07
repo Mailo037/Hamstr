@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -163,7 +164,13 @@ internal fun VideoSurface(
                 },
                 contentAlignment = Alignment.Center,
             ) {
-                PlayerSurface(controller, Modifier.aspectFit(ui.aspect), SURFACE_TYPE_TEXTURE_VIEW)
+                val casting by app.hamstr.cast.Cast.session.collectAsState()
+                val on = casting
+                if (on == null) PlayerSurface(controller, Modifier.aspectFit(ui.aspect), SURFACE_TYPE_TEXTURE_VIEW)
+                else {
+                    val preparing by on.preparing.collectAsState()
+                    app.hamstr.ui.CastingCard(on.device, Modifier.fillMaxSize().background(Color.Black), preparing)
+                }
             }
         }
         if (seek != 0) {
@@ -290,3 +297,4 @@ internal fun ImageView(file: File?, zoomable: Boolean) {
         drawImage(img, dstOffset = IntOffset(((size.width - w) / 2).roundToInt(), ((size.height - h) / 2).roundToInt()), dstSize = androidx.compose.ui.unit.IntSize(w.roundToInt(), h.roundToInt()))
     }
 }
+

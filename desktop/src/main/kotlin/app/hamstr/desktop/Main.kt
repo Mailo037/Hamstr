@@ -75,6 +75,9 @@ fun main(args: Array<String>) {
     args.firstOrNull { it.startsWith(Updater.UPDATED_FLAG) }?.let { Updater.restarted(it.removePrefix(Updater.UPDATED_FLAG)) }
     Updater.watch()
     Nearby.inbox = Paths.inbox
+    // Files a TV doesn't play go there as a copy made by the bundled FFmpeg.
+    app.hamstr.cast.Cast.ffmpeg = { args -> ProcessBuilder(listOf(Tools.ffmpeg.path) + args) }
+    app.hamstr.cast.Cast.cache = java.io.File(Paths.data, "cache/cast")
     Nearby.init(
         PropertiesFile(File(Paths.data, "nearby.properties")), Paths.data, DeviceKind.Desktop,
         defaultName = System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "Computer",

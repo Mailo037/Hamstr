@@ -25,6 +25,8 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import app.hamstr.data.Prefs
 import app.hamstr.widget.PlayerWidgets
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Owns the player. Media3 turns its session into the media notification and keeps playing in
@@ -72,6 +74,46 @@ class PlaybackService : MediaSessionService() {
         last = next.currentMediaItem?.mediaId
         session?.player = next
         PlayerWidgets.update(this, next)
+    }
+
+    // ---- playing on a TV or speaker ----------------------------------------------------
+    // While Hamstr casts, the session holds a CastPlayer; ExoPlayer waits paused and takes
+    // over again where the device was when the cast ends.
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+    private var local: ExoPlayer? = null
+
+    private fun follow(cast: app.hamstr.cast.CastSession?) {
+        val now = session?.player ?: return
+        if (cast != null && (now as? CastPlayer)?.cast !== cast) {
+            val exo = (now as? ExoPlayer) ?: local ?: return
+            val from = now
+            val items = List(from.mediaItemCount) { from.getMediaItemAt(it) }
+            if (items.isEmpty()) return
+            crossfade.release()
+            val player = CastPlayer(cast, items, from.currentMediaItemIndex, from.currentPosition, from.playWhenReady, from.repeatMode, from.shuffleModeEnabled)
+            exo.pause()
+            from.removeListener(listener)
+            (from as? CastPlayer)?.release()
+            local = exo
+            player.addListener(listener)
+            session?.player = player
+            PlayerWidgets.update(this, player)
+        } else if (cast == null && now is CastPlayer) {
+            val exo = local ?: return
+            val items = now.queue
+            val same = items.map { it.mediaId } == List(exo.mediaItemCount) { exo.getMediaItemAt(it).mediaId }
+            if (items.isNotEmpty()) {
+                if (same) exo.seekTo(now.currentIndex, now.positionMs) else exo.setMediaItems(items, now.currentIndex, now.positionMs)
+                exo.prepare()
+            }
+            exo.pause()
+            now.removeListener(listener)
+            exo.addListener(listener)
+            session?.player = exo
+            local = null
+            now.release()
+            PlayerWidgets.update(this, exo)
+        }
     }
 
     private var last: String? = null
@@ -164,6 +206,7 @@ class PlaybackService : MediaSessionService() {
         // The hamster, not Media3's play triangle, in the status bar and the system's media pill.
         setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_stat_hamstr) })
         player.addListener(listener)
+        scope.launch { app.hamstr.cast.Cast.session.collect(::follow) }
     }
 
     // ---- giving way to other apps ------------------------------------------------------
@@ -204,6 +247,11 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        scope.cancel()
+        if (session?.player is CastPlayer) {
+            app.hamstr.cast.Cast.disconnect()
+            follow(null)
+        }
         crossfade.release()
         handler.removeCallbacks(keep)
         handler.removeCallbacks(resume)
