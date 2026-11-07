@@ -207,6 +207,7 @@ fun PlayerHost(
     onQueue: () -> Unit = {},
     onSleep: () -> Unit = {},
     onEditLyrics: (DownloadTask) -> Unit = {},
+    onDownloadedRemote: () -> Unit = {},
     miniStart: Dp = 12.dp,
     miniWidth: Dp? = null,
 ) {
@@ -225,6 +226,11 @@ fun PlayerHost(
     val ui = rememberPlayerUi(controller)
     val file = remember(t.id) { t.filePath?.let(::File) }
     val kind = remember(t.id, t.choice.mode) { kindOf(t) }
+    val isRemote = t.id.startsWith(app.hamstr.cast.HamstrCast.REMOTE)
+    val remoteDownloading by PhoneStage.downloading.collectAsState()
+    val remoteDownloaded by PhoneStage.downloaded.collectAsState()
+    val isRemoteDownloaded = t.id in remoteDownloaded
+    val context = androidx.compose.ui.platform.LocalContext.current
     val activity = LocalActivity.current
 
     val c = Hamstr.colors
@@ -250,6 +256,11 @@ fun PlayerHost(
     val next = queue.getOrNull(ui.nextIndex)?.takeIf { queue.size > 1 && it.id != t.id }
     val neighbours by rememberUpdatedState(previous to next)
     val settle = spring<Float>(dampingRatio = 0.84f, stiffness = 360f)
+    val downloadRemote: () -> Unit = {
+        if (!isRemoteDownloaded && !remoteDownloading) {
+            scope.launch { if (PhoneStage.download(context)) onDownloadedRemote() }
+        }
+    }
     LaunchedEffect(expandedTarget, t.id) {
         swipeX.snapTo(0f)
         dropY.snapTo(0f)
@@ -435,8 +446,18 @@ fun PlayerHost(
                         IconButton(Res.drawable.ic_cast, stringResource(R.string.cast_button), { CastSheetState.open.value = true }, tint = if (casting != null) c.accent else c.muted)
                     } else if (kind == Kind.Video || kind == Kind.Audio) IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue)
                     else IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
-                    IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(t) })
-                    IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
+                    if (isRemote) {
+                        IconButton(
+                            if (isRemoteDownloaded) Res.drawable.ic_check else Res.drawable.ic_download,
+                            stringResource(if (isRemoteDownloaded) R.string.import_done_one else R.string.share_stash),
+                            downloadRemote,
+                            tint = if (isRemoteDownloaded || remoteDownloading) c.accent else c.ink,
+                        )
+                    } else {
+                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(t) })
+                        IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
+                    }
+
                 }
                 // Info + controls under the media (beside it in landscape). They scroll only when
                 // the screen is too short; otherwise a drag here still shrinks the player.
@@ -613,8 +634,8 @@ fun PlayerHost(
                         IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue, tint = c.muted, background = Color.Transparent)
                         if (playable) PlayPause(ui.isPlaying, size = 44.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
                         IconButton(
-                            Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() },
-                            tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent,
+                            Res.drawable.ic_skip_next, stringResource(R.string.player_next), { if (isRemote) PhoneStage.next() else controller?.seekToNextMediaItem() },
+                            tint = if (ui.hasNext || isRemote) c.ink else c.ghost, background = Color.Transparent,
                         )
                     }
                 } else Row(Modifier.fillMaxSize().padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -626,7 +647,7 @@ fun PlayerHost(
                         if (swipeX.value > 0f) previous?.let { MiniSlot(it, null, picture = true, inset = inset, mediaH = miniMediaH, modifier = Modifier.offset { IntOffset((swipeX.value - slot).roundToInt(), 0) }) }
                     }
                     if (playable) PlayPause(ui.isPlaying, size = if (style == MiniStyle.Compact) 36.dp else 40.dp, onClick = { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
-                    if (ui.hasNext) IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller?.seekToNextMediaItem() }, background = Color.Transparent)
+                    if (ui.hasNext || isRemote) IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { if (isRemote) PhoneStage.next() else controller?.seekToNextMediaItem() }, background = Color.Transparent)
                     else Spacer(Modifier.width(6.dp))
                 }
                 // Concentric with the bar's 18 dp corners (the media sits 4 dp in, at 14 dp);
@@ -671,6 +692,8 @@ fun PlayerHost(
                     onMenu = { fullscreen = false; onMenu(t) },
                     onShare = { fullscreen = false; onShare(t) },
                     onQuality = if (canHaveVersions(t)) ({ fullscreen = false; onQuality(t) }) else null,
+                    onDownloadRemote = if (isRemote) downloadRemote else null,
+                    remoteDownloaded = isRemoteDownloaded,
                 )
                 // The crossfade keeps to the morphing box: one that eased its own size would lag
                 // behind it while the player is pulled down, and show at the bottom and the side.
@@ -681,7 +704,22 @@ fun PlayerHost(
                     label = "lyrics",
                 ) { on ->
                     if (on && controller != null) LyricsPanel(t, controller!!, ui, onEdit = { onEditLyrics(t) }, onFullscreen = { lyricsFull = true })
-                    else Cover(t, ev)
+                    else Cover(
+                        t, ev,
+                        previous = previous,
+                        next = next,
+                        onPrevious = when {
+                            isRemote -> ({ PhoneStage.previous() })
+                            previous != null -> ({ Playback.skipTo(ui.previousIndex) })
+                            ui.position > 3_000L -> ({ controller?.seekTo(0L) })
+                            else -> null
+                        },
+                        onNext = when {
+                            isRemote -> ({ PhoneStage.next() })
+                            next != null -> ({ Playback.skipTo(ui.nextIndex) })
+                            else -> null
+                        },
+                    )
                 }
                 Kind.Image -> ImageView(file, zoomable = ev > 0.98f)
                 Kind.Other -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

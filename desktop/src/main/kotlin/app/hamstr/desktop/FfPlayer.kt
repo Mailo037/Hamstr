@@ -234,7 +234,7 @@ class FfPlayer internal constructor(
 
         private fun decoder(output: List<String>, sound: Boolean): Process? = synchronized(lock) {
             if (!active()) return@synchronized null
-            ffmpeg(output).also { if (sound) audio = it else video = it }
+            ffmpeg(output, sound).also { if (sound) audio = it else video = it }
         }
 
         private fun waitWhilePaused() {
@@ -248,12 +248,16 @@ class FfPlayer internal constructor(
             val buf = ByteArray(8192)
             val eq = app.hamstr.audio.SoundChain(RATE, 2)
             p.inputStream.use { input ->
+                var carry = 0
                 while (active()) {
                     waitWhilePaused()
                     if (!active()) break
-                    val n = input.readNBytes(buf, 0, buf.size)
-                    if (n == 0) break
-                    val count = n - n % 4
+                    val n = input.read(buf, carry, buf.size - carry)
+                    if (n < 0) break
+                    val total = carry + n
+                    val count = total - total % 4
+                    carry = total - count
+                    if (count == 0) continue
                     eq.process16(buf, 0, count)
                     scalePcm16(buf, count, _volume.value)
                     var written = 0
@@ -270,6 +274,7 @@ class FfPlayer internal constructor(
                         publish { _position.value = clock() }
                         if (sent == 0) Thread.sleep(5)
                     }
+                    if (carry > 0) System.arraycopy(buf, count, buf, 0, carry)
                 }
             }
             // drain() blocks indefinitely on a paused line, preventing a seek from retiring it.
@@ -318,10 +323,12 @@ class FfPlayer internal constructor(
             }.onFailure { if (active()) fail(it) }
         }
 
-        private fun ffmpeg(output: List<String>): Process =
-            ProcessBuilder(listOf(Tools.ffmpeg.path, "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", "%.3f".format(java.util.Locale.ROOT, from), "-i", source) + output)
+        private fun ffmpeg(output: List<String>, sound: Boolean): Process {
+            val fast = if (sound && !info.video) listOf("-probesize", "131072", "-analyzeduration", "100000") else emptyList()
+            return ProcessBuilder(listOf(Tools.ffmpeg.path, "-hide_banner", "-loglevel", "error", "-nostdin") + fast + listOf("-ss", "%.3f".format(java.util.Locale.ROOT, from), "-i", source) + output)
                 .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()
+        }
 
         private fun publish(block: () -> Unit) = synchronized(this@FfPlayer) {
             if (active()) block()

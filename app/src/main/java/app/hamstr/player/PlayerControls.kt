@@ -434,11 +434,11 @@ internal fun LyricsFullscreen(t: DownloadTask, controller: Player, ui: PlayerUi,
             ProgressLine(if (ui.duration > 0) ui.position / ui.duration.toFloat() else 0f)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
+                IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { if (t.id.startsWith(app.hamstr.cast.HamstrCast.REMOTE)) PhoneStage.previous() else controller.seekToPrevious() }, size = 48.dp, tint = c.ink, background = Color.Transparent)
                 Spacer(Modifier.width(16.dp))
                 PlayPause(ui.isPlaying, size = 60.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
                 Spacer(Modifier.width(16.dp))
-                IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 48.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
+                IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { if (t.id.startsWith(app.hamstr.cast.HamstrCast.REMOTE)) PhoneStage.next() else controller.seekToNextMediaItem() }, size = 48.dp, tint = if (ui.hasNext || t.id.startsWith(app.hamstr.cast.HamstrCast.REMOTE)) c.ink else c.ghost, background = Color.Transparent)
             }
         }
     }
@@ -517,9 +517,10 @@ internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, on
             haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             controller.shuffleModeEnabled = !ui.shuffle
         }
-        IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { controller.seekToPrevious() }, size = 52.dp, tint = c.ink, background = Color.Transparent)
+        val isRemote = Playback.current.collectAsState().value?.id?.startsWith(app.hamstr.cast.HamstrCast.REMOTE) == true
+        IconButton(Res.drawable.ic_skip_previous, stringResource(R.string.player_previous), { if (isRemote) PhoneStage.previous() else controller.seekToPrevious() }, size = 52.dp, tint = c.ink, background = Color.Transparent)
         PlayPause(ui.isPlaying, size = 72.dp, onClick = { if (controller.isPlaying) controller.pause() else controller.play() })
-        IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { controller.seekToNextMediaItem() }, size = 52.dp, tint = if (ui.hasNext) c.ink else c.ghost, background = Color.Transparent)
+        IconButton(Res.drawable.ic_skip_next, stringResource(R.string.player_next), { if (isRemote) PhoneStage.next() else controller.seekToNextMediaItem() }, size = 52.dp, tint = if (ui.hasNext || isRemote) c.ink else c.ghost, background = Color.Transparent)
         RepeatButton(controller, ui, queue.size)
     }
     Spacer(Modifier.height(14.dp))

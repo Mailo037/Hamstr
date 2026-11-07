@@ -11,8 +11,16 @@ import app.hamstr.cast.CastStatus
 import app.hamstr.cast.HamstrCast
 import app.hamstr.data.Choice
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.Importer
 import app.hamstr.data.Mode
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -27,10 +35,38 @@ import kotlin.math.roundToInt
  */
 object PhoneStage : HamstrCast.Stage {
     private lateinit var app: Context
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var loadedAt = 0L
+
+    private val _downloading = MutableStateFlow(false)
+    val downloading: StateFlow<Boolean> = _downloading.asStateFlow()
+
+    private val _downloaded = MutableStateFlow<Set<String>>(emptySet())
+    val downloaded: StateFlow<Set<String>> = _downloaded.asStateFlow()
 
     fun install(context: Context) {
         app = context.applicationContext
+        HamstrCast.onSkip = { next ->
+            main {
+                val c = Playback.controller.value?.takeIf { it.isConnected } ?: return@main false
+                if (next) {
+                    if (!c.hasNextMediaItem()) return@main false
+                    c.seekToNextMediaItem()
+                    true
+                } else {
+                    if (c.currentPosition > 3_000L) {
+                        c.seekTo(0L)
+                        true
+                    } else if (c.hasPreviousMediaItem()) {
+                        c.seekToPreviousMediaItem()
+                        true
+                    } else {
+                        c.seekTo(0L)
+                        true
+                    }
+                }
+            } == true
+        }
         HamstrCast.install(this)
     }
 
@@ -41,7 +77,7 @@ object PhoneStage : HamstrCast.Stage {
         val name = File(item.name)
         val task = DownloadTask(
             id = item.key, url = item.url, title = item.title, thumbnail = item.cover, source = item.from.name,
-            durationSec = 0, choice = Choice(if (item.video) Mode.Video else Mode.Audio, null, "", "", false),
+            durationSec = item.duration.toInt(), choice = Choice(if (item.video) Mode.Video else Mode.Audio, null, "", "", false),
             // Not a file here: its name only tells the player what kind it is.
             filePath = File(app.cacheDir, "remote/${name.name}").path, uploader = item.artist,
         )
@@ -59,6 +95,39 @@ object PhoneStage : HamstrCast.Stage {
     override fun play() { main { Playback.controller.value?.play() } }
     override fun pause() { main { Playback.controller.value?.pause() } }
     override fun seek(seconds: Double) { main { Playback.controller.value?.seekTo((seconds * 1000).toLong()) } }
+
+    fun next() {
+        val item = HamstrCast.incoming.value ?: return
+        scope.launch { HamstrCast.skip(item, next = true) }
+    }
+
+    fun previous() {
+        val item = HamstrCast.incoming.value ?: return
+        scope.launch {
+            val pos = withContext(Dispatchers.Main.immediate) { Playback.controller.value?.currentPosition ?: 0L }
+            if (pos > 3_000L) {
+                withContext(Dispatchers.Main.immediate) { Playback.controller.value?.seekTo(0L) }
+                return@launch
+            }
+            if (!HamstrCast.skip(item, next = false)) {
+                withContext(Dispatchers.Main.immediate) { Playback.controller.value?.seekTo(0L) }
+            }
+        }
+    }
+
+    suspend fun download(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val item = HamstrCast.incoming.value ?: return@withContext false
+        if (_downloading.value || item.key in _downloaded.value) return@withContext false
+        _downloading.value = true
+        try {
+            val received = HamstrCast.download(item, File(context.cacheDir, "nearby-inbox")) ?: return@withContext false
+            val kept = Importer.adopt(context, listOf(received), item.from.name)
+            if (kept.isNotEmpty()) _downloaded.update { it + item.key }
+            kept.isNotEmpty()
+        } finally {
+            _downloading.value = false
+        }
+    }
 
     override fun setVolume(level: Float) {
         val audio = app.getSystemService(AudioManager::class.java) ?: return
@@ -87,7 +156,7 @@ object PhoneStage : HamstrCast.Stage {
                 c.playWhenReady -> CastStatus.State.Playing
                 else -> CastStatus.State.Paused
             }
-            CastStatus(state, c.currentPosition / 1000.0, if (c.duration == C.TIME_UNSET) 0.0 else c.duration / 1000.0, volume)
+            CastStatus(state, c.currentPosition / 1000.0, if (c.duration == C.TIME_UNSET) item.duration else c.duration / 1000.0, volume)
         }
     }
 

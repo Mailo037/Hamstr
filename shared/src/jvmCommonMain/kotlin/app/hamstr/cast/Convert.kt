@@ -110,6 +110,7 @@ object Convert {
      * [progress] hears 0..1 while a copy is made; [wanted] going false stops it.
      */
     fun prepare(m: CastMedia, device: CastDevice, progress: (Float) -> Unit, wanted: () -> Boolean): Pair<File, String> {
+        if (device.protocol == CastProtocol.Hamstr) return m.file to m.mime
         val p = probe(m.file) ?: return m.file to m.mime
         val plan = plan(device.protocol, p, picture = m.video && device.video)
         Log.d(TAG, "${m.file.name} on ${device.protocol}: $p → $plan")

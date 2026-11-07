@@ -211,6 +211,7 @@ internal class CastPlayer(
                 mime = mime,
                 video = mime.startsWith("video/"),
                 cover = meta.artworkUri?.let { if (it.scheme == "file") it.path else it.toString() },
+                duration = app.hamstr.data.DownloadStore.tasks.value.firstOrNull { it.id == item.mediaId }?.durationSec?.toDouble() ?: 0.0,
             )
         }
     }

@@ -55,7 +55,7 @@ private enum class Shelf { All, Video, Audio, Other }
  * right-click has the rest.
  */
 @Composable
-internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask) -> Unit, onMenu: (DownloadTask) -> Unit) {
+internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask, List<DownloadTask>) -> Unit, onMenu: (DownloadTask) -> Unit) {
     val c = Hamstr.colors
     val s by Prefs.settings.collectAsState()
     val missing by FileChecks.missing.collectAsState()
@@ -131,7 +131,7 @@ internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask) ->
                     TaskRow(
                         t, versions = versions, gone = t.id in missing,
                         resume = resume[t.id]?.fraction,
-                        onClick = { onPlay(t) }, onLongClick = { onMenu(t) },
+                        onClick = { onPlay(t, shown.map { it.first }) }, onLongClick = { onMenu(t) },
                     )
                 }
             }

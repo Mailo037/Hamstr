@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import app.hamstr.ui.components.Specs
 import app.hamstr.ui.components.rubberBand
@@ -17,6 +18,7 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,15 +42,18 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -71,6 +76,7 @@ import app.hamstr.ui.theme.Hamstr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -90,6 +96,8 @@ internal fun VideoSurface(
     onMenu: () -> Unit,
     onShare: () -> Unit,
     onQuality: (() -> Unit)?,
+    onDownloadRemote: (() -> Unit)? = null,
+    remoteDownloaded: Boolean = false,
 ) {
     val context = LocalContext.current
     val c = Hamstr.colors
@@ -223,9 +231,19 @@ internal fun VideoSurface(
                     // One pill for the actions, so they read as a group rather than loose buttons.
                     Row(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.35f))) {
                         val none = Color.Transparent
-                        IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(context, t) }, tint = Color.White, background = none)
-                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), onShare, tint = Color.White, background = none)
-                        IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = none)
+                        if (onDownloadRemote != null) {
+                            IconButton(
+                                if (remoteDownloaded) Res.drawable.ic_check else Res.drawable.ic_download,
+                                stringResource(if (remoteDownloaded) R.string.import_done_one else R.string.share_stash),
+                                onDownloadRemote,
+                                tint = if (remoteDownloaded) c.accent else Color.White,
+                                background = none,
+                            )
+                        } else {
+                            IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(context, t) }, tint = Color.White, background = none)
+                            IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), onShare, tint = Color.White, background = none)
+                            IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), onMenu, tint = Color.White, background = none)
+                        }
                         if (forced) IconButton(Res.drawable.ic_fullscreen_exit, stringResource(R.string.player_exit_fullscreen), onExitFullscreen, tint = Color.White, background = none)
                     }
                 }
@@ -253,24 +271,122 @@ internal fun Modifier.aspectFit(aspect: Float): Modifier = this.layout { measura
         layout(p.width, p.height) { p.place(0, 0) }
     }
 
-/** Audio cover: the thumbnail; tap it and it dissolves into ASCII (and back). */
+/**
+ * Audio cover: the thumbnail; tap it and it dissolves into ASCII (and back).
+ * Swiping left or right on the expanded cover skips to the next or previous song,
+ * sliding the neighbour's cover in beside it.
+ */
 @Composable
-internal fun Cover(t: DownloadTask, ev: Float) {
+internal fun Cover(
+    t: DownloadTask,
+    ev: Float,
+    previous: DownloadTask? = null,
+    next: DownloadTask? = null,
+    onPrevious: (() -> Unit)? = null,
+    onNext: (() -> Unit)? = null,
+) {
     val bitmap = rememberImage(t.thumbnail, 720)
-    val reveal = remember { Animatable(1f) }
+    val prevBitmap = rememberImage(previous?.thumbnail, 720)
+    val nextBitmap = rememberImage(next?.thumbnail, 720)
+    val reveal = remember(t.id) { Animatable(1f) }
+    val swipeX = remember(t.id) { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    AsciiImage(
-        bitmap = bitmap,
-        reveal = reveal.value,
-        cell = 7.dp,
-        modifier = Modifier
+    val haptics = LocalHapticFeedback.current
+    val prevCallback by rememberUpdatedState(onPrevious)
+    val nextCallback by rememberUpdatedState(onNext)
+
+    BoxWithConstraints(
+        Modifier
             .fillMaxSize()
-            .pointerInput(ev > 0.98f) {
+            .clipToBounds()
+            .pointerInput(ev > 0.98f, t.id) {
                 detectTapGestures {
                     if (ev > 0.98f) scope.launch { reveal.animateTo(if (reveal.targetValue > 0.5f) 0f else 1f, tween(700)) } else Playback.expand()
                 }
-            },
-    )
+            }
+            .then(
+                if (ev > 0.98f) Modifier.pointerInput(t.id) {
+                    var total = 0f
+                    var armed = false
+                    val tracker = VelocityTracker()
+                    fun arm(now: Boolean) {
+                        if (now != armed) {
+                            armed = now
+                            haptics.performHapticFeedback(if (now) HapticFeedbackType.GestureThresholdActivate else HapticFeedbackType.SegmentTick)
+                        }
+                    }
+                    detectHorizontalDragGestures(
+                        onDragStart = { total = 0f; armed = false; tracker.resetTracking() },
+                        onHorizontalDrag = { change, dx ->
+                            change.consume()
+                            total += dx
+                            tracker.addPosition(change.uptimeMillis, Offset(total, 0f))
+                            val w = size.width.toFloat().coerceAtLeast(1f)
+                            val can = if (total < 0f) nextCallback != null else prevCallback != null
+                            val nextX = if (can) rubberBand(total, w * 0.9f, 0.6f) else total * 0.12f
+                            arm(can && abs(nextX) > w * 0.25f)
+                            scope.launch { swipeX.snapTo(nextX) }
+                        },
+                        onDragEnd = {
+                            val w = size.width.toFloat().coerceAtLeast(1f)
+                            val vx = tracker.calculateVelocity().x
+                            val goNext = nextCallback
+                            val goPrev = prevCallback
+                            when {
+                                goNext != null && (swipeX.value < -w * 0.25f || (vx < -1200f && swipeX.value < 0f)) -> {
+                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    scope.launch {
+                                        swipeX.animateTo(-w, Specs.leave(200))
+                                        goNext()
+                                        swipeX.snapTo(0f)
+                                    }
+                                }
+                                goPrev != null && (swipeX.value > w * 0.25f || (vx > 1200f && swipeX.value > 0f)) -> {
+                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    scope.launch {
+                                        swipeX.animateTo(w, Specs.leave(200))
+                                        goPrev()
+                                        swipeX.snapTo(0f)
+                                    }
+                                }
+                                else -> scope.launch { swipeX.animateTo(0f, Specs.settle()) }
+                            }
+                        },
+                        onDragCancel = { scope.launch { swipeX.animateTo(0f, Specs.settle()) } },
+                    )
+                } else Modifier
+            ),
+    ) {
+        val w = constraints.maxWidth.toFloat()
+        AsciiImage(
+            bitmap = bitmap,
+            reveal = reveal.value,
+            cell = 7.dp,
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset(swipeX.value.roundToInt(), 0) },
+        )
+        if (swipeX.value < 0f && next != null) {
+            AsciiImage(
+                bitmap = nextBitmap,
+                reveal = 1f,
+                cell = 7.dp,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset { IntOffset((w + swipeX.value).roundToInt(), 0) },
+            )
+        }
+        if (swipeX.value > 0f && previous != null) {
+            AsciiImage(
+                bitmap = prevBitmap,
+                reveal = 1f,
+                cell = 7.dp,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset { IntOffset((swipeX.value - w).roundToInt(), 0) },
+            )
+        }
+    }
 }
 
 /** Image viewer with pinch-zoom and pan. */
@@ -297,4 +413,3 @@ internal fun ImageView(file: File?, zoomable: Boolean) {
         drawImage(img, dstOffset = IntOffset(((size.width - w) / 2).roundToInt(), ((size.height - h) / 2).roundToInt()), dstSize = androidx.compose.ui.unit.IntSize(w.roundToInt(), h.roundToInt()))
     }
 }
-

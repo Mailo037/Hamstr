@@ -38,6 +38,7 @@ data class CastMedia(
     val video: Boolean,
     /** An http(s) link or a local file. */
     val cover: String? = null,
+    val duration: Double = 0.0,
 )
 
 /** What the device says it does, in seconds. */

@@ -123,19 +123,19 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
     var pointer by remember { mutableStateOf(Offset.Zero) }
     var menuAt by remember { mutableStateOf(IntOffset.Zero) }
     var sharing by remember { mutableStateOf<ShareContent?>(null) }
-    var playing by remember { mutableStateOf<DownloadTask?>(null) }
+    val playing by DesktopPlayback.current.collectAsState()
+    val playerExpanded by DesktopPlayback.expanded.collectAsState()
     // What another Hamstr plays here ("Play on") takes the player's place; playing something here ends it.
     val staged by DesktopStage.now.collectAsState()
-    LaunchedEffect(staged != null) { if (staged != null) playing = null }
-    LaunchedEffect(playing) { if (playing != null) DesktopStage.close() }
-    // The stash and the library mark what plays.
-    LaunchedEffect(playing?.id) { app.hamstr.ui.NowPlaying.id.value = playing?.id }
+    val stageExpanded by DesktopStage.expanded.collectAsState()
+    LaunchedEffect(staged != null) { if (staged != null) DesktopPlayback.close() }
+    DesktopPlaybackEffects()
     var infoFor by remember { mutableStateOf<DownloadTask?>(null) }
     val requests by Nearby.requests.collectAsState()
     // The tour on a first start; HAMSTR_TOUR=<page> opens it on that page, for screenshots.
     val tourAt = remember { System.getenv("HAMSTR_TOUR")?.toIntOrNull() }
     var touring by remember { mutableStateOf(tourAt != null || TourGate.due()) }
-    val sheetOpen = touring || adding || menuFor != null || sharing != null || playing != null || staged != null || infoFor != null || requests.isNotEmpty()
+    val sheetOpen = touring || adding || menuFor != null || sharing != null || (playing != null && playerExpanded) || (staged != null && stageExpanded) || infoFor != null || requests.isNotEmpty()
 
     fun clipboardLink() = Files.clipboardText()?.let(MediaLinks::find)
     // Back in the window with a link copied elsewhere: the stash offers it, once per link.
@@ -157,8 +157,8 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
         tab = Tab.Settings
     }
     // Videos and songs play in Hamstr; documents and the like open in the system's app.
-    fun play(t: DownloadTask) {
-        if (playable(t)) playing = t else t.filePath?.let { Files.open(File(it)) }
+    fun play(t: DownloadTask, from: List<DownloadTask> = visible) {
+        if (playable(t)) DesktopPlayback.open(t, from) else t.filePath?.let { Files.open(File(it)) }
     }
     fun openMenu(t: DownloadTask) {
         menuAt = IntOffset(pointer.x.roundToInt(), pointer.y.roundToInt())
@@ -186,7 +186,11 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
             Spacer(Modifier.height(TITLE_BAR))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Row(Modifier.fillMaxSize().padding(start = 10.dp, end = 12.dp, bottom = 12.dp)) {
-                    SideBar(tab, page, onTab = { tab = it }, onPage = { page = it; tab = Tab.Settings })
+                    Column(Modifier.width(216.dp).fillMaxHeight()) {
+                        SideBar(tab, page, onTab = { tab = it }, onPage = { page = it; tab = Tab.Settings })
+                        Spacer(Modifier.weight(1f))
+                        DesktopMiniPlayer()
+                    }
                     Spacer(Modifier.width(12.dp))
                     AnimatedContent(tab, Modifier.weight(1f).fillMaxHeight(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "tab") { t ->
                         when (t) {
@@ -197,7 +201,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                                         onAdd = { clipboardLink()?.let(Queue::stash) ?: run { clipLink = null; adding = true } },
                                         onOpenAdd = { clipLink = clipboardLink(); adding = true },
                                         onMenu = ::openMenu,
-                                        onPlay = { t, _ -> play(t) },
+                                        onPlay = ::play,
                                         onHide = { list -> DownloadStore.setHidden(list.map { it.id }.toSet(), true) },
                                         onRetryEngine = Queue::retryStart,
                                         onShowAll = {},
@@ -277,11 +281,11 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
             }
         }
         var castSheet by remember { mutableStateOf(false) }
-        Overlay(playing != null, onDismiss = { playing = null }) {
-            playing?.let { t -> DesktopPlayer(t, onCast = { castSheet = true }) { playing = null } }
+        Overlay(playing != null && playerExpanded, onDismiss = DesktopPlayback::minimize) {
+            playing?.let { t -> DesktopPlayer(t, onCast = { castSheet = true }, onMinimize = DesktopPlayback::minimize, onClose = DesktopPlayback::close) }
         }
-        Overlay(staged != null, onDismiss = DesktopStage::close) {
-            staged?.let { s -> DesktopPlayer(s.task, stream = s.player, onClose = DesktopStage::close) }
+        Overlay(staged != null && stageExpanded, onDismiss = DesktopStage::minimize) {
+            staged?.let { s -> DesktopPlayer(s.task, stream = s.player, onMinimize = DesktopStage::minimize, onClose = DesktopStage::close) }
         }
         Overlay(castSheet, onDismiss = { castSheet = false }) {
             DesktopSheet { app.hamstr.ui.CastSheet { castSheet = false } }

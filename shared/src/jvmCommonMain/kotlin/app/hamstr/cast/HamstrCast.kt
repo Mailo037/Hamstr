@@ -1,8 +1,13 @@
 package app.hamstr.cast
 
 import app.hamstr.Log
+import app.hamstr.data.Choice
+import app.hamstr.data.DownloadTask
+import app.hamstr.data.Mode
+import app.hamstr.nearby.FileMetadata
 import app.hamstr.nearby.Nearby
 import app.hamstr.nearby.Peer
+import app.hamstr.nearby.ReceivedFile
 import app.hamstr.nearby.Via
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,7 +76,8 @@ object HamstrCast {
         override suspend fun load(url: String, coverUrl: String?, media: CastMedia, at: Double, play: Boolean) {
             call("load") {
                 put("url", url).put("cover", coverUrl ?: "").put("media", media.id).put("title", media.title)
-                    .put("artist", media.artist ?: "").put("mime", media.mime).put("video", media.video).put("at", at).put("play", play)
+                    .put("artist", media.artist ?: "").put("mime", media.mime).put("video", media.video)
+                    .put("duration", media.duration).put("at", at).put("play", play)
             }
         }
 
@@ -113,6 +119,7 @@ object HamstrCast {
         val cover: String?,
         val at: Double,
         val play: Boolean,
+        val duration: Double = 0.0,
     ) {
         /** Its media id in this app's player, never one of a download. */
         val key: String get() = "$REMOTE${from.id}:$id"
@@ -138,9 +145,43 @@ object HamstrCast {
 
     @Volatile private var stage: Stage? = null
 
+    /** Called on the sender when the receiver asks for the next or previous song. */
+    @Volatile var onSkip: (next: Boolean) -> Boolean = { false }
+
     private val _incoming = MutableStateFlow<Incoming?>(null)
     /** What another Hamstr plays here now. */
     val incoming: StateFlow<Incoming?> = _incoming.asStateFlow()
+
+    /** Asks the sender of [item] to play its next or previous song. */
+    suspend fun skip(item: Incoming, next: Boolean): Boolean =
+        Nearby.command(item.from, JSONObject().put("cmd", if (next) "next" else "prev").put("session", item.session), 5_000) != null
+
+    /** Downloads the file of [item] from the sender's [MediaServer] into [dir], ready to adopt into the stash. */
+    fun download(item: Incoming, dir: File, progress: (Float) -> Unit = {}): ReceivedFile? {
+        if (!onThisNetwork(item.url)) return null
+        dir.mkdirs()
+        val safe = Nearby.safeName(item.name)
+        val part = File(dir, "${System.nanoTime()}-$safe.part")
+        return try {
+            LanHttp.download(item.url, part, timeout = 30_000, progress = progress)
+            val coverPart = item.cover?.takeIf { !it.startsWith("http") }?.let(::File)?.takeIf { it.isFile }?.let { src ->
+                File(dir, "${System.nanoTime()}.cover.part").also { src.copyTo(it, overwrite = true) }
+            }
+            val meta = FileMetadata.from(
+                DownloadTask(
+                    id = item.id, url = "", title = item.title, uploader = item.artist, source = item.from.name,
+                    thumbnail = item.cover?.takeIf { it.startsWith("https://") },
+                    durationSec = item.duration.toInt(),
+                    choice = Choice(if (item.video) Mode.Video else Mode.Audio, null, "", "", false),
+                )
+            )
+            ReceivedFile(part, safe, meta, coverPart)
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't download stream ${item.name}", e)
+            part.delete()
+            null
+        }
+    }
 
     // Devices "Allow once" let play, until the app quits.
     private val allowed = ConcurrentHashMap.newKeySet<String>()
@@ -188,6 +229,7 @@ object HamstrCast {
                     m.optString("title").take(300).ifBlank { "Hamstr" }, m.optString("artist").take(200).ifBlank { null },
                     m.optString("mime").take(100), m.optBoolean("video"), cover(m.optString("cover")),
                     m.optDouble("at", 0.0).takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0, m.optBoolean("play", true),
+                    m.optDouble("duration", 0.0).takeIf { it.isFinite() && it > 0 } ?: 0.0,
                 )
                 Log.i(TAG, "${from.name} plays ${item.name} here")
                 _incoming.value = item
@@ -197,6 +239,8 @@ object HamstrCast {
             "play" -> now?.let { stage.play(); done } ?: ended()
             "pause" -> now?.let { stage.pause(); done } ?: ended()
             "seek" -> now?.let { stage.seek(m.optDouble("at", 0.0).takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0); done } ?: ended()
+            "next" -> if (onSkip(true)) done else null
+            "prev" -> if (onSkip(false)) done else null
             "volume" -> {
                 m.optDouble("level", -1.0).takeIf { it in 0.0..1.0 }?.let { stage.setVolume(it.toFloat()) }
                 done

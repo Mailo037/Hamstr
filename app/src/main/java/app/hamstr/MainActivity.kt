@@ -563,6 +563,7 @@ private fun App(inPip: Boolean) {
                 miniBottom = bottom + 9.dp, inPip = false, onMenu = { if (mine(it)) menuFor = it }, onQuality = { if (mine(it)) qualityFor = it },
                 onShare = { if (mine(it)) share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
                 onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { if (mine(it)) lyricsFor = it },
+                onDownloadedRemote = { hint(resources.getString(R.string.import_done_one)) },
                 miniStart = sideStart + 5.dp, miniWidth = SIDEBAR - 10.dp,
             )
         } else {
@@ -571,6 +572,7 @@ private fun App(inPip: Boolean) {
                 miniBottom = bottom + 78.dp, inPip = false, onMenu = { if (mine(it)) menuFor = it }, onQuality = { if (mine(it)) qualityFor = it },
                 onShare = { if (mine(it)) share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
                 onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { if (mine(it)) lyricsFor = it },
+                onDownloadedRemote = { hint(resources.getString(R.string.import_done_one)) },
             )
         }
 
