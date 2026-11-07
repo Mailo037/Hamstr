@@ -792,6 +792,16 @@
     <string name="sound_mono_hint">Pareil des deux côtés</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Tourne autour de toi</string>
+    <string name="sound_level">Volume</string>
+    <string name="level_quiet">Doux</string>
+    <string name="level_quiet_hint">Un peu plus doux</string>
+    <string name="level_normal">Normal</string>
+    <string name="level_normal_hint">Tel quel</string>
+    <string name="level_loud">Fort</string>
+    <string name="level_loud_hint">Plus fort, sans saturer</string>
+    <string name="sound_normalize">Normaliser le volume</string>
+    <string name="voice_nothing">Rien dans Hamstr ne correspond à « %1$s »</string>
+    <string name="sound_normalize_hint">Les morceaux doux et forts sonnent à peu près au même volume.</string>
     <string name="eq_custom">Personnalisé</string>
     <string name="eq_reset">Réinitialiser</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

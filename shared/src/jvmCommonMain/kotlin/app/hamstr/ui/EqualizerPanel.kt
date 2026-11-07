@@ -38,6 +38,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import app.hamstr.audio.Channels
 import app.hamstr.audio.Equalizer
+import app.hamstr.audio.Level
 import app.hamstr.data.Prefs
 import app.hamstr.res.*
 import app.hamstr.ui.components.ButtonKind
@@ -67,6 +68,17 @@ fun EqualizerBlock() {
             Prefs.edit { it.copy(soundChannels = ch.id) }
         }
     }
+    Divider()
+    SettingBlock(stringResource(Res.string.sound_level)) {
+        val picked = Level.of(s.soundLevel)
+        val titles = Level.entries.associateWith { stringResource(it.title) }
+        val hint = stringResource(picked.hint)
+        Chips(Level.entries, picked, { titles.getValue(it) }, { if (it == picked) hint else null }) { level ->
+            Prefs.edit { it.copy(soundLevel = level.id) }
+        }
+    }
+    Divider()
+    FxRow(stringResource(Res.string.sound_normalize), stringResource(Res.string.sound_normalize_hint), s.normalize) { v -> Prefs.edit { it.copy(normalize = v) } }
     Divider()
     FxRow(stringResource(Res.string.eq_title), stringResource(Res.string.eq_hint), s.eqOn) { v -> Prefs.edit { it.copy(eqOn = v) } }
     AnimatedVisibility(s.eqOn, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {

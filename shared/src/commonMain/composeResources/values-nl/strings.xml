@@ -792,6 +792,16 @@
     <string name="sound_mono_hint">Beide oren gelijk</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Draait om je hoofd</string>
+    <string name="sound_level">Volume</string>
+    <string name="level_quiet">Zacht</string>
+    <string name="level_quiet_hint">Iets zachter</string>
+    <string name="level_normal">Normaal</string>
+    <string name="level_normal_hint">Zoals het is</string>
+    <string name="level_loud">Hard</string>
+    <string name="level_loud_hint">Harder, zonder vervorming</string>
+    <string name="sound_normalize">Volume gelijkmaken</string>
+    <string name="voice_nothing">Niets in Hamstr komt overeen met “%1$s”</string>
+    <string name="sound_normalize_hint">Zachte en harde nummers klinken ongeveer even hard.</string>
     <string name="eq_custom">Aangepast</string>
     <string name="eq_reset">Herstellen</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

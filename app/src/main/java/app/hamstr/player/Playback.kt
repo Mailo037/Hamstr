@@ -89,7 +89,7 @@ object Playback {
         return if (pool.any { it.id == task.id }) pool else listOf(task)
     }
 
-    private fun item(task: DownloadTask, file: File) = MediaItem.Builder()
+    internal fun item(task: DownloadTask, file: File) = MediaItem.Builder()
         .setMediaId(task.id)
         .setUri(Uri.fromFile(file))
         // An audio-only .mp4 still plays as a song, with its cover in the notification.
@@ -150,6 +150,18 @@ object Playback {
         }
         if (play) c.play() else c.pause()
         true
+    }
+
+    /**
+     * A voice assistant set [queue] on the session itself, starting at [start]: the app's
+     * player follows it as if it had been opened here.
+     */
+    fun adopt(context: Context, queue: List<DownloadTask>, start: DownloadTask) {
+        ++openGeneration
+        added.clear()
+        _queue.value = queue
+        _current.value = start
+        timerScope.launch { runCatching { connect(context) } }
     }
 
     /** Another quality of what is open: same spot, same play/pause, same player size. */

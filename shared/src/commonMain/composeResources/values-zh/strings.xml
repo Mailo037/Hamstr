@@ -781,6 +781,16 @@
     <string name="sound_mono_hint">双耳相同</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">环绕你的头部</string>
+    <string name="sound_level">音量</string>
+    <string name="level_quiet">小声</string>
+    <string name="level_quiet_hint">稍微柔和些</string>
+    <string name="level_normal">标准</string>
+    <string name="level_normal_hint">保持原样</string>
+    <string name="level_loud">大声</string>
+    <string name="level_loud_hint">更响，但不爆音</string>
+    <string name="sound_normalize">统一音量</string>
+    <string name="voice_nothing">Hamstr 中没有与「%1$s」匹配的内容</string>
+    <string name="sound_normalize_hint">小声和大声的歌曲将以大致相同的音量播放。</string>
     <string name="eq_custom">自定义</string>
     <string name="eq_reset">重置</string>
     <string name="eq_band">%1$s Hz，%2$s dB</string>

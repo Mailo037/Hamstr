@@ -19,7 +19,10 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import app.hamstr.MainActivity
 import app.hamstr.R
+import app.hamstr.data.DownloadStore
 import app.hamstr.data.Positions
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import app.hamstr.data.Prefs
 import app.hamstr.widget.PlayerWidgets
 
@@ -116,6 +119,33 @@ class PlaybackService : MediaSessionService() {
             if (key.keyCode != KeyEvent.KEYCODE_MEDIA_PLAY || !playing || session.isMediaNotificationController(controllerInfo)) return false
             if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0) player.pause()
             return true
+        }
+
+        // An assistant talking to the session ("play … on Hamstr" while Hamstr is the media app)
+        // sends words or ids, not files: they become the library's files here, and the app's
+        // player follows the queue they make.
+        override fun onSetMediaItems(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            if (mediaItems.all { it.localConfiguration != null }) return super.onSetMediaItems(session, controller, mediaItems, startIndex, startPositionMs)
+            val first = mediaItems.firstOrNull()
+            val hit = first?.requestMetadata?.searchQuery?.let { VoiceSearch.inLibrary(it, first.requestMetadata.extras) }
+                ?: first?.mediaId?.takeIf { it.isNotEmpty() }?.let(DownloadStore::get)?.let { t -> VoiceSearch.Hit(t, listOf(t)) }
+                ?: (if (first?.requestMetadata?.searchQuery != null) null else VoiceSearch.inLibrary(null))
+                ?: return Futures.immediateFailedFuture(UnsupportedOperationException("Nothing in the library matches"))
+            val queue = hit.queue.filter { it.filePath?.let { p -> java.io.File(p).isFile } == true }.ifEmpty { listOf(hit.start) }
+            Playback.adopt(this@PlaybackService, queue, hit.start)
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(
+                    queue.map { Playback.item(it, java.io.File(it.filePath!!)) },
+                    queue.indexOfFirst { it.id == hit.start.id }.coerceAtLeast(0),
+                    Positions.resumeAt(hit.start.id),
+                ),
+            )
         }
     }
 

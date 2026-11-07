@@ -792,6 +792,16 @@
     <string name="sound_mono_hint">Uguale nelle orecchie</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Ti gira intorno</string>
+    <string name="sound_level">Volume</string>
+    <string name="level_quiet">Piano</string>
+    <string name="level_quiet_hint">Un po’ più dolce</string>
+    <string name="level_normal">Normale</string>
+    <string name="level_normal_hint">Così com’è</string>
+    <string name="level_loud">Forte</string>
+    <string name="level_loud_hint">Più forte, senza distorsione</string>
+    <string name="sound_normalize">Normalizza il volume</string>
+    <string name="voice_nothing">Nulla in Hamstr corrisponde a “%1$s”</string>
+    <string name="sound_normalize_hint">Brani piani e forti suonano più o meno allo stesso volume.</string>
     <string name="eq_custom">Personalizzato</string>
     <string name="eq_reset">Ripristina</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

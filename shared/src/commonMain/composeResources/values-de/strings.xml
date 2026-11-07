@@ -792,6 +792,16 @@
     <string name="sound_mono_hint">Beide Ohren gleich</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Kreist um den Kopf</string>
+    <string name="sound_level">Lautstärke</string>
+    <string name="level_quiet">Leise</string>
+    <string name="level_quiet_hint">Etwas sanfter</string>
+    <string name="level_normal">Normal</string>
+    <string name="level_normal_hint">Wie es kommt</string>
+    <string name="level_loud">Laut</string>
+    <string name="level_loud_hint">Lauter, ohne Verzerrung</string>
+    <string name="sound_normalize">Lautstärke angleichen</string>
+    <string name="voice_nothing">In Hamstr gibt es nichts, das zu „%1$s“ passt</string>
+    <string name="sound_normalize_hint">Leise und laute Songs klingen etwa gleich laut.</string>
     <string name="eq_custom">Eigene</string>
     <string name="eq_reset">Zurücksetzen</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

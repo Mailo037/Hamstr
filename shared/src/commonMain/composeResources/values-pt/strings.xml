@@ -792,6 +792,16 @@
     <string name="sound_mono_hint">Igual nos dois ouvidos</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Gira na sua cabeça</string>
+    <string name="sound_level">Volume</string>
+    <string name="level_quiet">Baixo</string>
+    <string name="level_quiet_hint">Um pouco mais suave</string>
+    <string name="level_normal">Normal</string>
+    <string name="level_normal_hint">Como vem</string>
+    <string name="level_loud">Alto</string>
+    <string name="level_loud_hint">Mais alto, sem distorcer</string>
+    <string name="sound_normalize">Normalizar o volume</string>
+    <string name="voice_nothing">Nada no Hamstr corresponde a “%1$s”</string>
+    <string name="sound_normalize_hint">Músicas baixas e altas tocam com volume parecido.</string>
     <string name="eq_custom">Personalizado</string>
     <string name="eq_reset">Redefinir</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

@@ -814,6 +814,16 @@
     <string name="sound_mono_hint">Tak samo w obu uszach</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Krąży wokół głowy</string>
+    <string name="sound_level">Głośność</string>
+    <string name="level_quiet">Cicho</string>
+    <string name="level_quiet_hint">Trochę łagodniej</string>
+    <string name="level_normal">Normalnie</string>
+    <string name="level_normal_hint">Tak jak jest</string>
+    <string name="level_loud">Głośno</string>
+    <string name="level_loud_hint">Głośniej, bez przesterowania</string>
+    <string name="sound_normalize">Wyrównaj głośność</string>
+    <string name="voice_nothing">W Hamstr nic nie pasuje do „%1$s”</string>
+    <string name="sound_normalize_hint">Ciche i głośne utwory brzmią mniej więcej tak samo głośno.</string>
     <string name="eq_custom">Własne</string>
     <string name="eq_reset">Resetuj</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

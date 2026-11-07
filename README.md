@@ -54,6 +54,8 @@
 - Background audio with media controls, picture-in-picture, fullscreen, and double-tap to skip 10 s.
 - A ten-band equalizer with presets (bass, vocals, rock, podcast, late night and more) or your own curve, the same on the phone and the computer. It's in Settings › Playback and on the song page.
 - Crossfade: songs fade into each other over up to 12 seconds instead of stopping and starting (Settings › Playback). Videos keep a clean cut.
+- Volume quiet, normal or loud, and *Normalize volume*, which plays quiet and loud songs at about the same volume (Settings › Playback, on the phone and the computer).
+- On the phone, ask your assistant: “Hey Google, play Queen on Hamstr” plays a song, an artist or a playlist from your downloads; “play my music on Hamstr” shuffles all of them.
 - An A–B loop for practising a part: hold the timeline once for A and again for B, or hold and slide over the part. It keeps looping in the background; tap the loop under the timeline to end it.
 - *Open with…* hands a file to any other app: a video player, a music app, a PDF reader or Word. *Share file* sends the file itself, not the link.
 - Keep a video in several qualities: tap the quality in the player to switch between them at the same spot, fetch another one next to it, or replace the current one once the new file is in.

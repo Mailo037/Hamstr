@@ -792,6 +792,16 @@
     <string name="sound_mono_hint">Same in both ears</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Circles your head</string>
+    <string name="sound_level">Volume</string>
+    <string name="level_quiet">Quiet</string>
+    <string name="level_quiet_hint">A little softer</string>
+    <string name="level_normal">Normal</string>
+    <string name="level_normal_hint">As it comes</string>
+    <string name="level_loud">Loud</string>
+    <string name="level_loud_hint">Louder, without clipping</string>
+    <string name="sound_normalize">Normalize volume</string>
+    <string name="voice_nothing">Nothing in Hamstr matches “%1$s”</string>
+    <string name="sound_normalize_hint">Quiet and loud songs play at about the same volume.</string>
     <string name="eq_custom">Custom</string>
     <string name="eq_reset">Reset</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

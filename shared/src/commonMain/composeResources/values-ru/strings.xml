@@ -814,6 +814,16 @@
     <string name="sound_mono_hint">Одинаково в ушах</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Кружит вокруг</string>
+    <string name="sound_level">Громкость</string>
+    <string name="level_quiet">Тихо</string>
+    <string name="level_quiet_hint">Чуть мягче</string>
+    <string name="level_normal">Обычно</string>
+    <string name="level_normal_hint">Как есть</string>
+    <string name="level_loud">Громко</string>
+    <string name="level_loud_hint">Громче, без искажений</string>
+    <string name="sound_normalize">Выровнять громкость</string>
+    <string name="voice_nothing">В Hamstr нет ничего, что подходит под «%1$s»</string>
+    <string name="sound_normalize_hint">Тихие и громкие треки звучат примерно одинаково громко.</string>
     <string name="eq_custom">Свой</string>
     <string name="eq_reset">Сбросить</string>
     <string name="eq_band">%1$s Гц, %2$s дБ</string>

@@ -781,6 +781,16 @@
     <string name="sound_mono_hint">左右で同じ音</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">頭のまわりを回る</string>
+    <string name="sound_level">音量</string>
+    <string name="level_quiet">小さめ</string>
+    <string name="level_quiet_hint">少しやわらかく</string>
+    <string name="level_normal">ふつう</string>
+    <string name="level_normal_hint">録音のまま</string>
+    <string name="level_loud">大きめ</string>
+    <string name="level_loud_hint">歪まない範囲で大きく</string>
+    <string name="sound_normalize">音量をそろえる</string>
+    <string name="voice_nothing">Hamstrに「%1$s」に一致するものはありません</string>
+    <string name="sound_normalize_hint">小さい曲と大きい曲を、だいたい同じ音量で再生します。</string>
     <string name="eq_custom">カスタム</string>
     <string name="eq_reset">リセット</string>
     <string name="eq_band">%1$s Hz、%2$s dB</string>

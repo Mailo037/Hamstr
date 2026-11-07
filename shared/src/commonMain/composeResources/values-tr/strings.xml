@@ -792,6 +792,16 @@
     <string name="sound_mono_hint">İki kulakta aynı</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">Başının etrafında</string>
+    <string name="sound_level">Ses</string>
+    <string name="level_quiet">Kısık</string>
+    <string name="level_quiet_hint">Biraz daha yumuşak</string>
+    <string name="level_normal">Normal</string>
+    <string name="level_normal_hint">Olduğu gibi</string>
+    <string name="level_loud">Yüksek</string>
+    <string name="level_loud_hint">Daha yüksek, bozulmadan</string>
+    <string name="sound_normalize">Ses seviyesini eşitle</string>
+    <string name="voice_nothing">Hamstr’da “%1$s” ile eşleşen bir şey yok</string>
+    <string name="sound_normalize_hint">Kısık ve yüksek şarkılar yaklaşık aynı ses seviyesinde çalar.</string>
     <string name="eq_custom">Özel</string>
     <string name="eq_reset">Sıfırla</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

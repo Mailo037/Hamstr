@@ -71,6 +71,10 @@ data class Settings(
     val soundChannels: String = "stereo",
     // Seconds one song fades into the next; 0 cuts as before.
     val crossfade: Int = 0,
+    // How loud everything plays: "quiet", "normal" or "loud" (app.hamstr.audio.Level), and
+    // whether quiet and loud songs are evened out to about the same volume.
+    val soundLevel: String = "normal",
+    val normalize: Boolean = false,
     // Nearby: other Hamstr apps on the same Wi-Fi or in Bluetooth range. Empty name: the device's own.
     val nearby: Boolean = true,
     val nearbyBluetooth: Boolean = true,
@@ -176,6 +180,8 @@ object Prefs {
             .takeIf { it.size == 10 } ?: List(10) { 0f },
         soundChannels = sp.getString("sound.channels", "stereo")!!,
         crossfade = sp.getInt("crossfade", 0).coerceIn(0, 12),
+        soundLevel = sp.getString("sound.level", "normal")!!,
+        normalize = sp.getBoolean("sound.normalize", false),
         nearby = sp.getBoolean("nearby", true),
         nearbyBluetooth = sp.getBoolean("nearbyBluetooth", true),
         deviceName = sp.getString("deviceName", "")!!,
@@ -291,6 +297,8 @@ object Prefs {
         .putString("eq.gains", s.eqGains.joinToString(","))
         .putString("sound.channels", s.soundChannels)
         .putInt("crossfade", s.crossfade)
+        .putString("sound.level", s.soundLevel)
+        .putBoolean("sound.normalize", s.normalize)
         .putBoolean("nearby", s.nearby)
         .putBoolean("nearbyBluetooth", s.nearbyBluetooth)
         .putString("deviceName", s.deviceName)

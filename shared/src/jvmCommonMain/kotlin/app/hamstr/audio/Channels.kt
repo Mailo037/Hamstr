@@ -117,27 +117,30 @@ class ChannelMix(private val rate: Int, private val channels: Int) {
 }
 
 /**
- * The equalizer and the channel mix together, as both players run them on decoded sound:
+ * The equalizer, the channel mix and the loudness together, as both players run them on decoded sound:
  * [refresh] once per buffer, then [frame] for each frame of [channels] samples from -1 to 1.
  */
 class SoundChain(rate: Int, private val channels: Int) {
     val eq = EqFilter(rate, channels)
     val mix = ChannelMix(rate, channels)
+    val loudness = Loudness(rate, channels)
     private var eqOn = false
     private var mixOn = false
+    private var loudOn = false
     private val one = DoubleArray(channels)
 
     /** False when nothing would change the sound. */
     fun refresh(s: Settings = Prefs.settings.value): Boolean {
-        eqOn = eq.refresh(s); mixOn = mix.refresh(s)
-        return eqOn || mixOn
+        eqOn = eq.refresh(s); mixOn = mix.refresh(s); loudOn = loudness.refresh(s)
+        return eqOn || mixOn || loudOn
     }
 
-    fun reset() { eq.reset(); mix.reset() }
+    fun reset() { eq.reset(); mix.reset(); loudness.reset() }
 
     fun frame(x: DoubleArray, off: Int = 0) {
         if (eqOn) for (c in 0 until channels) x[off + c] = eq.next(x[off + c], c)
         if (mixOn) mix.frame(x, off)
+        if (loudOn) loudness.frame(x, off)
     }
 
     /** Signed 16-bit little-endian frames, interleaved, in place: what FFmpeg hands the desktop's player. */

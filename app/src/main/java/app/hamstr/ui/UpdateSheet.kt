@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -118,7 +119,7 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
                         .edgeFade(scroll, Orientation.Vertical, length = 22.dp)
                         .verticalScroll(scroll)
                         .padding(14.dp),
-                ) { Txt(plainNotes(release.notes), style = Hamstr.type.body, color = c.muted) }
+                ) { Notes(release.notes) }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -172,18 +173,42 @@ fun UpdateSheet(onLater: () -> Unit, onClose: () -> Unit) {
     }
 }
 
+/** What's new for the phone: the summary, then each point's title over its text. */
+@Composable
+private fun Notes(md: String) {
+    val c = Hamstr.colors
+    val notes = remember(md) { app.hamstr.data.ReleaseNotes.parse(md, desktop = false) }
+    // Notes from before the format (or written by GitHub) show as plain lines.
+    if (notes.points.isEmpty()) {
+        Txt(plainNotes(md), style = Hamstr.type.body, color = c.muted)
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (notes.summary.isNotBlank()) Txt(notes.summary, style = Hamstr.type.body, color = c.muted)
+        notes.points.forEach { point ->
+            Row {
+                Txt("*", style = Hamstr.type.mono, color = c.accent, modifier = Modifier.width(18.dp))
+                Column(Modifier.weight(1f)) {
+                    if (point.title.isNotBlank()) Txt(point.title, style = Hamstr.type.bodyMedium, color = c.ink)
+                    Txt(point.text, style = Hamstr.type.body, color = c.muted)
+                }
+            }
+        }
+    }
+}
+
 private val LINK = Regex("""\[([^]]+)]\([^)]+\)""")
 
 /** GitHub release Markdown, reduced to plain lines: no headings marks, links or emphasis. */
 fun plainNotes(md: String): String = md.lines()
     .map { line ->
         line.trim()
-            .replace(LINK, "$1")
+            .let { if (it.startsWith("![")) it else it.replace(LINK, "$1") }
             .replace(Regex("""^#+\s*"""), "")
             .replace(Regex("""^[-*]\s+"""), "·  ")
             .replace("**", "").replace("`", "")
     }
-    .filterNot { it.startsWith("<!--") }
+    .filterNot { it.startsWith("<!--") || it.startsWith("![") }
     .joinToString("\n")
     .replace(Regex("\n{3,}"), "\n\n")
     .trim()

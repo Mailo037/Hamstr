@@ -24,7 +24,7 @@ internal class EqRenderers(context: Context) : DefaultRenderersFactory(context) 
 }
 
 /**
- * The shared [SoundChain] (equalizer, then mono or 8D) on ExoPlayer's decoded sound, 16-bit or
+ * The shared [SoundChain] (equalizer, mono or 8D, then volume and normalizing) on ExoPlayer's decoded sound, 16-bit or
  * float. It stays in the chain while both are off and passes the sound through, so switching on needs no new
  * audio track; other encodings (passthrough, 24-bit) skip it.
  */

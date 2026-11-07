@@ -98,8 +98,33 @@ Before tagging:
 
 1. Set the default version in `gradle.properties` (`hamstr.version`) and, if a new Cheek is out, `hamstr.cheekVersion`.
 2. Write `.github/release-notes/v<version>.md`. It starts with the what's-new picture, linked by the tag: `![What's new in Hamstr <version>](https://raw.githubusercontent.com/Mailo037/Hamstr/v<version>/docs/images/releases/v<version>.png)`.
-3. Make that picture. Change `VERSION`, `FEATURES` and `SHOTS` in [`tools/render_release.py`](tools/render_release.py) to what is new, add any screen it needs to `tools/demo_screens.py` (and to the demo seed), install a debug build and run `python tools/demo_screens.py`. That also renders the README pictures again from the current UI. Look at `docs/images/releases/v<version>.png` before committing; older pictures stay. Every release gets one, a bugfix too.
-4. Commit everything, including the picture, before the tag: the notes load it from the tagged commit.
+3. Keep the notes to this format, strictly: the phone's update sheet and the test `ReleaseNotesTest` read them (`ReleaseNotes.parse`), and the phone shows only its part.
+
+   ```markdown
+   ![What's new in Hamstr <version>](<picture URL, as above>)
+
+   One or two sentences: what this release is about, in plain words. Shown on both apps.
+
+   ### Phone and computer
+
+   - **Short title.** One to three sentences, what the user notices and where to find it.
+
+   ### Phone
+
+   - **Short title.** …
+
+   ### Computer
+
+   - **Short title.** …
+
+   ### Details
+
+   How it works, version codes, the Cheek version, what was tested and what wasn't.
+   ```
+
+   Only these four `###` sections, in this order; leave out one that has no points, but `### Details` is always there. Every point is one `- **Title.** Text.` line: the title ends with a full stop inside the bold, the text says what changes for the user, without class names, file names or test talk (that goes into Details). The picture, another device's section and Details only show on GitHub. Write for people, not for reviewers: short, concrete, no "fixed an issue where".
+4. Make that picture. Change `VERSION`, `FEATURES` and `SHOTS` in [`tools/render_release.py`](tools/render_release.py) to what is new, add any screen it needs to `tools/demo_screens.py` (and to the demo seed), install a debug build and run `python tools/demo_screens.py`. That also renders the README pictures again from the current UI. Look at `docs/images/releases/v<version>.png` before committing; older pictures stay. Every release gets one, a bugfix too.
+5. Commit everything, including the picture, before the tag: the notes load it from the tagged commit.
 
 Cheek has the same rule for its own releases (see its AGENTS.md). Ship a Cheek release first and wait until its binaries are published, because both Hamstr builds download them by `hamstr.cheekVersion`.
 

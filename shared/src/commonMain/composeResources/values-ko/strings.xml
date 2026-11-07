@@ -781,6 +781,16 @@
     <string name="sound_mono_hint">양쪽 같은 소리</string>
     <string name="sound_8d">8D</string>
     <string name="sound_8d_hint">머리 주위를 돌아요</string>
+    <string name="sound_level">볼륨</string>
+    <string name="level_quiet">작게</string>
+    <string name="level_quiet_hint">조금 부드럽게</string>
+    <string name="level_normal">보통</string>
+    <string name="level_normal_hint">녹음 그대로</string>
+    <string name="level_loud">크게</string>
+    <string name="level_loud_hint">찢어지지 않게 더 크게</string>
+    <string name="sound_normalize">볼륨 맞추기</string>
+    <string name="voice_nothing">Hamstr에 “%1$s”에 맞는 항목이 없어요</string>
+    <string name="sound_normalize_hint">작은 곡과 큰 곡을 대략 같은 볼륨으로 재생해요.</string>
     <string name="eq_custom">사용자 설정</string>
     <string name="eq_reset">초기화</string>
     <string name="eq_band">%1$s Hz, %2$s dB</string>

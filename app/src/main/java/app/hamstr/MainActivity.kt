@@ -202,11 +202,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun take(intent: Intent?) {
+        if (intent?.action == android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH) return listen(intent)
         val action = intent?.action?.takeIf { it in ACTIONS } ?: return
         pendingAction.value = if (action == ACTION_OPEN) "$ACTION_OPEN:${intent.getStringExtra(DownloadService.EXTRA_ID)}" else action
     }
 
+    /** "Hey Google, play … on Hamstr": the best match from the library plays in the mini player. */
+    private fun listen(intent: Intent) {
+        val query = intent.getStringExtra(android.app.SearchManager.QUERY)
+        val hit = app.hamstr.player.VoiceSearch.inLibrary(query, intent.extras)
+        if (hit == null) {
+            pendingAction.value = "$NOTHING_FOUND${query.orEmpty()}"
+            return
+        }
+        lifecycleScope.launch { Playback.open(this@MainActivity, hit.start, hit.queue, expand = false) }
+    }
+
     companion object {
+        /** Followed by what was asked for: nothing in the library matched it. */
+        const val NOTHING_FOUND = "nothing:"
         // Launcher shortcuts, the widget's buttons and "Play" in notifications.
         const val ACTION_PASTE = "app.hamstr.action.PASTE"
         const val ACTION_ADD = "app.hamstr.action.ADD"
@@ -463,6 +477,10 @@ private fun App(inPip: Boolean) {
                 val url = clipboardLink()
                 if (url != null) sheetUrl = url else { hint(resources.getString(R.string.no_clipboard_link)); clipLink = null; addSheet = true }
             } else return@LaunchedEffect
+            a.startsWith(MainActivity.NOTHING_FOUND) -> {
+                tab = Tab.Library
+                hint(resources.getString(R.string.voice_nothing, a.removePrefix(MainActivity.NOTHING_FOUND)))
+            }
             a.startsWith(MainActivity.ACTION_OPEN) -> DownloadStore.get(a.substringAfter(':'))?.let { t ->
                 Seen.opened(context, t.id)
                 play(t, library())
