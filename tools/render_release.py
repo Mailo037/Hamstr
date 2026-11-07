@@ -12,18 +12,17 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.9"
+VERSION = "0.10.10"
 FEATURES = [
-    ("PLAY ON A TV OR SPEAKER", "Chromecast, DLNA, Sonos, AirPlay, MPD"),
-    ("THE PLAYER IS THE REMOTE", "Volume keys and lock screen too"),
-    ("CONVERTED WHEN NEEDED", "Files the TV can't open still play"),
+    ("NORMALIZE WITHOUT PUMPING", "The voice stays when the bass comes in"),
+    ("BASS PEAKS TAMED IN THE BASS", "Only the boom gets quieter"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
-# 0.10.0 to 0.10.9: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
+# 0.10.0 to 0.10.10: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
-SHOTS = [("phone_cast_playing.png", "Play on"), ("phone_cast_player.png", "Remote")]
+SHOTS = [("phone_eq.png", "Playback")]
 
 
 def sharing_panel(shots):

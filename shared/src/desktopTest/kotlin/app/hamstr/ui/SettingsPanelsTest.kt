@@ -96,7 +96,7 @@ class SettingsPanelsTest {
         val file = File.createTempFile("hamstr-eq-", ".properties")
         try {
             Prefs.init(PropertiesFile(file))
-            Prefs.edit { it.copy(eqOn = true, eqPreset = "custom", eqGains = listOf(5f, 4f, 2f, 0f, -1f, 0f, 1f, 3f, 4f, 5f), crossfade = 6) }
+            Prefs.edit { it.copy(eqOn = true, eqPreset = "custom", eqGains = listOf(5f, 4f, 2f, 0f, -1f, 0f, 1f, 3f, 4f, 5f), crossfade = 6, normalize = true) }
             screen("phone_eq.png", Res.string.page_playback) {
                 Group {
                     val s = Prefs.settings.value
