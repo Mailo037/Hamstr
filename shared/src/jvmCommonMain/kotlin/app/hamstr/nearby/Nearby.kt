@@ -622,7 +622,10 @@ object Nearby {
 
     /** Every field but the signature, sorted, so both sides sign the same bytes whatever their JSON library's order. */
     internal fun signed(m: JSONObject) = m.keys().asSequence().filter { it != "sig" }.sorted()
-        .joinToString("\n") { "$it=${m.get(it)}" }.toByteArray(Charsets.UTF_8)
+        .joinToString("\n") { "$it=${canonical(m.get(it))}" }.toByteArray(Charsets.UTF_8)
+
+    // A number as it goes over the wire, so both ends sign the same text: 180.0 is sent as 180.
+    private fun canonical(v: Any): String = if (v is Number) runCatching { JSONObject.numberToString(v) }.getOrDefault(v.toString()) else v.toString()
 
     /** The sender of a signed message, when its key matches its id, the signature holds and it is recent. */
     private fun verify(m: JSONObject): Peer? {

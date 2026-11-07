@@ -152,8 +152,12 @@ class NearbyTest {
         assertTrue(Nearby.known.value.single { it.id == other.id }.trusted)
         val saved = File(dir, "nearby.json")
         val deadline = System.currentTimeMillis() + 5_000
-        while (System.currentTimeMillis() < deadline && !(saved.exists() && saved.readText().contains("\"trusted\":true"))) Thread.sleep(20)
-        assertTrue(JSONObject(saved.readText()).getJSONArray("devices").getJSONObject(0).getBoolean("trusted"))
+        fun savedOther() = runCatching {
+            val list = JSONObject(saved.readText()).getJSONArray("devices")
+            (0 until list.length()).map(list::getJSONObject).firstOrNull { it.getString("id") == other.id }
+        }.getOrNull()
+        while (System.currentTimeMillis() < deadline && savedOther()?.optBoolean("trusted") != true) Thread.sleep(20)
+        assertTrue(assertNotNull(savedOther()).getBoolean("trusted"))
 
         // A device that says goodbye is away at once: a stranger leaves the list, a known one stays as away.
         val laptop = Other("Laptop")

@@ -70,7 +70,7 @@ object HamstrCast {
 
         override suspend fun load(url: String, coverUrl: String?, media: CastMedia, at: Double, play: Boolean) {
             call("load") {
-                put("url", url).put("cover", coverUrl ?: "").put("id", media.id).put("title", media.title)
+                put("url", url).put("cover", coverUrl ?: "").put("media", media.id).put("title", media.title)
                     .put("artist", media.artist ?: "").put("mime", media.mime).put("video", media.video).put("at", at).put("play", play)
             }
         }
@@ -184,7 +184,7 @@ object HamstrCast {
             "load" -> {
                 val url = m.optString("url").takeIf(::onThisNetwork) ?: return null
                 val item = Incoming(
-                    session, from, m.optString("id").take(200), url,
+                    session, from, m.optString("media").take(200), url,
                     m.optString("title").take(300).ifBlank { "Hamstr" }, m.optString("artist").take(200).ifBlank { null },
                     m.optString("mime").take(100), m.optBoolean("video"), cover(m.optString("cover")),
                     m.optDouble("at", 0.0).takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0, m.optBoolean("play", true),

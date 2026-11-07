@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import app.hamstr.nearby.Nearby
+import app.hamstr.nearby.Via
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import app.hamstr.data.Choice
@@ -34,6 +36,8 @@ class SharingSheetTest {
     @Test fun switchesBetweenFileAndLinkWithoutSharingTheWrongContent() {
         val file = File.createTempFile("hamstr-share-", ".mp4")
         try {
+            // Devices other tests left in Nearby would push the buttons out of the window.
+            Nearby.peers.value.keys.forEach { id -> Nearby.forget(id); Via.entries.forEach { Nearby.gone(id, it) } }
             val content = ShareContent.from(listOf(task(file)))
             var filesShared = 0
             var copied: String? = null

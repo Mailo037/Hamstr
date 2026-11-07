@@ -128,9 +128,10 @@ class HamstrCastTest {
         var hello: JSONObject? = null
         val asking = thread { hello = reply(Nearby.receive(phone.command("hello"))) }
         val deadline = System.currentTimeMillis() + 5_000
-        while (Nearby.requests.value.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(10)
-        val r = Nearby.requests.value.single()
-        assertTrue(r.play)
+        // Other tests may leave requests of their own; this one is the phone's.
+        fun asked() = Nearby.requests.value.firstOrNull { it.play && it.from.id == phone.id }
+        while (asked() == null && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        val r = assertNotNull(asked())
         Nearby.answer(r, accept = true)
         asking.join(5_000)
         assertTrue(hello!!.getBoolean("ok"))
@@ -138,14 +139,17 @@ class HamstrCastTest {
 
         // Only a stream from a private address plays; the receipt is signed by this device.
         assertFalse(reply(Nearby.receive(phone.command("load") { put("url", "http://example.com/song.m4a") })).getBoolean("ok"))
-        val loaded = reply(Nearby.receive(phone.command("load") { put("url", "http://192.168.1.20:4000/t/My%20song.m4a").put("title", "My song").put("at", 30.5).put("id", "d1") }))
+        val loaded = reply(Nearby.receive(phone.command("load") { put("url", "http://192.168.1.20:4000/t/My%20song.m4a").put("title", "My song").put("at", 30.5).put("media", "d1") }))
         assertTrue(loaded.getBoolean("ok"))
         assertEquals(Nearby.id, loaded.getString("id"))
         assertEquals("load My song.m4a at 30.5", stage.calls.last())
         assertEquals("remote:${phone.id}:d1", HamstrCast.incoming.value?.key)
 
         val status = reply(Nearby.receive(phone.command("status")))
-        assertEquals(listOf("Playing", "12.0", "200.0"), listOf(status.getString("x_state"), status.getDouble("x_position").toString(), status.getDouble("x_duration").toString()))
+        assertEquals("Playing", status.getString("x_state"))
+        // It plays on while the answer is made, so the position may be a little past 12 s.
+        assertEquals(12.0, status.getDouble("x_position"), 0.5)
+        assertEquals(200.0, status.getDouble("x_duration"), 0.001)
 
         // Another session of the same device (an older connect) only hears that it ended.
         assertTrue(reply(Nearby.receive(phone.command("status", session = "session-0"))).getBoolean("x_ended"))
@@ -201,7 +205,7 @@ class HamstrCastTest {
     }
 
     @Test
-    fun theSendersLinkSpeaksTheProtocol() = runBlocking {
+    fun theSendersLinkSpeaksTheProtocol(): Unit = runBlocking {
         val laptop = Other("Laptop")
         var ended = false
         val fake = Answering(laptop) { m ->
@@ -222,7 +226,7 @@ class HamstrCastTest {
         assertEquals(0.25f, s.volume)
         val load = fake.seen[1]
         assertEquals(listOf("hello", "load"), fake.seen.take(2).map { it.getString("cmd") })
-        assertEquals(listOf(laptop.id, "http://192.168.1.10:5000/t/a.opus", "A"), listOf(load.getString("to"), load.getString("url"), load.getString("title")))
+        assertEquals(listOf(laptop.id, "http://192.168.1.10:5000/t/a.opus", "A", "d1"), listOf(load.getString("to"), load.getString("url"), load.getString("title"), load.getString("media")))
         // Every command of a session carries its id.
         assertEquals(1, fake.seen.map { it.getString("session") }.toSet().size)
         ended = true
