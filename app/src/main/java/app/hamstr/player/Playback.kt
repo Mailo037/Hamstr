@@ -69,6 +69,9 @@ object Playback {
                 // A loop belongs to its file; repeating that file keeps it.
                 if (mediaItem?.mediaId != loopId) setLoop(null)
                 val id = mediaItem?.mediaId ?: return
+                // Right after a skip the session may still report the song it left once more
+                // before the seek reaches it; that one is not followed (the cover would jump back).
+                if (skipping != null && id != skipping && android.os.SystemClock.uptimeMillis() < skipUntil) return
                 _queue.value.firstOrNull { it.id == id }?.let { _current.value = it }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) { playing.value = isPlaying }
@@ -255,8 +258,25 @@ object Playback {
         val c = live() ?: return
         val t = _queue.value.getOrNull(index) ?: return
         _current.value = t
+        skipping = t.id
+        skipUntil = android.os.SystemClock.uptimeMillis() + SKIP_SETTLE_MS
         c.seekToDefaultPosition(index)
+        // Once the skip has settled, the UI follows the player again, wherever it ended up.
+        skipCheck?.cancel()
+        skipCheck = timerScope.launch {
+            delay(SKIP_SETTLE_MS)
+            skipping = null
+            c.currentMediaItem?.mediaId?.takeIf { it != _current.value?.id }?.let { id ->
+                _queue.value.firstOrNull { it.id == id }?.let { _current.value = it }
+            }
+        }
     }
+
+    /** The song a skip went to, and until when other songs the session reports are passed over. */
+    private var skipping: String? = null
+    private var skipUntil = 0L
+    private var skipCheck: Job? = null
+    private const val SKIP_SETTLE_MS = 1_200L
 
     /** Jumps to an entry of the queue and plays it from where it was left. */
     fun jumpTo(index: Int) {

@@ -15,8 +15,11 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.common.MediaMetadata
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
+import com.google.common.collect.ImmutableList
 import app.hamstr.MainActivity
 import app.hamstr.R
 import app.hamstr.data.DownloadStore
@@ -32,12 +35,17 @@ import kotlinx.coroutines.launch
  * Owns the player. Media3 turns its session into the media notification and keeps playing in
  * the background (audio, or a video's sound when the app is left). During a crossfade a
  * second player starts the next song and the session moves over to it ([Crossfade]).
+ *
+ * It is a library service, so assistants (Gemini, Google Assistant, Bixby) and car screens find
+ * Hamstr as a media app: they browse its songs and say what to play ([buttons]'s
+ * onSetMediaItems). Media buttons reach it even when it is not running: a headphone's Play
+ * starts it again with the queue that played last ([onPlaybackResumption]).
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaLibraryService() {
     override fun attachBaseContext(base: android.content.Context) = super.attachBaseContext(app.hamstr.AppLanguage.wrap(base))
 
-    private var session: MediaSession? = null
+    private var session: MediaLibrarySession? = null
     private val handler = Handler(Looper.getMainLooper())
     // Where each file was left, written every few seconds while it plays and whenever it stops.
     private val keep = object : Runnable {
@@ -153,20 +161,117 @@ class PlaybackService : MediaSessionService() {
             if (events.containsAny(Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_MEDIA_METADATA_CHANGED, Player.EVENT_TIMELINE_CHANGED)) {
                 PlayerWidgets.update(this@PlaybackService, player)
             }
+            if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_TIMELINE_CHANGED)) keepQueue(player)
         }
     }
 
-    // Headphones like Sony's XM5 send Play or Pause by what they think the player does, not
-    // a toggle; when they think it is paused, their tap sends Play into a song that already
-    // plays and nothing happens. A Play from outside while playing pauses instead.
-    private val buttons = object : MediaSession.Callback {
+    // ---- the queue that played last, for a media button that wakes Hamstr up ---------------
+    private val lastQueue by lazy { getSharedPreferences("last_queue", MODE_PRIVATE) }
+
+    private fun keepQueue(player: Player) {
+        val ids = List(player.mediaItemCount) { player.getMediaItemAt(it).mediaId }
+            .filter { it.isNotEmpty() && !it.startsWith(app.hamstr.cast.HamstrCast.REMOTE) }
+        if (ids.isEmpty()) return
+        val now = player.currentMediaItem?.mediaId?.takeIf { it in ids } ?: ids.first()
+        lastQueue.edit().putString("ids", ids.joinToString("\n")).putString("current", now).apply()
+    }
+
+    private val buttons = object : MediaLibrarySession.Callback {
+        // Play while playing pauses, Pause while paused plays ([MediaButtons]).
         override fun onMediaButtonEvent(session: MediaSession, controllerInfo: MediaSession.ControllerInfo, intent: Intent): Boolean {
             val key = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java) ?: return false
+            if (session.isMediaNotificationController(controllerInfo)) return false
             val player = session.player
             val playing = player.playWhenReady && player.playbackState != Player.STATE_IDLE && player.playbackState != Player.STATE_ENDED
-            if (key.keyCode != KeyEvent.KEYCODE_MEDIA_PLAY || !playing || session.isMediaNotificationController(controllerInfo)) return false
-            if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0) player.pause()
+            if (!MediaButtons.flips(key.keyCode, playing, player.mediaItemCount > 0, player.playbackState == Player.STATE_ENDED)) return false
+            if (key.action == KeyEvent.ACTION_DOWN && key.repeatCount == 0) {
+                if (playing) player.pause() else { if (player.playbackState == Player.STATE_IDLE) player.prepare(); player.play() }
+            }
             return true
+        }
+
+        // A media button (or the system's media controls) when Hamstr was not playing: the queue
+        // that played last, from where it was left.
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val ids = lastQueue.getString("ids", null)?.split('\n').orEmpty()
+            val queue = ids.mapNotNull(DownloadStore::get).filter { it.filePath?.let { p -> java.io.File(p).isFile } == true }
+            val start = queue.firstOrNull { it.id == lastQueue.getString("current", null) } ?: queue.firstOrNull()
+                ?: return Futures.immediateFailedFuture(UnsupportedOperationException("Nothing played before"))
+            Playback.adopt(this@PlaybackService, queue, start)
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(
+                    queue.map { Playback.item(it, java.io.File(it.filePath!!)) },
+                    queue.indexOf(start),
+                    Positions.resumeAt(start.id),
+                ),
+            )
+        }
+
+        // ---- browsing, for assistants and car screens: the songs, then the videos ---------
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> = Futures.immediateFuture(
+            LibraryResult.ofItem(
+                MediaItem.Builder().setMediaId(ROOT).setMediaMetadata(
+                    MediaMetadata.Builder().setTitle("Hamstr").setIsBrowsable(true).setIsPlayable(false)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED).build(),
+                ).build(),
+                params,
+            ),
+        )
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            if (parentId != ROOT) return Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+            val all = browsable()
+            val from = (page.coerceAtLeast(0).toLong() * pageSize.coerceAtLeast(1)).coerceAtMost(all.size.toLong()).toInt()
+            val items = all.subList(from, (from + pageSize.coerceAtLeast(1)).coerceAtMost(all.size))
+            return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String,
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val t = DownloadStore.get(mediaId)?.takeIf { it.filePath?.let { p -> java.io.File(p).isFile } == true }
+                ?: return Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+            return Futures.immediateFuture(LibraryResult.ofItem(Playback.item(t, java.io.File(t.filePath!!)), null))
+        }
+
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> {
+            session.notifySearchResultChanged(browser, query, VoiceSearch.inLibrary(query)?.queue?.size ?: 0, params)
+            return Futures.immediateFuture(LibraryResult.ofVoid())
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            val hit = VoiceSearch.inLibrary(query)?.queue.orEmpty()
+            val items = hit.drop(page.coerceAtLeast(0) * pageSize.coerceAtLeast(1)).take(pageSize.coerceAtLeast(1))
+                .map { Playback.item(it, java.io.File(it.filePath!!)).buildUpon().setMediaMetadata(browsableMeta(it)).build() }
+            return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
         }
 
         // An assistant talking to the session ("play … on Hamstr" while Hamstr is the media app)
@@ -207,7 +312,7 @@ class PlaybackService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        session = MediaSession.Builder(this, player).setSessionActivity(open).setCallback(buttons).build()
+        session = MediaLibrarySession.Builder(this, player, buttons).setSessionActivity(open).build()
         getSystemService(AudioManager::class.java)?.registerAudioPlaybackCallback(others, handler)
         // The hamster, not Media3's play triangle, in the status bar and the system's media pill.
         setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().apply { setSmallIcon(R.drawable.ic_stat_hamstr) })
@@ -244,7 +349,23 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
+
+    /** Songs first, then videos, newest first: what a browser lists. */
+    private fun browsable(): List<MediaItem> = VoiceSearch.playable()
+        .sortedWith(compareBy<app.hamstr.data.DownloadTask> { if (kindOf(it) == Kind.Audio) 0 else 1 }.thenByDescending { it.createdAt })
+        .map { Playback.item(it, java.io.File(it.filePath!!)).buildUpon().setMediaMetadata(browsableMeta(it)).build() }
+
+    private fun browsableMeta(t: app.hamstr.data.DownloadTask): MediaMetadata = MediaMetadata.Builder()
+        .setTitle(t.title)
+        .setArtist(t.uploader ?: t.source)
+        .setArtworkUri(t.thumbnail?.let(android.net.Uri::parse))
+        .setIsBrowsable(false)
+        .setIsPlayable(true)
+        .setMediaType(if (kindOf(t) == Kind.Audio) MediaMetadata.MEDIA_TYPE_MUSIC else MediaMetadata.MEDIA_TYPE_VIDEO)
+        .build()
+
+    private companion object { const val ROOT = "hamstr-root" }
 
     /** Swiping the app away stops playback unless something is actually playing. */
     override fun onTaskRemoved(rootIntent: Intent?) {

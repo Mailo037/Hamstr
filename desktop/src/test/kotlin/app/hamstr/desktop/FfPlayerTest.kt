@@ -43,6 +43,31 @@ class FfPlayerTest {
     }
 
     @Test
+    fun volumeSliderFollowsLoudnessNotStraightGain() {
+        assertEquals(0f, FfPlayer.gainFor(0f))
+        assertEquals(1f, FfPlayer.gainFor(1f))
+        // Half way is about 18 dB down, a quarter about 36 dB: steps that sound like steps.
+        val db = { level: Float -> 20 * kotlin.math.log10(FfPlayer.gainFor(level)) }
+        assertEquals(-18.06f, db(0.5f), 0.1f)
+        assertEquals(-36.12f, db(0.25f), 0.1f)
+        // Each tenth of the slider is quieter than the one above it, by more near the bottom.
+        val steps = (1..10).map { db(it / 10f) }
+        assert(steps.zipWithNext().all { (a, b) -> b > a })
+        assertEquals(1f, FfPlayer.gainFor(Float.NaN))
+        assertEquals(1f, FfPlayer.gainFor(3f))
+    }
+
+    @Test
+    fun aNewVolumeGlidesInAcrossTheBuffer() {
+        val bytes = pcm16(10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000)
+
+        FfPlayer.scalePcm16(bytes, bytes.size, 1f, 0f)
+
+        // Four stereo frames: both channels of a frame get the same gain, falling to silence.
+        assertContentEquals(pcm16(7_500, 7_500, 5_000, 5_000, 2_500, 2_500, 0, 0), bytes)
+    }
+
+    @Test
     fun zeroVolumeSilencesPcm() {
         val bytes = pcm16(32_767, -32_768, 255, -255, 0)
 

@@ -101,10 +101,11 @@ fun QueueSheet(onClose: () -> Unit) {
 
 /**
  * The rows of the queue and, under them, the way to close the player: in [QueueSheet] and in
- * the player's pulled-up drawer. With [fill] the list takes all the height it is given.
+ * the player's pulled-up drawer. With [fill] the list takes all the height it is given;
+ * [rowColor] and [nowColor] are the rows' ground and the playing (or held) row's.
  */
 @Composable
-fun ColumnScope.QueueList(fill: Boolean, onClose: () -> Unit) {
+fun ColumnScope.QueueList(fill: Boolean, onClose: () -> Unit, rowColor: Color = Hamstr.colors.overlay, nowColor: Color = Hamstr.colors.surface) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val queue by Playback.queue.collectAsState()
@@ -184,7 +185,7 @@ fun ColumnScope.QueueList(fill: Boolean, onClose: () -> Unit) {
                             .fillMaxWidth()
                             .height(QUEUE_ROW)
                             .clip(RoundedCornerShape(Radii.row))
-                            .background(if (now || dragging) c.surface else c.overlay)
+                            .background(if (now || dragging) nowColor else rowColor)
                             .swipeActions()
                             .clickable { Playback.jumpTo(queue.indexOfFirst { it.id == t.id }) },
                         verticalAlignment = Alignment.CenterVertically,

@@ -72,6 +72,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -250,6 +252,10 @@ fun PlayerHost(
     // A song's drawer on an upright phone: the queue and the lyrics, pulled up from the foot.
     val drawer = remember { Animatable(0f) }
     var drawerTab by remember { mutableStateOf(DrawerTab.Queue) }
+    // Where the row of play buttons ends below the top of the title: the drawer's half stop
+    // goes under it, and the player makes room for that.
+    var controlsInInfo by remember { mutableFloatStateOf(0f) }
+    val infoBox = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
     LaunchedEffect(expandedTarget) { if (!expandedTarget) drawer.snapTo(0f) }
     val queue by Playback.queue.collectAsState()
     val previous = queue.getOrNull(ui.previousIndex)?.takeIf { queue.size > 1 && it.id != t.id }
@@ -386,6 +392,27 @@ fun PlayerHost(
         // Full view: media under a 56 dp top bar; in landscape it sits left of the info.
         val navBottom = WindowInsets.navigationBars.getBottom(density).toFloat()
         val landscape = W > H
+        val useDrawer = kind == Kind.Audio && !landscape && controller != null
+        // The drawer's half stop, as music apps have it: the list takes the lower half, and the
+        // cover shrinks (down to 140 dp) so the title and the play buttons still sit above it.
+        val cover = W - px(48.dp)
+        val closedTop = H - navBottom - px(DRAWER_CLOSED)
+        val openTop = top + px(76.dp)
+        var halfTop: Float? = null
+        var squeeze = 0f
+        var halfShare: Float? = null
+        if (useDrawer && controlsInInfo > 0f) {
+            val coverTop = top + px(72.dp)
+            val minCover = min(cover, px(140.dp))
+            var want = H * 0.5f
+            var s = (coverTop + cover + px(20.dp) + controlsInInfo + px(14.dp) - want).coerceAtLeast(0f)
+            if (cover - s < minCover) { want += minCover - (cover - s); s = cover - minCover }
+            drawerHalf(closedTop, openTop, want, px(160.dp))?.let { half ->
+                halfTop = want
+                halfShare = half
+                squeeze = s * (drawer.value / half).coerceIn(0f, 1f)
+            }
+        }
         val fullMedia = when {
             immersive -> Box4(0f, 0f, W, H)
             landscape -> {
@@ -396,11 +423,10 @@ fun PlayerHost(
             // Upright videos get more of the screen; the controls still fit below.
             kind == Kind.Video -> Box4(0f, top + px(56.dp), W, min(W / ui.aspect, H * if (ui.aspect < 0.9f) 0.6f else 0.55f))
             kind == Kind.Image -> Box4(0f, top + px(56.dp), W, H - top - px(56.dp) - WindowInsets.navigationBars.getBottom(density) - px(150.dp))
-            else -> Box4(px(24.dp), top + px(72.dp), W - px(48.dp), W - px(48.dp))
+            else -> Box4(px(24.dp) + squeeze / 2f, top + px(72.dp), cover - squeeze, cover - squeeze)
         }
         val ev = e.value.coerceIn(0f, 1f)
         val media = miniMedia.towards(fullMedia, ev)
-        val useDrawer = kind == Kind.Audio && !landscape && controller != null
         SideEffect {
             videoArea = if (kind == Kind.Video && !immersive) androidx.compose.ui.geometry.Rect(fullMedia.x, fullMedia.y, fullMedia.x + fullMedia.w, fullMedia.y + fullMedia.h)
                 else androidx.compose.ui.geometry.Rect.Zero
@@ -430,7 +456,11 @@ fun PlayerHost(
                         .offset { IntOffset(0, (top + (1f - ev) * px(40.dp)).roundToInt()) }
                         .fillMaxWidth()
                         .height(56.dp)
-                        .graphicsLayer { alpha = ((ev - 0.5f) * 2f).coerceIn(0f, 1f) }
+                        .graphicsLayer {
+                            // Under the drawer's song row (on its way past the half stop) it fades out.
+                            val upper = if (!useDrawer) 0f else halfShare?.let { ((drawer.value - it) / (1f - it)).coerceIn(0f, 1f) } ?: drawer.value
+                            alpha = ((ev - 0.5f) * 2f).coerceIn(0f, 1f) * (1f - upper * 2.5f).coerceIn(0f, 1f)
+                        }
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -467,6 +497,7 @@ fun PlayerHost(
                 Column(
                     Modifier
                         .offset { IntOffset(infoX.roundToInt(), (infoY + (1f - ev) * px(60.dp)).roundToInt()) }
+                        .onPlaced { infoBox[0] = it }
                         .width(with(density) { (W - infoX).toDp() })
                         .height(with(density) { (H - infoY - navBottom - if (useDrawer) px(DRAWER_CLOSED) else 0f).coerceAtLeast(0f).toDp() })
                         .graphicsLayer { alpha = ((ev - 0.4f) / 0.6f).coerceIn(0f, 1f) }
@@ -514,6 +545,12 @@ fun PlayerHost(
                                 controller!!, ui, video = kind == Kind.Video, onFullscreen = { fullscreen = true },
                                 lyrics = if (kind == Kind.Audio) lyricsOn else null, onLyrics = { lyricsOn = !lyricsOn },
                                 onQueue = onQueue, onSleep = onSleep, drawer = useDrawer,
+                                controls = if (useDrawer) Modifier.onGloballyPositioned { row ->
+                                    val info = infoBox[0]?.takeIf { it.isAttached } ?: return@onGloballyPositioned
+                                    if (!row.isAttached) return@onGloballyPositioned
+                                    val bottom = info.localBoundingBoxOf(row, clipBounds = false).bottom
+                                    if (abs(bottom - controlsInInfo) > 1f) controlsInInfo = bottom
+                                } else Modifier,
                             )
                         }
                         Kind.Image -> {}
@@ -737,7 +774,9 @@ fun PlayerHost(
                 UpNextDrawer(
                     t, controller!!, ui, drawer, drawerTab, { drawerTab = it },
                     width = W, height = H,
-                    closedTop = H - navBottom - px(DRAWER_CLOSED), openTop = top + px(76.dp), navBottom = navBottom,
+                    closedTop = closedTop, openTop = openTop, navBottom = navBottom,
+                    halfTop = halfTop,
+                    tint = tint,
                     backEnabled = !lyricsOver,
                     onEditLyrics = { onEditLyrics(t) }, onLyricsFullscreen = { lyricsFull = true },
                 )

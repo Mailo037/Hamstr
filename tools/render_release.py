@@ -12,17 +12,19 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.12"
+VERSION = "0.10.13"
 FEATURES = [
-    ("MINI PLAYER & SONG QUEUE", "Shrinks to the bottom left, skips between songs"),
-    ("KEEP WHAT PLAYS & SWIPE COVERS", "Stash a stream from another Hamstr, swipe covers"),
+    ("QUEUE & LYRICS IN TWO STEPS", "Half under the controls, or all the way up"),
+    ("CLEAN COVER SWIPES", "The next cover slides in without a flicker"),
+    ("HEADPHONES, ASSISTANTS, VOLUME", "Buttons that answer, volume that steps"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
 # A panel_*.png (a transparent picture of its own, not a phone) sits on the right as it is.
 # 0.10.0 to 0.10.11: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
-SHOTS = [("desktop_cast_devices.png", "Desktop"), ("phone_cast_player.png", "Play on")]
+# 0.10.13: emulator screenshots of the song player with the drawer closed, half and all the way up.
+SHOTS = [("phone_sheet_half.png", "Half"), ("phone_sheet_full.png", "Full"), ("phone_sheet_closed.png", "Closed")]
 
 
 def sharing_panel(shots):

@@ -107,8 +107,9 @@ internal fun Transport(
     onQueue: () -> Unit,
     onSleep: () -> Unit,
     drawer: Boolean = false,
+    controls: Modifier = Modifier,
 ) {
-    if (!video && lyrics != null) return SongTransport(controller, ui, lyrics, onLyrics, onQueue, onSleep, drawer)
+    if (!video && lyrics != null) return SongTransport(controller, ui, lyrics, onLyrics, onQueue, onSleep, drawer, controls)
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val queue by Playback.queue.collectAsState()
@@ -486,6 +487,8 @@ internal fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: Player
 internal fun rememberCoverColor(url: String?): Color {
     val c = Hamstr.colors
     val bitmap = rememberImage(url, 96)
+    // While the next song's picture loads, the last colour stays (not a grey blink in between).
+    val held = remember { arrayOfNulls<Color>(1) }
     val target = remember(bitmap) {
         bitmap?.let { b ->
             val hsv = FloatArray(3)
@@ -495,7 +498,8 @@ internal fun rememberCoverColor(url: String?): Color {
             Color(android.graphics.Color.HSVToColor(hsv))
         }
     }
-    return animateColorAsState(target ?: c.overlay, tween(600), label = "coverColor").value
+    val shown = target?.also { held[0] = it } ?: if (url != null) held[0] else null
+    return animateColorAsState(shown ?: c.overlay, tween(600), label = "coverColor").value
 }
 
 /**
@@ -503,16 +507,17 @@ internal fun rememberCoverColor(url: String?): Color {
  * play, next and repeat in one row. Under it, upright with the [drawer] (where the queue and
  * the lyrics are pulled up from), the sleep timer, speed and equalizer sit centred as three
  * chips; otherwise sleep and speed are on the left, lyrics, equalizer, cast and the queue on
- * the right. A lit mode is accent.
+ * the right. A lit mode is accent. [controls] goes on the row of buttons (the drawer's half
+ * stop sits under it).
  */
 @Composable
-internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onLyrics: () -> Unit, onQueue: () -> Unit, onSleep: () -> Unit, drawer: Boolean = false) {
+internal fun SongTransport(controller: Player, ui: PlayerUi, lyrics: Boolean, onLyrics: () -> Unit, onQueue: () -> Unit, onSleep: () -> Unit, drawer: Boolean = false, controls: Modifier = Modifier) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val queue by Playback.queue.collectAsState()
     Scrubber(controller, ui)
     Spacer(Modifier.height(10.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().then(controls), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         ModeButton(Res.drawable.ic_shuffle, stringResource(R.string.player_shuffle), on = ui.shuffle, enabled = queue.size > 1) {
             haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             controller.shuffleModeEnabled = !ui.shuffle

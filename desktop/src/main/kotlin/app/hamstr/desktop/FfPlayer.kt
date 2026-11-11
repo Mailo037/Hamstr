@@ -247,6 +247,7 @@ class FfPlayer internal constructor(
             val l = line ?: return
             val buf = ByteArray(8192)
             val eq = app.hamstr.audio.SoundChain(RATE, 2)
+            var gain = gainFor(_volume.value)
             p.inputStream.use { input ->
                 var carry = 0
                 while (active()) {
@@ -259,7 +260,10 @@ class FfPlayer internal constructor(
                     carry = total - count
                     if (count == 0) continue
                     eq.process16(buf, 0, count)
-                    scalePcm16(buf, count, _volume.value)
+                    // A new level glides in over this buffer instead of stepping (no click).
+                    val next = gainFor(_volume.value)
+                    scalePcm16(buf, count, gain, next)
+                    gain = next
                     var written = 0
                     while (written < count && active()) {
                         waitWhilePaused()
@@ -382,6 +386,34 @@ class FfPlayer internal constructor(
         private const val RATE = 48_000
         private const val FPS = 30
         private val infoCache = InfoCache()
+
+        /**
+         * The volume slider's place (0..1) as a gain. Loudness is heard in decibels: as a
+         * straight gain, half way was only 6 dB down and everything below that crowded into the
+         * last few percent, so it was loud or silent. Cubed, half way is 18 dB down, a quarter
+         * 36 dB, and every step of the slider sounds like a step.
+         */
+        internal fun gainFor(level: Float): Float {
+            val v = if (level.isFinite()) level.coerceIn(0f, 1f) else 1f
+            return v * v * v
+        }
+
+        /** [scalePcm16] with the gain moving from [from] to [to] across the stereo frames. */
+        internal fun scalePcm16(bytes: ByteArray, count: Int, from: Float, to: Float) {
+            if (from == to) return scalePcm16(bytes, count, to)
+            val frames = count / 4
+            if (frames == 0) return
+            for (f in 0 until frames) {
+                val g = from + (to - from) * (f + 1) / frames
+                for (c in 0 until 2) {
+                    val i = f * 4 + c * 2
+                    val sample = ((bytes[i].toInt() and 0xff) or (bytes[i + 1].toInt() shl 8)).toShort()
+                    val scaled = (sample * g).toInt()
+                    bytes[i] = scaled.toByte()
+                    bytes[i + 1] = (scaled shr 8).toByte()
+                }
+            }
+        }
 
         /** Gain in PCM works even on audio devices without a MASTER_GAIN control. */
         internal fun scalePcm16(bytes: ByteArray, count: Int, volume: Float) {

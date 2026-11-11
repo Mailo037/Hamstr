@@ -88,10 +88,7 @@ object VoiceSearch {
     /** [find] over what Hamstr has now: finished files that are still there, and every playlist. */
     fun inLibrary(query: String?, extras: Bundle? = null): Hit? {
         val tasks = DownloadStore.tasks.value
-        val library = tasks.filter { t ->
-            t.status == Status.Done && !t.hidden && kindOf(t).let { it == Kind.Audio || it == Kind.Video } &&
-                t.filePath?.let(::File)?.isFile == true
-        }
+        val library = playable(tasks)
         val playlists = Playlists.all(tasks, Playlists.lists.value).map { it.name to it.items }
         val focus = when (extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)) {
             MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE -> Focus.Artist
@@ -106,6 +103,12 @@ object VoiceSearch {
             album = extras?.getString(MediaStore.EXTRA_MEDIA_ALBUM) ?: extras?.getString("android.intent.extra.playlist"),
             title = extras?.getString(MediaStore.EXTRA_MEDIA_TITLE),
         )
+    }
+
+    /** The finished songs and videos whose files are still there. */
+    fun playable(tasks: List<DownloadTask> = DownloadStore.tasks.value): List<DownloadTask> = tasks.filter { t ->
+        t.status == Status.Done && !t.hidden && kindOf(t).let { it == Kind.Audio || it == Kind.Video } &&
+            t.filePath?.let(::File)?.isFile == true
     }
 
     /** 100 for the same words, less the fewer of the said words the name has. */

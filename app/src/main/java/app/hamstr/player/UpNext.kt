@@ -23,6 +23,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +46,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.graphics.lerp
+import kotlin.math.abs
 import androidx.media3.common.Player
 import app.hamstr.R
 import app.hamstr.data.DownloadTask
@@ -60,15 +68,26 @@ import kotlin.math.roundToInt
 /** How tall the closed drawer is above the navigation bar: its grip and its tabs. */
 internal val DRAWER_CLOSED = 56.dp
 
+/**
+ * The drawer's half stop as a share of the way up from [closedTop] to [openTop], for a top
+ * edge at [halfTop]; null where either half would leave less than [minRoom] (half of it above).
+ */
+internal fun drawerHalf(closedTop: Float, openTop: Float, halfTop: Float, minRoom: Float): Float? =
+    if (halfTop < closedTop - minRoom && halfTop > openTop + minRoom / 2) (closedTop - halfTop) / (closedTop - openTop).coerceAtLeast(1f) else null
+
 /** What the drawer shows when pulled up. */
 internal enum class DrawerTab { Queue, Lyrics }
 
 /**
  * The song player's drawer on an upright phone, as in music apps: closed it is a grip with
- * two tabs at the foot of the player, the queue and the lyrics. Pulled up (or a tab tapped)
- * it covers the player, with the song shrunk to one row above it: its picture, title and
- * play. Pulled down, a tap on that row or Back put it away again. [open] runs from 0 (closed)
- * to 1; [closedTop] and [openTop] are where its top edge sits then, in pixels.
+ * two tabs at the foot of the player, the queue and the lyrics. It stops twice on the way up:
+ * half open its top sits under the play buttons, so the song stays in sight and in reach above
+ * the list; all the way up it covers the player, with the song shrunk to one row above it (its
+ * picture, title and play). A tab tapped while closed opens it halfway; a tap on the song's
+ * row, Back or a pull down put it away again. [open] runs from 0 (closed) to 1 (full);
+ * [closedTop], [halfTop] and [openTop] are where its top edge sits then, in pixels. Without
+ * room for a useful half ([halfTop] null or too close to either end) it has two stops. It and
+ * the song's row take the cover's [tint].
  */
 @Composable
 internal fun UpNextDrawer(
@@ -86,6 +105,8 @@ internal fun UpNextDrawer(
     backEnabled: Boolean,
     onEditLyrics: () -> Unit,
     onLyricsFullscreen: () -> Unit,
+    halfTop: Float? = null,
+    tint: Color = Hamstr.colors.overlay,
 ) {
     val c = Hamstr.colors
     val density = LocalDensity.current
@@ -94,46 +115,89 @@ internal fun UpNextDrawer(
     val settle = spring<Float>(dampingRatio = 0.86f, stiffness = 420f)
     val p = open.value.coerceIn(0f, 1f)
     val travel = (closedTop - openTop).coerceAtLeast(1f)
+    val half = halfTop?.let { drawerHalf(closedTop, openTop, it, with(density) { 160.dp.toPx() }) }
+    val stops = listOfNotNull(0f, half, 1f)
+    val firstStop = half ?: 1f
+    // From the half stop up: how far towards full it is (the song's row comes in on that leg).
+    val upper = if (half == null) p else ((p - half) / (1f - half)).coerceIn(0f, 1f)
     fun to(target: Float) {
-        if ((target > 0.5f) != (open.value > 0.5f)) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+        if (abs(target - open.value) > 0.02f) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
         scope.launch { open.animateTo(target, settle) }
     }
-    BackHandler(enabled = backEnabled && p > 0.5f) { to(0f) }
-    // Up or down anywhere on the drawer's own parts moves it with the finger; let go, it
-    // goes the way it was flung, or to the nearer end.
+    BackHandler(enabled = backEnabled && p > firstStop / 2f) { to(0f) }
+    // Up or down anywhere on the drawer's own parts moves it with the finger; let go, it goes
+    // one stop on from [from] the way it was flung, or to the nearest one.
+    val currentStops by rememberUpdatedState(stops)
+    fun release(v: Float, from: Float) {
+        val s = currentStops
+        to(
+            when {
+                v < -1200f -> s.firstOrNull { it > from + 0.01f } ?: s.last()
+                v > 1200f -> s.lastOrNull { it < from - 0.01f } ?: s.first()
+                else -> s.minBy { abs(it - open.value) }
+            },
+        )
+    }
+    // The list (and the lyrics) move the drawer too, as a sheet does: pushed up, it first opens
+    // all the way, then scrolls; pulled down from its top, it comes down with the finger.
+    val nested = remember(travel) {
+        object : NestedScrollConnection {
+            fun move(dy: Float): Float {
+                val before = open.value
+                val next = (before - dy / travel).coerceIn(0f, 1f)
+                scope.launch { open.snapTo(next) }
+                return (before - next) * travel
+            }
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset =
+                if (source == NestedScrollSource.UserInput && available.y < 0f && open.value < 1f) Offset(0f, move(available.y)) else Offset.Zero
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+                if (source == NestedScrollSource.UserInput && available.y > 0f && open.value > 0f) Offset(0f, move(available.y)) else Offset.Zero
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                // Left between two stops, it settles; at a stop the list keeps the fling.
+                if (currentStops.all { abs(it - open.value) > 0.004f }) {
+                    release(available.y, open.value)
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
     val drag = Modifier.pointerInput(travel) {
         val tracker = VelocityTracker()
         var total = 0f
+        var from = 0f
         detectVerticalDragGestures(
-            onDragStart = { tracker.resetTracking(); total = 0f },
+            onDragStart = { tracker.resetTracking(); total = 0f; from = open.value },
             onVerticalDrag = { change, dy ->
                 change.consume()
                 total += dy
                 tracker.addPosition(change.uptimeMillis, Offset(0f, total))
                 scope.launch { open.snapTo((open.value - dy / travel).coerceIn(0f, 1f)) }
             },
-            onDragEnd = {
-                val v = tracker.calculateVelocity().y
-                to(when { v < -1200f -> 1f; v > 1200f -> 0f; open.value > 0.5f -> 1f; else -> 0f })
-            },
-            onDragCancel = { to(if (open.value > 0.5f) 1f else 0f) },
+            onDragEnd = { release(tracker.calculateVelocity().y, from) },
+            onDragCancel = { to(currentStops.minBy { abs(it - open.value) }) },
         )
     }
     val px = { v: Float -> with(density) { v.toDp() } }
+    val sheet = lerp(c.overlay, tint, 0.28f)
+    val head = lerp(c.canvas, tint, 0.38f)
 
     // The song in one row, where the top bar and the cover were.
-    if (p > 0.01f) {
+    if (upper > 0.01f) {
         Box(
             Modifier
                 .width(px(width))
                 .height(px(openTop))
-                .graphicsLayer { alpha = ((p - 0.4f) / 0.6f).coerceIn(0f, 1f) }
-                .background(c.canvas)
+                // The ground comes first and hides the top bar under it; the row follows.
+                .background(head.copy(alpha = (upper * 2.5f).coerceIn(0f, 1f)))
                 .then(drag)
                 .pressable({ to(0f) }, label = stringResource(R.string.player_now_playing)),
             contentAlignment = Alignment.BottomStart,
         ) {
-            Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, bottom = 10.dp)) {
+            Column(
+                Modifier.fillMaxWidth().graphicsLayer { alpha = ((upper - 0.4f) / 0.6f).coerceIn(0f, 1f) }
+                    .padding(start = 20.dp, end = 12.dp, bottom = 10.dp),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(c.black)) {
                         AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(44.dp))
@@ -152,6 +216,8 @@ internal fun UpNextDrawer(
         }
     }
 
+    // Up to the first stop the drawer's contents come in; past it they are all there.
+    val shown = (p / firstStop).coerceIn(0f, 1f)
     val top = lerp(closedTop, openTop, p)
     Column(
         Modifier
@@ -159,7 +225,7 @@ internal fun UpNextDrawer(
             .width(px(width))
             .height(px(height - top))
             .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
-            .background(c.overlay)
+            .background(lerp(c.overlay, sheet, shown))
             .then(drag),
     ) {
         Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
@@ -168,15 +234,15 @@ internal fun UpNextDrawer(
         Row(Modifier.fillMaxWidth().height(DRAWER_CLOSED - 12.dp).padding(horizontal = 12.dp)) {
             listOf(DrawerTab.Queue to R.string.queue_title, DrawerTab.Lyrics to R.string.lyrics).forEach { (which, label) ->
                 // The open tab is lit; closed, neither is.
-                val lit = animateSelection(which == tab) * p
+                val lit = animateSelection(which == tab) * shown
                 Box(
                     Modifier.weight(1f).fillMaxSize().pressable({
                         onTab(which)
-                        if (open.value < 0.5f) to(1f)
+                        if (open.value < firstStop / 2f) to(firstStop)
                     }, label = stringResource(label)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Txt(stringResource(label), style = Hamstr.type.bodyMedium, color = androidx.compose.ui.graphics.lerp(c.muted, c.ink, lit))
+                    Txt(stringResource(label), style = Hamstr.type.bodyMedium, color = lerp(c.muted, c.ink, lit))
                     Box(
                         Modifier.align(Alignment.BottomCenter).size(width = 40.dp, height = 2.dp)
                             .graphicsLayer { alpha = lit }.clip(CircleShape).background(c.accent),
@@ -188,11 +254,12 @@ internal fun UpNextDrawer(
             Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .graphicsLayer { alpha = p }
+                .graphicsLayer { alpha = shown }
+                .nestedScroll(nested)
                 .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = px(navBottom) + 8.dp),
         ) {
             when (tab) {
-                DrawerTab.Queue -> QueueTab(controller, ui)
+                DrawerTab.Queue -> QueueTab(controller, ui, tint)
                 DrawerTab.Lyrics -> Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(16.dp))) {
                     LyricsPanel(t, controller, ui, onEdit = onEditLyrics, onFullscreen = onLyricsFullscreen)
                 }
@@ -203,7 +270,7 @@ internal fun UpNextDrawer(
 
 /** The queue in the drawer: where it stands, shuffle and repeat, then its rows. */
 @Composable
-private fun androidx.compose.foundation.layout.ColumnScope.QueueTab(controller: Player, ui: PlayerUi) {
+private fun androidx.compose.foundation.layout.ColumnScope.QueueTab(controller: Player, ui: PlayerUi, tint: Color) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val queue by Playback.queue.collectAsState()
@@ -221,5 +288,6 @@ private fun androidx.compose.foundation.layout.ColumnScope.QueueTab(controller: 
         RepeatButton(controller, ui, queue.size)
     }
     Spacer(Modifier.height(4.dp))
-    QueueList(fill = true, onClose = {})
+    // Rows lie on the tinted drawer; the song that plays is lit in the cover's colour.
+    QueueList(fill = true, onClose = {}, rowColor = Color.Transparent, nowColor = lerp(c.surface, tint, 0.55f))
 }

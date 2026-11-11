@@ -50,6 +50,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -274,7 +277,9 @@ internal fun Modifier.aspectFit(aspect: Float): Modifier = this.layout { measura
 /**
  * Audio cover: the thumbnail; tap it and it dissolves into ASCII (and back).
  * Swiping left or right on the expanded cover skips to the next or previous song,
- * sliding the neighbour's cover in beside it.
+ * sliding the neighbour's cover in beside it. The neighbour stays where it slid in until the
+ * player has moved on, and its picture is kept, so the new song's cover is there at once
+ * instead of the old one coming back or a black frame while it loads again.
  */
 @Composable
 internal fun Cover(
@@ -285,9 +290,15 @@ internal fun Cover(
     onPrevious: (() -> Unit)? = null,
     onNext: (() -> Unit)? = null,
 ) {
-    val bitmap = rememberImage(t.thumbnail, 720)
-    val prevBitmap = rememberImage(previous?.thumbnail, 720)
-    val nextBitmap = rememberImage(next?.thumbnail, 720)
+    // The three pictures by address: after a skip the new song's is the one that just slid in.
+    val pictures = remember { HashMap<String, ImageBitmap>() }
+    fun kept(url: String?, loaded: ImageBitmap?): ImageBitmap? =
+        if (url == null) null else loaded?.also { pictures[url] = it } ?: pictures[url]
+    val bitmap = kept(t.thumbnail, rememberImage(t.thumbnail, 720))
+    val prevBitmap = kept(previous?.thumbnail, rememberImage(previous?.thumbnail, 720))
+    val nextBitmap = kept(next?.thumbnail, rememberImage(next?.thumbnail, 720))
+    pictures.keys.retainAll(setOfNotNull(t.thumbnail, previous?.thumbnail, next?.thumbnail))
+    val id by rememberUpdatedState(t.id)
     val reveal = remember(t.id) { Animatable(1f) }
     val swipeX = remember(t.id) { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -338,7 +349,7 @@ internal fun Cover(
                                     scope.launch {
                                         swipeX.animateTo(-w, Specs.leave(200))
                                         goNext()
-                                        swipeX.snapTo(0f)
+                                        settleAfterSkip(swipeX) { id }
                                     }
                                 }
                                 goPrev != null && (swipeX.value > w * 0.25f || (vx > 1200f && swipeX.value > 0f)) -> {
@@ -346,7 +357,7 @@ internal fun Cover(
                                     scope.launch {
                                         swipeX.animateTo(w, Specs.leave(200))
                                         goPrev()
-                                        swipeX.snapTo(0f)
+                                        settleAfterSkip(swipeX) { id }
                                     }
                                 }
                                 else -> scope.launch { swipeX.animateTo(0f, Specs.settle()) }
@@ -387,6 +398,17 @@ internal fun Cover(
             )
         }
     }
+}
+
+/**
+ * After a swipe skipped, the slid-out cover waits for the player to change songs (a new song
+ * brings a fresh [swipeX]), so the old cover doesn't flash back in between; only if the song
+ * stays (the skip went nowhere) it comes back after a moment.
+ */
+private suspend fun settleAfterSkip(swipeX: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>, id: () -> String) {
+    val before = id()
+    kotlinx.coroutines.withTimeoutOrNull(1_500) { snapshotFlow(id).first { it != before } }
+    if (id() == before) swipeX.animateTo(0f, Specs.settle())
 }
 
 /** Image viewer with pinch-zoom and pan. */

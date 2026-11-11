@@ -39,6 +39,7 @@ import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -236,12 +237,16 @@ private fun DrawScope.drawCover(image: ImageBitmap, alpha: Float = 1f) {
     val s = max(size.width / image.width, size.height / image.height)
     val w = image.width * s
     val h = image.height * s
+    // Rounded outwards: cut down to whole pixels, the picture left a hairline of the black
+    // ground at its edge, which shimmered while a cover slid.
+    val x = floor((size.width - w) / 2)
+    val y = floor((size.height - h) / 2)
     drawImage(
         image,
         srcOffset = IntOffset.Zero,
         srcSize = IntSize(image.width, image.height),
-        dstOffset = IntOffset(((size.width - w) / 2).toInt(), ((size.height - h) / 2).toInt()),
-        dstSize = IntSize(w.toInt(), h.toInt()),
+        dstOffset = IntOffset(x.toInt(), y.toInt()),
+        dstSize = IntSize(ceil(size.width - 2 * x).toInt(), ceil(size.height - 2 * y).toInt()),
         alpha = alpha,
     )
 }
