@@ -38,6 +38,7 @@ import app.hamstr.engine.EngineState
 import app.hamstr.res.*
 import app.hamstr.ui.components.Group
 import app.hamstr.ui.components.IconButton
+import app.hamstr.ui.components.LocalDesktop
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.HamstrTheme
@@ -140,7 +141,8 @@ class ReleaseScreensTest {
     private fun screen(name: String, check: String, content: @Composable () -> Unit) =
         runDesktopComposeUiTest(1080, 2400) {
             setContent {
-                CompositionLocalProvider(LocalDensity provides Density(2.625f)) {
+                // A phone's screen: rows swipe and show their menu button, as on the phone.
+                CompositionLocalProvider(LocalDensity provides Density(2.625f), LocalDesktop provides false) {
                     HamstrTheme {
                         Box(Modifier.size((1080 / 2.625f).dp, (2400 / 2.625f).dp).background(Hamstr.colors.canvas).testTag("shot")) { content() }
                     }

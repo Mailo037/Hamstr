@@ -74,6 +74,7 @@ import androidx.core.content.ContextCompat
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.Downloads
 import app.hamstr.data.DownloadFiles
+import app.hamstr.data.PendingCancel
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalConfiguration
 import app.hamstr.data.Prefs
@@ -97,6 +98,7 @@ import kotlinx.coroutines.launch
 import app.hamstr.ui.LibraryScreen
 import app.hamstr.ui.SettingsScreen
 import app.hamstr.ui.ShareSheet
+import app.hamstr.ui.STASHED_HOLD_MS
 import app.hamstr.ui.ShareContent
 import app.hamstr.ui.AndroidSharingSheet
 import app.hamstr.ui.DeviceSheet
@@ -268,8 +270,11 @@ internal enum class Tab(val label: Int, val icon: DrawableResource) {
 /** A channel to show in the follow sheet: its name, its link if known, or the download to find it from. */
 internal data class FollowFor(val name: String?, val link: String?, val task: DownloadTask? = null)
 
-/** A short message at the bottom, optionally with one action (Undo, Open, Retry). */
-internal data class Snack(val text: String, val action: String? = null, val id: Long = System.nanoTime(), val run: (() -> Unit)? = null)
+/**
+ * A short message at the bottom (at the top while a sheet is open), optionally with one action
+ * (Undo, Open, Retry). [hold] is how long it stays, when not the usual.
+ */
+internal data class Snack(val text: String, val action: String? = null, val id: Long = System.nanoTime(), val hold: Long? = null, val run: (() -> Unit)? = null)
 
 @Composable
 private fun App(inPip: Boolean) {
@@ -313,8 +318,9 @@ private fun App(inPip: Boolean) {
     var queueSheet by rememberSaveable { mutableStateOf(false) }
     var sleepSheet by rememberSaveable { mutableStateOf(false) }
     var lyricsFor by remember { mutableStateOf<DownloadTask?>(null) }
-    // Hidden files live in Settings > Hidden only.
-    val visible = remember(tasks) { tasks.filterNot { it.hidden } }
+    // Hidden files live in Settings > Hidden only; a canceled download is gone while Undo can still bring it back.
+    val canceling by PendingCancel.pending.collectAsState()
+    val visible = remember(tasks, canceling) { tasks.filterNot { it.hidden || it.id in canceling } }
     fun library() = DownloadStore.tasks.value.filter { it.status == Status.Done && !it.hidden }
     fun hint(text: String) { snack = Snack(text) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -457,8 +463,24 @@ private fun App(inPip: Boolean) {
 
     LaunchedEffect(snack?.id) {
         val s = snack ?: return@LaunchedEffect
-        delay(if (s.action != null) DownloadFiles.UNDO_MS else 2600)
+        delay(s.hold ?: if (s.action != null) DownloadFiles.UNDO_MS else 2600)
         if (snack?.id == s.id) snack = null
+    }
+    // A download canceled anywhere in the app waits a moment before it really goes, behind Undo.
+    LaunchedEffect(resources) {
+        PendingCancel.requests.collect { t ->
+            snack = Snack(resources.getString(R.string.snack_canceled), resources.getString(R.string.undo), hold = PendingCancel.UNDO_MS) {
+                PendingCancel.undo(t.id)
+            }
+        }
+    }
+    // The player closed by hand (flung down, Close player) keeps what it held for as long as Undo shows.
+    LaunchedEffect(resources) {
+        Playback.closed.collect { kept ->
+            snack = Snack(resources.getString(R.string.player_closed), resources.getString(R.string.undo)) {
+                scope.launch { Playback.reopen(context, kept) }
+            }
+        }
     }
 
     // The clipboard is only readable once the window has focus.
@@ -552,12 +574,15 @@ private fun App(inPip: Boolean) {
                 )
             }
         }
+        // The pill on the tabs moves with the pages, under a swipe as on a tap.
+        val pagePosition = { pager.currentPage + pager.currentPageOffsetFraction }
         if (landscape) {
             // One panel from top to bottom: the tabs up top, the mini player at its foot.
             SideTabs(
                 tab, { tab = it },
                 Modifier.padding(start = sideStart, top = top + 8.dp, bottom = bottom + 12.dp).width(SIDEBAR).fillMaxHeight()
                     .clip(RoundedCornerShape(22.dp)).background(c.overlay).padding(5.dp),
+                position = pagePosition,
             )
             if (!inPip) PlayerHost(
                 miniBottom = bottom + 9.dp, inPip = false, onMenu = { if (mine(it)) menuFor = it }, onQuality = { if (mine(it)) qualityFor = it },
@@ -567,43 +592,13 @@ private fun App(inPip: Boolean) {
                 miniStart = sideStart + 5.dp, miniWidth = SIDEBAR - 10.dp,
             )
         } else {
-            TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp))
+            TabBar(tab, { tab = it }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 12.dp), position = pagePosition)
             if (!inPip) PlayerHost(
                 miniBottom = bottom + 78.dp, inPip = false, onMenu = { if (mine(it)) menuFor = it }, onQuality = { if (mine(it)) qualityFor = it },
                 onShare = { if (mine(it)) share(listOf(it)) }, onArtist = { followFor = FollowFor(it.uploader?.let(app.hamstr.data.Lyrics::cleanArtist), it.channelUrl, it) },
                 onQueue = { queueSheet = true }, onSleep = { sleepSheet = true }, onEditLyrics = { if (mine(it)) lyricsFor = it },
                 onDownloadedRemote = { hint(resources.getString(R.string.import_done_one)) },
             )
-        }
-
-        AnimatedVisibility(
-            snack != null,
-            enter = slideInVertically { it / 2 } + fadeIn(),
-            exit = slideOutVertically { it / 2 } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(
-                start = 16.dp + contentStart, end = 16.dp + contentEnd,
-                bottom = if (landscape) 16.dp else 96.dp + if (playing != null) miniRoom else 0.dp,
-            ),
-        ) {
-            var shown by remember { mutableStateOf(snack) }
-            snack?.let { shown = it }
-            shown?.let { s ->
-                Row(
-                    // A screen reader says the message as it comes, without moving away from where it is.
-                    Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-                        .clip(RoundedCornerShape(14.dp)).background(c.raised).padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 40.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Txt(s.text, style = Hamstr.type.small, modifier = Modifier.weight(1f, fill = false).padding(end = 10.dp, top = 6.dp, bottom = 6.dp))
-                    if (s.action != null) {
-                        Box(
-                            Modifier.clip(RoundedCornerShape(10.dp)).clickable { s.run?.invoke(); snack = null }
-                                .heightIn(min = 40.dp).padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) { Txt(s.action, style = Hamstr.type.button, color = c.accent) }
-                    } else Spacer(Modifier.width(10.dp))
-                }
-            }
         }
 
         var lastOffered by remember { mutableStateOf(offered) }
@@ -698,10 +693,15 @@ private fun App(inPip: Boolean) {
                 onFollow = { url -> addSheet = false; follow(url) },
             )
         }
-        val stashed = {
-            sheetUrl = null
-            tab = Tab.Stash
-            if (NotifyAsk.due(context)) notifyAsk = true
+        // After a stash the sheet shows its "in the stash" for a moment ([hold]), then leaves for the stash.
+        fun stashed(hold: Boolean) {
+            val from = sheetUrl
+            val leave = {
+                if (sheetUrl == from) sheetUrl = null
+                tab = Tab.Stash
+                if (NotifyAsk.due(context)) notifyAsk = true
+            }
+            if (hold) scope.launch { delay(STASHED_HOLD_MS); leave() } else leave()
         }
         Overlay(visible = followFor != null, onDismiss = { followFor = null }) {
             followFor?.let { f ->
@@ -720,11 +720,11 @@ private fun App(inPip: Boolean) {
             sheetUrl?.let { url ->
                 ShareSheet(
                     url,
-                    onStash = { link, info, choice -> DownloadService.stash(context, link, info, choice); stashed() },
-                    onBatchQueued = { stashed() },
+                    onStash = { link, info, choice -> DownloadService.stash(context, link, info, choice); stashed(hold = true) },
+                    onBatchQueued = { stashed(hold = false) },
                     onDismiss = { sheetUrl = null },
                     onOpen = { t -> sheetUrl = null; play(t, library()) },
-                    onStashVersion = { of, choice -> DownloadService.stashVersion(context, of, choice, replace = false); stashed() },
+                    onStashVersion = { of, choice -> DownloadService.stashVersion(context, of, choice, replace = false); stashed(hold = true) },
                     onSend = { link, title -> sheetUrl = null; sharing = ShareContent(link, title) },
                 )
             }
@@ -820,6 +820,30 @@ private fun App(inPip: Boolean) {
                 onClose = { updateSheet = false },
             )
         }
+
+        // The snack goes over the sheets, so what a sheet says (copied, deleted · Undo) shows while
+        // it is open. With a sheet up it hangs from the top, clear of the sheet's buttons.
+        val sheetOpen = (queueSheet || eqSheet) && playing != null || castSheet || sleepSheet || lyricsFor != null ||
+            playlistFor != null || playlistMenu != null || addToList != null || newList != null || renameList != null ||
+            addSheet || followFor != null || sheetUrl != null || notifyAsk || menuFor != null || renameFor != null ||
+            infoFor != null || qualityFor != null || deviceFor != null || sharing != null || request != null || updateSheet
+        val dismissSnack = { snack = null }
+        AnimatedVisibility(
+            snack != null && !sheetOpen,
+            enter = slideInVertically { it / 2 } + fadeIn(),
+            exit = slideOutVertically { it / 2 } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(
+                start = 16.dp + contentStart, end = 16.dp + contentEnd,
+                bottom = if (landscape) 16.dp else 96.dp + if (playing != null) miniRoom else 0.dp,
+            ),
+        ) { SnackBar(snack, dismissSnack) }
+        AnimatedVisibility(
+            snack != null && sheetOpen,
+            enter = slideInVertically { -it } + fadeIn(),
+            exit = slideOutVertically { -it } + fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 16.dp + contentStart, end = 16.dp + contentEnd),
+        ) { SnackBar(snack, dismissSnack) }
+
         TourOverlay(touring && !inPip, onDone = { TourGate.done(); touring = false; tab = Tab.Stash })
         if (!introDone) Intro(onDone = { introDone = true })
         // Always cover the entire app in PiP, even if playback stops during the transition.
@@ -830,3 +854,27 @@ private fun App(inPip: Boolean) {
 
 /** A download of this phone's, not what another Hamstr plays here ("Play on"), which has no menu. */
 private fun mine(t: DownloadTask) = !t.id.startsWith(app.hamstr.cast.HamstrCast.REMOTE)
+
+/** The snack's pill: one line and at most one action in accent. It keeps the last message while it leaves. */
+@Composable
+private fun SnackBar(snack: Snack?, onDone: () -> Unit) {
+    val c = Hamstr.colors
+    var shown by remember { mutableStateOf(snack) }
+    snack?.let { shown = it }
+    val s = shown ?: return
+    Row(
+        // A screen reader says the message as it comes, without moving away from where it is.
+        Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            .clip(RoundedCornerShape(14.dp)).background(c.raised).padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 40.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Txt(s.text, style = Hamstr.type.small, modifier = Modifier.weight(1f, fill = false).padding(end = 10.dp, top = 6.dp, bottom = 6.dp))
+        if (s.action != null) {
+            Box(
+                Modifier.clip(RoundedCornerShape(10.dp)).clickable { s.run?.invoke(); onDone() }
+                    .heightIn(min = 40.dp).padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) { Txt(s.action, style = Hamstr.type.button, color = c.accent) }
+        } else Spacer(Modifier.width(10.dp))
+    }
+}

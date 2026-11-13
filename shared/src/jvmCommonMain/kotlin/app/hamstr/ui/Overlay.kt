@@ -116,10 +116,10 @@ fun Overlay(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> 
                                         dismiss()
                                     }
                                 } else {
-                                    scope.launch { offset.animateTo(0f, Specs.settle(), initialVelocity = v) }
+                                    scope.launch { offset.animateTo(0f, Specs.release(), initialVelocity = v) }
                                 }
                             },
-                            onDragCancel = { scope.launch { offset.animateTo(0f, Specs.settle()) } },
+                            onDragCancel = { scope.launch { offset.animateTo(0f, Specs.release()) } },
                         )
                     },
             ) { content() }

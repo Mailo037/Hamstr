@@ -17,9 +17,9 @@
     <string name="err_full">휴대폰 저장 공간이 가득 찼어요</string>
     <string name="err_full_hint">공간을 조금 비운 뒤 다시 시도해 주세요.</string>
     <string name="err_unsupported">Hamstr가 이 링크를 알지 못해요</string>
-    <string name="err_unsupported_hint">yt-dlp가 이 페이지에서 미디어를 읽을 방법이 없어요.</string>
+    <string name="err_unsupported_hint">Hamstr가 이 페이지에서 동영상이나 노래를 찾을 수 없어요.</string>
     <string name="err_drm">복사 방지가 걸린 영상이에요</string>
-    <string name="err_drm_hint">DRM으로 잠겨 있어서 저장할 수 없어요.</string>
+    <string name="err_drm_hint">사이트에서 복사를 막아 두어서 저장할 수 없어요.</string>
     <string name="err_private">비공개 영상이에요</string>
     <string name="err_private_hint">소유자나 소유자가 허용한 사람만 볼 수 있어요.</string>
     <string name="err_age">연령 제한이 있어요</string>
@@ -35,18 +35,18 @@
     <string name="err_format">해당 화질은 제공되지 않아요</string>
     <string name="err_format_hint">다른 화질을 고르거나 ‘최고’를 선택해 주세요.</string>
     <string name="err_changed">사이트가 무언가를 바꿨어요</string>
-    <string name="err_changed_hint">사이트는 수시로 바뀌어요. 최신 yt-dlp로 업데이트하면 보통 해결돼요.</string>
+    <string name="err_changed_hint">사이트는 수시로 바뀌어요. Hamstr 다운로더를 업데이트하면 보통 해결돼요.</string>
     <string name="err_ffmpeg">파일을 마무리할 수 없어요</string>
-    <string name="err_ffmpeg_hint">파일을 합치거나 변환하는 중에 FFmpeg가 멈췄어요. 다시 시도하면 보통 잘 돼요.</string>
+    <string name="err_ffmpeg_hint">파일을 만드는 중에 멈췄어요. 다시 시도하면 보통 잘 돼요.</string>
     <string name="err_details">자세히</string>
     <string name="err_copy">오류 복사</string>
     <string name="err_copied">오류를 복사했어요</string>
-    <string name="err_update_retry">yt-dlp 업데이트 &amp; 재시도</string>
-    <string name="err_updating">yt-dlp 업데이트 중 …</string>
+    <string name="err_update_retry">업데이트 후 다시 시도</string>
+    <string name="err_updating">다운로더 업데이트 중 …</string>
     <string name="err_try_again">다시 시도</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">링크 확인 중 …</string>
+    <string name="stage_resolving">링크 읽는 중 …</string>
     <string name="stage_merging">영상과 오디오 합치는 중 …</string>
     <string name="stage_extracting">오디오 변환 중 …</string>
     <string name="stage_remuxing">파일 정리 중 …</string>
@@ -78,8 +78,8 @@
     <string name="notif_timeout_text">Android는 하루 6시간 동안만 백그라운드 다운로드를 허용해요. Hamstr를 열면 다시 이어서 진행돼요.</string>
 
     <!-- Share sheet -->
-    <string name="share_sniffing">링크 분석 중 …</string>
-    <string name="share_reading_formats">형식 읽는 중 …</string>
+    <string name="share_sniffing">링크 살펴보는 중 …</string>
+    <string name="share_reading_formats">화질 찾는 중 …</string>
     <string name="share_already_here">보관함에 이미 있어요</string>
     <string name="share_already_coming">이미 저장 대기 중이에요</string>
     <string name="share_open">열기</string>
@@ -91,7 +91,7 @@
     <string name="share_format">형식</string>
     <string name="share_subtitles">자막 (%1$s)</string>
     <string name="share_audio_format">오디오 형식</string>
-    <string name="share_custom_hint">yt-dlp 형식 선택기 (-f)</string>
+    <string name="share_custom_hint">전문가용: yt-dlp 형식 코드 (-f)</string>
     <string name="share_custom_placeholder">형식 코드</string>
     <string name="share_cancel">취소</string>
     <string name="share_stash">저장하기</string>
@@ -151,9 +151,9 @@
     <string name="hidden_many">%1$d개 숨김 · 설정 › 숨김에서 찾을 수 있어요</string>
     <string name="deleted_one">파일 삭제됨</string>
     <string name="deleted_many">파일 %1$d개 삭제됨</string>
-    <string name="engine_restarting">yt-dlp를 다시 시작하는 중 …</string>
-    <string name="engine_restarted">yt-dlp가 실행 중이에요</string>
-    <string name="engine_still_broken">yt-dlp가 아직 시작되지 않아요</string>
+    <string name="engine_restarting">다운로더를 다시 시작하는 중 …</string>
+    <string name="engine_restarted">다운로더가 실행 중이에요</string>
+    <string name="engine_still_broken">다운로더가 아직 시작되지 않아요</string>
 
     <!-- File menu -->
     <string name="menu_play">Hamstr에서 재생</string>
@@ -253,8 +253,8 @@
         <item quantity="other">파일 %1$d개 저장됨</item>
     </plurals>
     <string name="stash_active">%1$d개 진행 중</string>
-    <string name="stash_engine_starting">yt-dlp 시작 중</string>
-    <string name="stash_engine_broken">yt-dlp 오류 · 탭해서 다시 시도</string>
+    <string name="stash_engine_starting">다운로더 시작 중</string>
+    <string name="stash_engine_broken">다운로더가 시작되지 않았어요 · 탭해서 다시 시도</string>
     <string name="stash_downloading">다운로드 중</string>
     <string name="stash_running">%1$d개 실행 중</string>
     <string name="stash_stashed">저장됨</string>
@@ -891,10 +891,10 @@
     <plurals name="stash_failed_all">
         <item quantity="other">다운로드 %1$d개 실패</item>
     </plurals>
-    <string name="stash_failed_update_hint">사이트가 바뀌었어요. 보통 최신 yt-dlp로 해결돼요</string>
+    <string name="stash_failed_update_hint">사이트가 바뀌었어요. 다운로더를 업데이트하면 보통 해결돼요</string>
     <string name="stash_update_retry">업데이트 &amp; 다시 시도</string>
     <string name="stash_retry_all">모두 다시 시도</string>
-    <string name="stash_updating">yt-dlp를 업데이트한 뒤 다시 시도하는 중 …</string>
+    <string name="stash_updating">다운로더를 업데이트한 뒤 다시 시도하는 중 …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">복사한 링크를 보관할까요?</string>
     <string name="clip_offer_hint">클립보드에 링크가 있어요</string>
@@ -942,4 +942,37 @@
     <string name="follow_offer_channel">이것은 채널이에요</string>
     <string name="follow_offer_playlist">이것은 재생목록이에요</string>
     <string name="follow_unfollowed">%1$s 구독을 취소했어요</string>
+    <string name="share_more">옵션 더 보기</string>
+    <string name="share_custom">사용자 지정 형식</string>
+    <string name="share_no_subs">자막 없음</string>
+    <string name="share_opens_done">완료되면 열려요</string>
+    <string name="share_open_done_needs">“다른 앱 위에 표시”가 필요해요. 설정 › 다운로드에서 허용할 수 있어요</string>
+    <string name="share_stashed">냠! 보관함에 넣었어요</string>
+    <string name="snack_canceled">다운로드를 취소했어요</string>
+    <string name="link_copied">링크를 복사했어요</string>
+    <string name="player_closed">플레이어를 닫았어요</string>
+    <string name="stash_moving">%2$d개 중 %1$d개 진행 중</string>
+    <string name="eta_left">%1$s 남음</string>
+    <string name="intro_skip">탭해서 건너뛰기</string>
+    <string name="hidden_empty_desktop">숨긴 항목이 없어요. 라이브러리에서 숨긴 파일은 여기서 기다리고, 파일은 이 컴퓨터에 남아요.</string>
+    <string name="hidden_note_desktop">숨긴 파일은 Hamstr 폴더에 남아 있어요. 클릭하면 메뉴가 열려요.</string>
+    <plurals name="tray_downloading">
+        <item quantity="other">Hamstr · %1$d개 다운로드 중</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="other">Hamstr · %1$d개 대기 중</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="other">다운로드 %1$d개 완료</item>
+    </plurals>
+    <string name="tray_failed">다운로드가 잘 안 됐어요</string>
+    <string name="drop_link">놓으면 저장해요</string>
+    <plurals name="drop_files">
+        <item quantity="other">놓으면 파일 %1$d개를 추가해요</item>
+    </plurals>
+    <string name="drop_files_some">놓으면 파일을 추가해요</string>
+    <string name="drop_no_link">링크가 없어요</string>
+    <plurals name="drop_added">
+        <item quantity="other">파일 %1$d개 추가하는 중</item>
+    </plurals>
 </resources>

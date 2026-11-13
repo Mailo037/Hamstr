@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.hamstr.Platform
+import androidx.compose.ui.focus.focusRequester
 import app.hamstr.data.Choice
 import app.hamstr.data.Prefs
 import app.hamstr.ui.components.Badge
@@ -75,11 +76,16 @@ fun AddSheet(
     val link = app.hamstr.engine.MediaLinks.find(text.text)
     val submit = { if (link != null) onStash?.invoke(link, choice) ?: onLink(link) }
 
+    // On a computer the caret waits in the field (Ctrl+N, the + button); on a phone the keyboard would cover the sheet.
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    if (Platform.desktop) androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+
     Sheet {
         SheetHeader(stringResource(Res.string.add_title), leading = { HamstrMark(36.dp) })
         Spacer(Modifier.height(16.dp))
         SheetField(
             text, { text = it }, stringResource(Res.string.add_hint), Res.drawable.ic_link,
+            modifier = Modifier.focusRequester(focus),
             mono = true,
             lit = link != null,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),

@@ -14,8 +14,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import app.hamstr.data.Prefs
+import app.hamstr.ui.STASHED_HOLD_MS
+import kotlinx.coroutines.launch
 import app.hamstr.engine.DownloadService
 import app.hamstr.nearby.PhoneNearby
 import app.hamstr.ui.NotifyAsk
@@ -59,7 +62,7 @@ class ShareActivity : ComponentActivity() {
         if (!sendOnly) askStorage(this, storagePermission::launch)
         if (!sendOnly && Prefs.settings.value.quickStash && !app.hamstr.engine.MediaLinks.needsEpisodeSelection(url)) {
             DownloadService.stash(this, url, null, Prefs.settings.value.defaultChoice())
-            Toast.makeText(this, getString(R.string.share_stashing), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.share_stashed), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -75,16 +78,24 @@ class ShareActivity : ComponentActivity() {
                     if (closing) { delay(200); finish(); overridePendingTransition(0, 0) }
                 }
                 close = { closing = true }
-                // After the stash, the sheet either closes or turns into the one-time question.
-                val stashed = { if (NotifyAsk.due(this)) asking = true else closing = true }
+                val scope = rememberCoroutineScope()
+                // After the stash, the sheet says so for a moment ([hold]), then either closes or
+                // turns into the one-time question.
+                val stashed = { hold: Boolean ->
+                    scope.launch {
+                        if (hold) delay(STASHED_HOLD_MS)
+                        if (NotifyAsk.due(this@ShareActivity)) asking = true else closing = true
+                    }
+                    Unit
+                }
                 Overlay(visible = visible && !sendOnly && !closing && !asking && sendLink == null, onDismiss = { closing = true }) {
                     ShareSheet(
                         url,
                         onStash = { link, info, choice ->
                             DownloadService.stash(this, link, info, choice)
-                            stashed()
+                            stashed(true)
                         },
-                        onBatchQueued = { stashed() },
+                        onBatchQueued = { stashed(false) },
                         onDismiss = { closing = true },
                         onOpen = { task ->
                             startActivity(
@@ -95,7 +106,7 @@ class ShareActivity : ComponentActivity() {
                         },
                         onStashVersion = { of, choice ->
                             DownloadService.stashVersion(this, of, choice, replace = false)
-                            stashed()
+                            stashed(true)
                         },
                         onSend = { link, title -> sendLink = link to title },
                     )

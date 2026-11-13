@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -286,7 +287,8 @@ internal fun Scrubber(controller: Player, ui: PlayerUi) {
                 .loopHold(hold, loop, { ui.duration }, { ui.position }, Playback::setLoop),
         ) {
             LoopBand(hold.shown(loop, ui.duration), ui.duration, Modifier.matchParentSize())
-            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(4.dp).clip(CircleShape).background(c.line))
+            // Ink at 18 % rather than the line colour: it shows on a song's cover colour as on the canvas.
+            Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(4.dp).clip(CircleShape).background(c.ink.copy(alpha = 0.18f)))
             Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(fraction.coerceIn(0f, 1f)).height(4.dp).clip(CircleShape).background(c.accent))
             Box(
                 Modifier
@@ -418,7 +420,7 @@ internal fun LyricsFullscreen(t: DownloadTask, controller: Player, ui: PlayerUi,
         Modifier
             .fillMaxSize()
             .background(c.canvas)
-            .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.9f), 0.55f to tint.copy(alpha = 0.4f), 1f to Color.Transparent))
+            .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.85f), 0.6f to tint.copy(alpha = 0.35f), 1f to Color.Transparent))
             .pointerInput(Unit) { detectTapGestures { } } // keep taps off the player below
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
@@ -471,7 +473,8 @@ internal fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: Player
                     big -> Hamstr.type.body.copy(fontSize = 19.sp, lineHeight = 28.sp)
                     else -> Hamstr.type.body.copy(fontSize = 16.sp, lineHeight = 23.sp)
                 },
-                color = if (timed) lerp(c.ghost, c.ink, p) else c.ink,
+                // Over the cover's colour (big) the lines still to come stay readable: muted, not ghost.
+                color = if (timed) lerp(if (big) c.muted else c.ghost, c.ink, p) else c.ink,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
@@ -482,7 +485,11 @@ internal fun LyricLines(lines: List<Lyrics.Line>, controller: Player, ui: Player
     }
 }
 
-/** The average colour of a cover, toned so white text stays readable on it; eases between songs. */
+/**
+ * The average colour of a cover, toned down until the app's text stays readable on it (muted
+ * at about 5:1 and ink at 10:1 on every base, where the tint is strongest); eases between songs.
+ * A near-grey cover gives the canvas, so there is no grey haze.
+ */
 @Composable
 internal fun rememberCoverColor(url: String?): Color {
     val c = Hamstr.colors
@@ -493,12 +500,16 @@ internal fun rememberCoverColor(url: String?): Color {
         bitmap?.let { b ->
             val hsv = FloatArray(3)
             android.graphics.Color.colorToHSV(android.graphics.Bitmap.createScaledBitmap(b.asAndroidBitmap(), 1, 1, true).getPixel(0, 0), hsv)
-            hsv[1] = (hsv[1] * 1.25f).coerceAtMost(0.7f)
+            // Grey on average: no tint (Unspecified stands for the canvas).
+            if (hsv[1] < 0.12f) return@let Color.Unspecified
+            hsv[1] = (hsv[1] * 1.25f).coerceAtMost(0.5f)
             hsv[2] = hsv[2].coerceIn(0.3f, 0.55f)
+            // Yellow, green and cyan are bright at the same value; darken until the luminance is low enough.
+            while (hsv[2] > 0.15f && Color(android.graphics.Color.HSVToColor(hsv)).luminance() > 0.045f) hsv[2] = (hsv[2] - 0.02f).coerceAtLeast(0.15f)
             Color(android.graphics.Color.HSVToColor(hsv))
         }
     }
-    val shown = target?.also { held[0] = it } ?: if (url != null) held[0] else null
+    val shown = target?.let { if (it == Color.Unspecified) c.canvas else it }?.also { held[0] = it } ?: if (url != null) held[0] else null
     return animateColorAsState(shown ?: c.overlay, tween(600), label = "coverColor").value
 }
 

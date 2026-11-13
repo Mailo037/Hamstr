@@ -17,9 +17,9 @@
     <string name="err_full">De telefoon is vol</string>
     <string name="err_full_hint">Maak wat ruimte vrij en probeer het opnieuw.</string>
     <string name="err_unsupported">Hamstr kent deze link niet</string>
-    <string name="err_unsupported_hint">yt-dlp kan geen media van deze pagina lezen.</string>
+    <string name="err_unsupported_hint">Hamstr vindt op deze pagina geen video of nummer.</string>
     <string name="err_drm">Deze is kopieerbeveiligd</string>
-    <string name="err_drm_hint">Hij is vergrendeld met DRM, dus hij kan niet worden opgeslagen.</string>
+    <string name="err_drm_hint">De site beschermt het tegen kopiëren, dus het kan niet worden opgeslagen.</string>
     <string name="err_private">Deze is privé</string>
     <string name="err_private_hint">Alleen de eigenaar, of de mensen die hij toestaat, kan hem zien.</string>
     <string name="err_age">Leeftijdsbeperkt</string>
@@ -35,18 +35,18 @@
     <string name="err_format">Die kwaliteit wordt niet aangeboden</string>
     <string name="err_format_hint">Kies een andere kwaliteit, of Beste.</string>
     <string name="err_changed">De site heeft iets veranderd</string>
-    <string name="err_changed_hint">Sites veranderen constant. Een nieuwere yt-dlp lost dit meestal op.</string>
+    <string name="err_changed_hint">Sites veranderen constant. Een update van de downloader van Hamstr lost dit meestal op.</string>
     <string name="err_ffmpeg">Kon het bestand niet afmaken</string>
-    <string name="err_ffmpeg_hint">FFmpeg stopte tijdens het samenvoegen of omzetten. Opnieuw proberen werkt meestal.</string>
+    <string name="err_ffmpeg_hint">Het samenstellen van het bestand is gestopt. Opnieuw proberen werkt meestal.</string>
     <string name="err_details">Details</string>
     <string name="err_copy">Fout kopiëren</string>
     <string name="err_copied">Fout gekopieerd</string>
-    <string name="err_update_retry">yt-dlp bijwerken &amp; opnieuw proberen</string>
-    <string name="err_updating">yt-dlp wordt bijgewerkt …</string>
+    <string name="err_update_retry">Bijwerken &amp; opnieuw proberen</string>
+    <string name="err_updating">Downloader wordt bijgewerkt …</string>
     <string name="err_try_again">Opnieuw proberen</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">Link wordt uitgepluisd …</string>
+    <string name="stage_resolving">Link wordt gelezen …</string>
     <string name="stage_merging">Video en audio worden samengevoegd …</string>
     <string name="stage_extracting">Audio wordt omgezet …</string>
     <string name="stage_remuxing">Bestand wordt ingepakt …</string>
@@ -78,8 +78,8 @@
     <string name="notif_timeout_text">Android staat downloads op de achtergrond toe, 6 uur per dag. Open Hamstr en ze gaan verder.</string>
 
     <!-- Share sheet -->
-    <string name="share_sniffing">Link wordt uitgepluisd …</string>
-    <string name="share_reading_formats">formaten worden gelezen …</string>
+    <string name="share_sniffing">Link wordt bekeken …</string>
+    <string name="share_reading_formats">kwaliteiten worden gezocht …</string>
     <string name="share_already_here">Staat al in je voorraad</string>
     <string name="share_already_coming">Is al onderweg</string>
     <string name="share_open">Openen</string>
@@ -91,7 +91,7 @@
     <string name="share_format">Formaat</string>
     <string name="share_subtitles">Ondertitels (%1$s)</string>
     <string name="share_audio_format">Audioformaat</string>
-    <string name="share_custom_hint">yt-dlp-formaatkiezer (-f)</string>
+    <string name="share_custom_hint">Voor experts: een yt-dlp-formaatcode (-f)</string>
     <string name="share_custom_placeholder">Formaatcode</string>
     <string name="share_cancel">Annuleren</string>
     <string name="share_stash">Hamsteren</string>
@@ -155,9 +155,9 @@
     <string name="hidden_many">%1$d verborgen · vind ze onder Instellingen › Verborgen</string>
     <string name="deleted_one">Bestand verwijderd</string>
     <string name="deleted_many">%1$d bestanden verwijderd</string>
-    <string name="engine_restarting">yt-dlp wordt opnieuw gestart …</string>
-    <string name="engine_restarted">yt-dlp draait</string>
-    <string name="engine_still_broken">yt-dlp start nog steeds niet</string>
+    <string name="engine_restarting">Downloader wordt opnieuw gestart …</string>
+    <string name="engine_restarted">De downloader draait</string>
+    <string name="engine_still_broken">De downloader start nog steeds niet</string>
 
     <!-- File menu -->
     <string name="menu_play">Afspelen in Hamstr</string>
@@ -258,8 +258,8 @@
         <item quantity="other">%1$d bestanden gehamsterd</item>
     </plurals>
     <string name="stash_active">%1$d actief</string>
-    <string name="stash_engine_starting">yt-dlp start</string>
-    <string name="stash_engine_broken">yt-dlp kapot · tik om opnieuw te proberen</string>
+    <string name="stash_engine_starting">Downloader start</string>
+    <string name="stash_engine_broken">Downloader niet gestart · tik om opnieuw te proberen</string>
     <string name="stash_downloading">Downloaden</string>
     <string name="stash_running">%1$d bezig</string>
     <string name="stash_stashed">Gehamsterd</string>
@@ -908,10 +908,10 @@
         <item quantity="one">%1$d download mislukt</item>
         <item quantity="other">%1$d downloads mislukt</item>
     </plurals>
-    <string name="stash_failed_update_hint">De site is veranderd; een nieuwere yt-dlp lost dat meestal op</string>
+    <string name="stash_failed_update_hint">De site is veranderd; een update van de downloader lost dat meestal op</string>
     <string name="stash_update_retry">Bijwerken &amp; opnieuw proberen</string>
     <string name="stash_retry_all">Alles opnieuw proberen</string>
-    <string name="stash_updating">yt-dlp wordt bijgewerkt, daarna opnieuw proberen …</string>
+    <string name="stash_updating">Downloader wordt bijgewerkt, daarna opnieuw proberen …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">De gekopieerde link hamsteren?</string>
     <string name="clip_offer_hint">Er staat een link op het klembord</string>
@@ -961,4 +961,42 @@
     <string name="follow_offer_channel">Dit is een kanaal</string>
     <string name="follow_offer_playlist">Dit is een afspeellijst</string>
     <string name="follow_unfollowed">Gevolgd %1$s gestopt</string>
+    <string name="share_more">Meer opties</string>
+    <string name="share_custom">Eigen formaat</string>
+    <string name="share_no_subs">Geen ondertitels</string>
+    <string name="share_opens_done">Gaat open als hij klaar is</string>
+    <string name="share_open_done_needs">Vereist “Weergeven over andere apps”, wat je onder Instellingen › Downloads kunt toestaan</string>
+    <string name="share_stashed">Nom! In de voorraad</string>
+    <string name="snack_canceled">Download geannuleerd</string>
+    <string name="link_copied">Link gekopieerd</string>
+    <string name="player_closed">Speler gesloten</string>
+    <string name="stash_moving">%1$d van %2$d bezig</string>
+    <string name="eta_left">nog %1$s</string>
+    <string name="intro_skip">Tik om over te slaan</string>
+    <string name="hidden_empty_desktop">Niets is verborgen. Wat je uit de bibliotheek verbergt, wacht hier, en de bestanden blijven op deze computer.</string>
+    <string name="hidden_note_desktop">Verborgen bestanden blijven in je Hamstr-map. Klik erop voor het menu.</string>
+    <plurals name="tray_downloading">
+        <item quantity="one">Hamstr · %1$d wordt gedownload</item>
+        <item quantity="other">Hamstr · %1$d worden gedownload</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="one">Hamstr · %1$d wacht</item>
+        <item quantity="other">Hamstr · %1$d wachten</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="one">Download klaar</item>
+        <item quantity="other">%1$d downloads klaar</item>
+    </plurals>
+    <string name="tray_failed">Een download is niet gelukt</string>
+    <string name="drop_link">Loslaten om te hamsteren</string>
+    <plurals name="drop_files">
+        <item quantity="one">Loslaten om het bestand toe te voegen</item>
+        <item quantity="other">Loslaten om %1$d bestanden toe te voegen</item>
+    </plurals>
+    <string name="drop_files_some">Loslaten om de bestanden toe te voegen</string>
+    <string name="drop_no_link">Daar zit geen link in</string>
+    <plurals name="drop_added">
+        <item quantity="one">Bestand wordt toegevoegd</item>
+        <item quantity="other">%1$d bestanden worden toegevoegd</item>
+    </plurals>
 </resources>

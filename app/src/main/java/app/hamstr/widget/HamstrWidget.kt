@@ -104,7 +104,7 @@ object Widgets {
                 current.title,
                 // While FFmpeg works or the queue waits, that is what it says.
                 DownloadService.stageText(context, current)
-                    ?: listOf("${(current.progress * 100).toInt()}%", current.speed, DownloadService.eta(current.etaSec), if (more > 0) context.getString(R.string.widget_more, more) else "")
+                    ?: listOf("${(current.progress * 100).toInt()}%", current.speed, DownloadService.etaLeft(context, current.etaSec), if (more > 0) context.getString(R.string.widget_more, more) else "")
                         .filter { it.isNotEmpty() }.joinToString(" · "),
                 (current.progress * 1000).toInt(), accent,
             )

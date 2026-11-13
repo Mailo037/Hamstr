@@ -17,9 +17,9 @@
     <string name="err_full">端末の空き容量がいっぱいです</string>
     <string name="err_full_hint">容量を空けてから、もう一度お試しください。</string>
     <string name="err_unsupported">Hamstr はこのリンクに対応していません</string>
-    <string name="err_unsupported_hint">yt-dlp はこのページからメディアを読み取る方法がありません。</string>
+    <string name="err_unsupported_hint">このページには Hamstr が見つけられる動画や曲がありません。</string>
     <string name="err_drm">このコンテンツはコピー防止されています</string>
-    <string name="err_drm_hint">DRM で保護されているため、保存できません。</string>
+    <string name="err_drm_hint">サイトがコピーできないよう保護しているため、保存できません。</string>
     <string name="err_private">このコンテンツは非公開です</string>
     <string name="err_private_hint">投稿者本人、または許可された人だけが見られます。</string>
     <string name="err_age">年齢制限あり</string>
@@ -35,18 +35,18 @@
     <string name="err_format">その画質は提供されていません</string>
     <string name="err_format_hint">別の画質を選ぶか、「最高画質」を選んでください。</string>
     <string name="err_changed">サイト側が仕様を変更しました</string>
-    <string name="err_changed_hint">サイトは頻繁に変わります。新しい yt-dlp で直ることが多いです。</string>
+    <string name="err_changed_hint">サイトは頻繁に変わります。Hamstr のダウンローダーを更新すると直ることが多いです。</string>
     <string name="err_ffmpeg">ファイルを仕上げられませんでした</string>
-    <string name="err_ffmpeg_hint">結合または変換中に FFmpeg が停止しました。もう一度試すと成功することが多いです。</string>
+    <string name="err_ffmpeg_hint">ファイルの組み立てが止まりました。もう一度試すとたいてい直ります。</string>
     <string name="err_details">詳細</string>
     <string name="err_copy">エラーをコピー</string>
     <string name="err_copied">エラーをコピーしました</string>
-    <string name="err_update_retry">yt-dlp を更新 &amp; 再試行</string>
-    <string name="err_updating">yt-dlp を更新中 …</string>
+    <string name="err_update_retry">更新して再試行</string>
+    <string name="err_updating">ダウンローダーを更新中 …</string>
     <string name="err_try_again">再試行</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">リンクを解析中 …</string>
+    <string name="stage_resolving">リンクを読み込み中 …</string>
     <string name="stage_merging">映像と音声を結合中 …</string>
     <string name="stage_extracting">音声を変換中 …</string>
     <string name="stage_remuxing">ファイルをまとめ中 …</string>
@@ -79,7 +79,7 @@
 
     <!-- Share sheet -->
     <string name="share_sniffing">リンクを確認中 …</string>
-    <string name="share_reading_formats">形式を読み取り中 …</string>
+    <string name="share_reading_formats">画質を探しています …</string>
     <string name="share_already_here">ストックに入っています</string>
     <string name="share_already_coming">すでに向かっています</string>
     <string name="share_open">開く</string>
@@ -91,7 +91,7 @@
     <string name="share_format">形式</string>
     <string name="share_subtitles">字幕 (%1$s)</string>
     <string name="share_audio_format">音声形式</string>
-    <string name="share_custom_hint">yt-dlp のフォーマット指定 (-f)</string>
+    <string name="share_custom_hint">上級者向け：yt-dlp のフォーマットコード (-f)</string>
     <string name="share_custom_placeholder">フォーマットコード</string>
     <string name="share_cancel">キャンセル</string>
     <string name="share_stash">保存する</string>
@@ -151,9 +151,9 @@
     <string name="hidden_many">%1$d 件を非表示にしました · 設定 › 非表示 から見つけられます</string>
     <string name="deleted_one">ファイルを削除しました</string>
     <string name="deleted_many">%1$d 件のファイルを削除しました</string>
-    <string name="engine_restarting">yt-dlp を再起動中 …</string>
-    <string name="engine_restarted">yt-dlp は動作中です</string>
-    <string name="engine_still_broken">yt-dlp がまだ起動しません</string>
+    <string name="engine_restarting">ダウンローダーを再起動中 …</string>
+    <string name="engine_restarted">ダウンローダーは動作中です</string>
+    <string name="engine_still_broken">ダウンローダーがまだ起動しません</string>
 
     <!-- File menu -->
     <string name="menu_play">Hamstr で再生</string>
@@ -253,8 +253,8 @@
         <item quantity="other">%1$d 件のファイルをストック済み</item>
     </plurals>
     <string name="stash_active">%1$d 件進行中</string>
-    <string name="stash_engine_starting">yt-dlp を起動中</string>
-    <string name="stash_engine_broken">yt-dlp が壊れています · タップで再試行</string>
+    <string name="stash_engine_starting">ダウンローダー起動中</string>
+    <string name="stash_engine_broken">ダウンローダーが起動しませんでした · タップで再試行</string>
     <string name="stash_downloading">ダウンロード中</string>
     <string name="stash_running">%1$d 件実行中</string>
     <string name="stash_stashed">保存済み</string>
@@ -891,10 +891,10 @@
     <plurals name="stash_failed_all">
         <item quantity="other">%1$d 件のダウンロードが失敗</item>
     </plurals>
-    <string name="stash_failed_update_hint">サイトが変わりました。新しい yt-dlp で直ることが多いです</string>
+    <string name="stash_failed_update_hint">サイトが変わりました。ダウンローダーを更新すると直ることが多いです</string>
     <string name="stash_update_retry">更新して再試行</string>
     <string name="stash_retry_all">すべて再試行</string>
-    <string name="stash_updating">yt-dlp を更新してから再試行しています …</string>
+    <string name="stash_updating">ダウンローダーを更新してから再試行中 …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">コピーしたリンクをストックしますか？</string>
     <string name="clip_offer_hint">クリップボードにリンクがあります</string>
@@ -942,4 +942,37 @@
     <string name="follow_offer_channel">これはチャンネルです</string>
     <string name="follow_offer_playlist">これはプレイリストです</string>
     <string name="follow_unfollowed">%1$s のフォローを解除しました</string>
+    <string name="share_more">その他のオプション</string>
+    <string name="share_custom">カスタム形式</string>
+    <string name="share_no_subs">字幕なし</string>
+    <string name="share_opens_done">完了時に開きます</string>
+    <string name="share_open_done_needs">「他のアプリの上に表示」が必要です。設定 › ダウンロード で許可できます</string>
+    <string name="share_stashed">もぐもぐ！ストックに入りました</string>
+    <string name="snack_canceled">ダウンロードをキャンセルしました</string>
+    <string name="link_copied">リンクをコピーしました</string>
+    <string name="player_closed">プレーヤーを閉じました</string>
+    <string name="stash_moving">%2$d 件中 %1$d 件が進行中</string>
+    <string name="eta_left">残り %1$s</string>
+    <string name="intro_skip">タップしてスキップ</string>
+    <string name="hidden_empty_desktop">非表示のものはありません。ライブラリから隠したものはここに残り、ファイルはこのコンピューターに残ります。</string>
+    <string name="hidden_note_desktop">非表示のファイルは Hamstr フォルダーに残ります。クリックするとメニューが開きます。</string>
+    <plurals name="tray_downloading">
+        <item quantity="other">Hamstr · %1$d 件ダウンロード中</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="other">Hamstr · %1$d 件待機中</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="other">%1$d 件のダウンロードが完了しました</item>
+    </plurals>
+    <string name="tray_failed">ダウンロードがうまくいきませんでした</string>
+    <string name="drop_link">ドロップしてストック</string>
+    <plurals name="drop_files">
+        <item quantity="other">ドロップして %1$d 個のファイルを追加</item>
+    </plurals>
+    <string name="drop_files_some">ドロップしてファイルを追加</string>
+    <string name="drop_no_link">リンクが含まれていません</string>
+    <plurals name="drop_added">
+        <item quantity="other">%1$d 個のファイルを追加中</item>
+    </plurals>
 </resources>

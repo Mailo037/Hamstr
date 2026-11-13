@@ -87,7 +87,8 @@ fun DropMenu(open: Boolean, onDismiss: () -> Unit, at: IntOffset? = null, end: B
 
 /**
  * One line of a [DropMenu]: an icon, the label, and a check when it is the picked one. The
- * pointer resting on it lifts it a step; [danger] is for what can't be undone.
+ * pointer resting on it lifts it a step, the keyboard's focus rings it; [danger] is for what
+ * can't be undone.
  */
 @Composable
 fun MenuItem(
@@ -108,7 +109,8 @@ fun MenuItem(
             .clip(RoundedCornerShape(10.dp))
             .background(c.hover.copy(alpha = lift))
             .hoverable(source)
-            .clickable(source, null, onClick = onClick)
+            // The lift above shows the pointer; the keyboard's focus gets the ring.
+            .clickable(source, FocusIndication, onClick = onClick)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

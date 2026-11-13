@@ -24,6 +24,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +67,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.hamstr.ui.theme.Hamstr
 import app.hamstr.ui.theme.Radii
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -88,13 +90,16 @@ fun Txt(
     )
 }
 
-/** `[ LABEL ]` in mono, Glyph's ASCII badge. A screen reader says the label, not the brackets. */
+/**
+ * `[ LABEL ]` in mono, Glyph's ASCII badge: a quiet fact in `ghost`, or live state in accent. A
+ * screen reader says the label, not the brackets.
+ */
 @Composable
 fun Badge(label: String, accent: Boolean = false, modifier: Modifier = Modifier) {
     Txt(
         "[ ${label.uppercase()} ]",
-        style = Hamstr.type.badge,
-        color = if (accent) Hamstr.colors.accent else Hamstr.colors.muted,
+        style = Hamstr.type.tag,
+        color = if (accent) Hamstr.colors.accent else Hamstr.colors.ghost,
         modifier = modifier.clearAndSetSemantics { text = AnnotatedString(label) },
         maxLines = 1,
     )
@@ -122,8 +127,12 @@ fun Modifier.pressable(
     enabled: Boolean = true,
     pressedScale: Float = 0.97f,
     onLongClick: (() -> Unit)? = null,
+    // A part that shows the hover and the keyboard focus itself (IconButton's visible button)
+    // shares the source and passes hover = false; otherwise they show over all of this.
+    interactionSource: MutableInteractionSource? = null,
+    hover: Boolean = true,
 ): Modifier {
-    val source = remember { MutableInteractionSource() }
+    val source = interactionSource ?: remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) pressedScale else 1f, Specs.press(), label = "press")
     val dy by animateDpAsState(if (pressed) 1.dp else 0.dp, tween(90), label = "pressY")
@@ -132,7 +141,7 @@ fun Modifier.pressable(
         .offset(y = dy)
         .scale(scale)
         .onRightClick(onLongClick.takeIf { enabled })
-        .combinedClickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onLongClick = onLongClick, onClick = onClick)
+        .combinedClickable(interactionSource = source, indication = if (hover) HoverIndication else null, enabled = enabled, role = Role.Button, onLongClick = onLongClick, onClick = onClick)
 }
 
 /**
@@ -202,18 +211,21 @@ fun IconButton(
     // The visible button can be small; the finger always gets at least 48 dp. A pointer
     // resting on it gets the label as a tooltip.
     val tip = rememberTip()
+    val source = remember { MutableInteractionSource() }
     Box(
         modifier
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .hoverTip(tip)
-            .pressable(onClick, label = label, pressedScale = 0.92f),
+            .pressable(onClick, label = label, pressedScale = 0.92f, interactionSource = source, hover = false),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
                 .size(size)
                 .clip(RoundedCornerShape(12.dp))
-                .background(background),
+                .background(background)
+                // Hover and focus on the button you see, not on the larger area the finger gets.
+                .indication(source, HoverIndication),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, tint = tint, size = 20.dp) }
         Tip(tip, label)
@@ -437,7 +449,8 @@ fun SettingRow(
             Txt(title, style = Hamstr.type.body)
             if (subtitle != null) {
                 Spacer(Modifier.height(2.dp))
-                Txt(subtitle, style = Hamstr.type.small, color = Hamstr.colors.ghost)
+                // A little more room between lines: subtitles often run to two or three.
+                Txt(subtitle, style = Hamstr.type.small.copy(lineHeight = 17.sp), color = Hamstr.colors.ghost)
             }
         }
         Spacer(Modifier.width(12.dp))

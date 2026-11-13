@@ -17,9 +17,9 @@
     <string name="err_full">Телефон заполнен</string>
     <string name="err_full_hint">Освободи место и попробуй снова.</string>
     <string name="err_unsupported">Hamstr не знает эту ссылку</string>
-    <string name="err_unsupported_hint">yt-dlp не может получить медиа с этой страницы.</string>
+    <string name="err_unsupported_hint">Hamstr не находит на этой странице ни видео, ни песни.</string>
     <string name="err_drm">Это видео защищено от копирования</string>
-    <string name="err_drm_hint">Оно закрыто DRM, поэтому сохранить его нельзя.</string>
+    <string name="err_drm_hint">Сайт защищает это от копирования, поэтому сохранить нельзя.</string>
     <string name="err_private">Это видео приватное</string>
     <string name="err_private_hint">Смотреть его могут только владелец и те, кому он разрешил.</string>
     <string name="err_age">Возрастное ограничение</string>
@@ -35,18 +35,18 @@
     <string name="err_format">Такое качество не предлагается</string>
     <string name="err_format_hint">Выбери другое качество или «Лучшее».</string>
     <string name="err_changed">Сайт что-то поменял</string>
-    <string name="err_changed_hint">Сайты меняются постоянно. Обычно помогает более новая версия yt-dlp.</string>
+    <string name="err_changed_hint">Сайты меняются постоянно. Обычно помогает обновление загрузчика Hamstr.</string>
     <string name="err_ffmpeg">Не получилось доделать файл</string>
-    <string name="err_ffmpeg_hint">FFmpeg остановился при склейке или конвертации. Обычно помогает повторная попытка.</string>
+    <string name="err_ffmpeg_hint">Сборка файла прервалась. Повторная попытка обычно помогает.</string>
     <string name="err_details">Подробности</string>
     <string name="err_copy">Скопировать ошибку</string>
     <string name="err_copied">Ошибка скопирована</string>
-    <string name="err_update_retry">Обновить yt-dlp &amp; повторить</string>
-    <string name="err_updating">Обновляем yt-dlp …</string>
+    <string name="err_update_retry">Обновить и повторить</string>
+    <string name="err_updating">Обновляем загрузчик …</string>
     <string name="err_try_again">Повторить</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">Разбираем ссылку …</string>
+    <string name="stage_resolving">Читаем ссылку …</string>
     <string name="stage_merging">Склеиваем видео и звук …</string>
     <string name="stage_extracting">Конвертируем звук …</string>
     <string name="stage_remuxing">Упаковываем файл …</string>
@@ -78,8 +78,8 @@
     <string name="notif_timeout_text">Android разрешает фоновые загрузки только 6 часов в сутки. Открой Hamstr, и они продолжатся.</string>
 
     <!-- Share sheet -->
-    <string name="share_sniffing">Вынюхиваем ссылку …</string>
-    <string name="share_reading_formats">смотрим форматы …</string>
+    <string name="share_sniffing">Смотрим ссылку …</string>
+    <string name="share_reading_formats">ищем варианты качества …</string>
     <string name="share_already_here">Уже в запасах</string>
     <string name="share_already_coming">Уже в пути</string>
     <string name="share_open">Открыть</string>
@@ -91,7 +91,7 @@
     <string name="share_format">Формат</string>
     <string name="share_subtitles">Субтитры (%1$s)</string>
     <string name="share_audio_format">Формат аудио</string>
-    <string name="share_custom_hint">Селектор формата yt-dlp (-f)</string>
+    <string name="share_custom_hint">Для знатоков: код формата yt-dlp (-f)</string>
     <string name="share_custom_placeholder">Код формата</string>
     <string name="share_cancel">Отмена</string>
     <string name="share_stash">Сохранить</string>
@@ -163,9 +163,9 @@
     <string name="hidden_many">Скрыто: %1$d · найти их можно в Настройки › Скрытые</string>
     <string name="deleted_one">Файл удалён</string>
     <string name="deleted_many">Файлов удалено: %1$d</string>
-    <string name="engine_restarting">Запускаем yt-dlp заново …</string>
-    <string name="engine_restarted">yt-dlp работает</string>
-    <string name="engine_still_broken">yt-dlp всё ещё не запускается</string>
+    <string name="engine_restarting">Перезапускаем загрузчик …</string>
+    <string name="engine_restarted">Загрузчик работает</string>
+    <string name="engine_still_broken">Загрузчик всё ещё не запускается</string>
 
     <!-- File menu -->
     <string name="menu_play">Воспроизвести в Hamstr</string>
@@ -268,8 +268,8 @@
         <item quantity="other">%1$d файла припрятаны</item>
     </plurals>
     <string name="stash_active">Активных: %1$d</string>
-    <string name="stash_engine_starting">yt-dlp запускается</string>
-    <string name="stash_engine_broken">yt-dlp сломался · нажми, чтобы повторить</string>
+    <string name="stash_engine_starting">Загрузчик запускается</string>
+    <string name="stash_engine_broken">Загрузчик не запустился · нажми, чтобы повторить</string>
     <string name="stash_downloading">Скачивается</string>
     <string name="stash_running">В работе: %1$d</string>
     <string name="stash_stashed">Припрятано</string>
@@ -942,10 +942,10 @@
         <item quantity="many">%1$d загрузок не удались</item>
         <item quantity="other">%1$d загрузок не удались</item>
     </plurals>
-    <string name="stash_failed_update_hint">Сайт изменился; обычно помогает более новая версия yt-dlp</string>
+    <string name="stash_failed_update_hint">Сайт изменился; обычно помогает обновление загрузчика</string>
     <string name="stash_update_retry">Обновить &amp; повторить</string>
     <string name="stash_retry_all">Повторить все</string>
-    <string name="stash_updating">Обновляем yt-dlp, затем пробуем снова …</string>
+    <string name="stash_updating">Обновляем загрузчик, потом пробуем снова …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">Сохранить скопированную ссылку?</string>
     <string name="clip_offer_hint">В буфере обмена есть ссылка</string>
@@ -999,4 +999,52 @@
     <string name="follow_offer_channel">Это канал</string>
     <string name="follow_offer_playlist">Это плейлист</string>
     <string name="follow_unfollowed">Подписка на %1$s отменена</string>
+    <string name="share_more">Ещё параметры</string>
+    <string name="share_custom">Свой формат</string>
+    <string name="share_no_subs">Без субтитров</string>
+    <string name="share_opens_done">Откроется по окончании</string>
+    <string name="share_open_done_needs">Нужно «Показ поверх других приложений» — разрешить можно в Настройки › Загрузки</string>
+    <string name="share_stashed">Ням! Уже в запасах</string>
+    <string name="snack_canceled">Загрузка отменена</string>
+    <string name="link_copied">Ссылка скопирована</string>
+    <string name="player_closed">Плеер закрыт</string>
+    <string name="stash_moving">В работе: %1$d из %2$d</string>
+    <string name="eta_left">осталось %1$s</string>
+    <string name="intro_skip">Нажми, чтобы пропустить</string>
+    <string name="hidden_empty_desktop">Ничего не скрыто. То, что ты скрыл из медиатеки, ждёт здесь, а файлы остаются на этом компьютере.</string>
+    <string name="hidden_note_desktop">Скрытые файлы остаются в твоей папке Hamstr. Нажми на файл, чтобы открыть его меню.</string>
+    <plurals name="tray_downloading">
+        <item quantity="one">Hamstr · загружается: %1$d</item>
+        <item quantity="few">Hamstr · загружается: %1$d</item>
+        <item quantity="many">Hamstr · загружается: %1$d</item>
+        <item quantity="other">Hamstr · загружается: %1$d</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="one">Hamstr · ждёт: %1$d</item>
+        <item quantity="few">Hamstr · ждёт: %1$d</item>
+        <item quantity="many">Hamstr · ждёт: %1$d</item>
+        <item quantity="other">Hamstr · ждёт: %1$d</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="one">%1$d загрузка завершена</item>
+        <item quantity="few">%1$d загрузки завершены</item>
+        <item quantity="many">%1$d загрузок завершено</item>
+        <item quantity="other">%1$d загрузки завершено</item>
+    </plurals>
+    <string name="tray_failed">Загрузка не удалась</string>
+    <string name="drop_link">Отпусти, чтобы припрятать</string>
+    <plurals name="drop_files">
+        <item quantity="one">Отпусти, чтобы добавить %1$d файл</item>
+        <item quantity="few">Отпусти, чтобы добавить %1$d файла</item>
+        <item quantity="many">Отпусти, чтобы добавить %1$d файлов</item>
+        <item quantity="other">Отпусти, чтобы добавить %1$d файла</item>
+    </plurals>
+    <string name="drop_files_some">Отпусти, чтобы добавить файлы</string>
+    <string name="drop_no_link">Здесь нет ссылки</string>
+    <plurals name="drop_added">
+        <item quantity="one">Добавляем %1$d файл</item>
+        <item quantity="few">Добавляем %1$d файла</item>
+        <item quantity="many">Добавляем %1$d файлов</item>
+        <item quantity="other">Добавляем %1$d файла</item>
+    </plurals>
 </resources>

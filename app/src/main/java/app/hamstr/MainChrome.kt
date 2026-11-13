@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,10 +48,29 @@ import app.hamstr.ui.components.LocalReduceMotion
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import app.hamstr.ui.components.Specs
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 
-/** Bottom tab bar: tap a tab or drag the pill along; it stretches with its speed. */
+/**
+ * Bottom tab bar: tap a tab or drag the pill along; it stretches with its speed. With
+ * [position] (the pager's page plus its offset) the pill moves with the pages.
+ */
 @Composable
-internal fun TabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
+internal fun TabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier, position: (() -> Float)? = null) {
     val c = Hamstr.colors
     DragPillRow(
         count = Tab.entries.size,
@@ -66,6 +84,7 @@ internal fun TabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier =
             .clip(RoundedCornerShape(22.dp))
             .background(c.overlay)
             .padding(5.dp),
+        position = position,
     ) { i, near ->
         val t = Tab.entries[i]
         Column(
@@ -86,17 +105,21 @@ internal fun TabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier =
 /** Width of the side bar that holds the tabs and the mini player in landscape. */
 internal val SIDEBAR = 216.dp
 
-/** The tabs as a column for the side bar; the pill springs to the chosen one. */
+/**
+ * The tabs as a column for the side bar; the pill springs to the chosen one, or moves with
+ * the pages when [position] (the pager's page plus its offset) is given.
+ */
 @Composable
-internal fun SideTabs(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier) {
+internal fun SideTabs(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = Modifier, position: (() -> Float)? = null) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
     val itemHeight = 48.dp
-    val y by animateFloatAsState(
+    val sprung by animateFloatAsState(
         selected.ordinal.toFloat(),
         if (LocalReduceMotion.current) snap() else Specs.arrive(),
         label = "sideTab",
     )
+    val y = position?.invoke() ?: sprung
     Box(modifier) {
         Box(
             Modifier
@@ -132,29 +155,59 @@ internal fun SideTabs(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier
 
 /**
  * Cold-start intro: the hamster assembles out of ASCII noise, hops and winks, then the
- * screen fades away into the app. Tap to skip.
+ * screen fades away into the app. A touch anywhere (or any key) skips it at once; a small
+ * hint says so after a moment.
  */
 @Composable
 internal fun Intro(onDone: () -> Unit) {
     val c = Hamstr.colors
     val mark = remember { MarkState(intro = 0f) }
     val fade = remember { Animatable(1f) }
+    val hint = remember { Animatable(0f) }
     val done by rememberUpdatedState(onDone)
-    var skip by remember { mutableStateOf(false) }
-    LaunchedEffect(skip) {
-        if (!skip) {
-            mark.assemble(700)
-            delay(260)
-        }
-        fade.animateTo(0f, tween(320))
+    // How long the fade into the app takes: 0 while the hamster plays, 320 ms when it has
+    // finished, 160 ms when skipped (also in the middle of the slower fade).
+    var leave by remember { mutableIntStateOf(0) }
+    val skip = { leave = 160 }
+    val focus = remember { FocusRequester() }
+    val skipLabel = stringResource(R.string.intro_skip)
+    LaunchedEffect(Unit) {
+        mark.assemble(700)
+        delay(260)
+        if (leave == 0) leave = 320
+    }
+    LaunchedEffect(leave) {
+        if (leave == 0) return@LaunchedEffect
+        fade.animateTo(0f, tween(leave))
         done()
     }
+    LaunchedEffect(Unit) {
+        delay(600)
+        hint.animateTo(1f, Specs.listIn())
+    }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Box(
         Modifier
             .fillMaxSize()
             .graphicsLayer { alpha = fade.value }
             .background(c.canvas)
-            .clickable(remember { MutableInteractionSource() }, null) { skip = true },
+            // The touch going down skips: no waiting for it to lift, and no slop that turns it into nothing.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).consume()
+                    skip()
+                }
+            }
+            .focusRequester(focus)
+            // Any key skips too, and still does its own thing (volume, back).
+            .onPreviewKeyEvent { if (it.type == KeyEventType.KeyDown) skip(); false }
+            .focusable()
+            // A screen reader hears the hint and can skip with it.
+            .clearAndSetSemantics {
+                contentDescription = skipLabel
+                role = Role.Button
+                onClick(skipLabel) { skip(); true }
+            },
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -168,5 +221,15 @@ internal fun Intro(onDone: () -> Unit) {
             Spacer(Modifier.height(18.dp))
             DecodeText("Hamstr", style = Hamstr.type.title, delayMs = 380)
         }
+        Txt(
+            skipLabel,
+            style = Hamstr.type.small,
+            color = c.ghost,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 32.dp)
+                .graphicsLayer { alpha = hint.value },
+        )
     }
 }

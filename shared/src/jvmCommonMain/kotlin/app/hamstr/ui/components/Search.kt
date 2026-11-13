@@ -46,9 +46,10 @@ fun SearchField(
     modifier: Modifier = Modifier,
     autoFocus: Boolean = false,
     background: Color = Hamstr.colors.overlay,
+    // To put the caret in from outside (the desktop's Ctrl+F).
+    focus: FocusRequester = remember { FocusRequester() },
 ) {
     val c = Hamstr.colors
-    val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     if (autoFocus) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     BasicTextField(

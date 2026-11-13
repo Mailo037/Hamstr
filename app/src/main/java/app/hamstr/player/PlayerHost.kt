@@ -22,6 +22,7 @@ import app.hamstr.data.MiniStyle
 import app.hamstr.data.Prefs
 import app.hamstr.ui.components.rubberBand
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -189,6 +190,22 @@ private data class Box4(val x: Float, val y: Float, val w: Float, val h: Float) 
 }
 
 /**
+ * A whole surface going back to rest after a drag that didn't commit (the mini bar, the cover):
+ * [Specs.release], carrying a fling that points home, and held at rest, so it never swings
+ * over to the other side and shows the neighbour there.
+ */
+internal suspend fun Animatable<Float, AnimationVector1D>.backToRest(velocity: Float = 0f) {
+    val from = value
+    if (from == 0f) return
+    updateBounds(min(0f, from), max(0f, from))
+    try {
+        animateTo(0f, Specs.release(), initialVelocity = if (velocity * from < 0f) velocity else 0f)
+    } finally {
+        updateBounds(null, null)
+    }
+}
+
+/**
  * The player. One surface morphs between a full-screen view and a floating mini player
  * above the tab bar: swipe the big player up or down to shrink it, tap or swipe the mini
  * player up to bring it back. Sideways the mini player turns through the queue, with the
@@ -312,9 +329,10 @@ fun PlayerHost(
     BackHandler(enabled = lyricsOver) { lyricsFull = false }
     LaunchedEffect(lyricsOver) { if (!lyricsOver) lyricsFull = false }
 
+    // Flung away: what it held can come back for a moment (Undo in the snack).
     fun close() = scope.launch {
         fullscreen = false
-        Playback.close()
+        Playback.closeKeeping()
     }
 
     // Vertical drags on the big player shrink it (either direction); release decides. On the
@@ -444,7 +462,7 @@ fun PlayerHost(
                     .background(if (immersive) Color.Black else c.canvas)
                     .then(
                         if (kind == Kind.Audio && !immersive) Modifier.background(
-                            Brush.verticalGradient(0f to tint.copy(alpha = 0.9f), 0.45f to tint.copy(alpha = 0.35f), 0.8f to Color.Transparent),
+                            Brush.verticalGradient(0f to tint.copy(alpha = 0.85f), 0.5f to tint.copy(alpha = 0.3f), 0.85f to Color.Transparent),
                         ) else Modifier,
                     )
                     .pointerInput(Unit) { detectTapGestures { } }, // keep taps off the list below
@@ -464,7 +482,9 @@ fun PlayerHost(
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(Res.drawable.ic_expand_more, stringResource(R.string.player_minimize), { Playback.minimize() }, tint = c.ink)
+                    // On a song's cover colour the buttons lighten it a little instead of sitting on it as grey tiles.
+                    val bar = if (kind == Kind.Audio) Color.White.copy(alpha = 0.08f) else c.surface
+                    IconButton(Res.drawable.ic_expand_more, stringResource(R.string.player_minimize), { Playback.minimize() }, tint = c.ink, background = bar)
                     Spacer(Modifier.width(12.dp))
                     Txt(
                         stringResource(when (kind) { Kind.Video -> R.string.player_video; Kind.Audio -> R.string.player_now_playing; Kind.Image -> R.string.player_image; Kind.Other -> R.string.player_file }),
@@ -473,19 +493,20 @@ fun PlayerHost(
                     if (useDrawer) {
                         // The queue is in the drawer; casting moves up here.
                         val casting by app.hamstr.cast.Cast.session.collectAsState()
-                        IconButton(Res.drawable.ic_cast, stringResource(R.string.cast_button), { CastSheetState.open.value = true }, tint = if (casting != null) c.accent else c.muted)
-                    } else if (kind == Kind.Video || kind == Kind.Audio) IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue)
-                    else IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) })
+                        IconButton(Res.drawable.ic_cast, stringResource(R.string.cast_button), { CastSheetState.open.value = true }, tint = if (casting != null) c.accent else c.muted, background = bar)
+                    } else if (kind == Kind.Video || kind == Kind.Audio) IconButton(Res.drawable.ic_queue_music, stringResource(R.string.queue_title), onQueue, background = bar)
+                    else IconButton(Res.drawable.ic_open_in_new, stringResource(R.string.menu_open_with), { Playback.openWith(activity ?: return@IconButton, t) }, background = bar)
                     if (isRemote) {
                         IconButton(
                             if (isRemoteDownloaded) Res.drawable.ic_check else Res.drawable.ic_download,
                             stringResource(if (isRemoteDownloaded) R.string.import_done_one else R.string.share_stash),
                             downloadRemote,
                             tint = if (isRemoteDownloaded || remoteDownloading) c.accent else c.ink,
+                            background = bar,
                         )
                     } else {
-                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(t) })
-                        IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) })
+                        IconButton(Res.drawable.ic_share, stringResource(R.string.menu_share_file), { onShare(t) }, background = bar)
+                        IconButton(Res.drawable.ic_more_vert, stringResource(R.string.player_more), { onMenu(t) }, background = bar)
                     }
 
                 }
@@ -528,9 +549,12 @@ fun PlayerHost(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         t.source?.let { Badge(it) }
-                        Badge(file?.extension ?: formatBadge(t))
+                        // Not twice: a song's quality pill is its format already ([ M4A ▾ ]); a video's names the height.
+                        val versions = canHaveVersions(t)
+                        val format = file?.extension ?: formatBadge(t)
+                        if (!versions || !format.equals(formatBadge(t), ignoreCase = true)) Badge(format)
                         // Tap the quality to switch to another one or fetch more.
-                        if (canHaveVersions(t)) Row(
+                        if (versions) Row(
                             Modifier.clip(RoundedCornerShape(8.dp)).clickable { onQuality(t) }.padding(start = 2.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -603,7 +627,7 @@ fun PlayerHost(
                             }
                         }
                         detectDragGestures(
-                            onDragStart = { dragging = true; axis = 0; total = Offset.Zero; armed = false; tracker.resetTracking() },
+                            onDragStart = { dragging = true; axis = 0; total = Offset.Zero; armed = false; tracker.resetTracking(); swipeX.updateBounds(null, null); dropY.updateBounds(null, null) },
                             onDragEnd = {
                                 dragging = false
                                 val v = tracker.calculateVelocity()
@@ -618,19 +642,19 @@ fun PlayerHost(
                                         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                                         scope.launch { swipeX.animateTo(w, Specs.leave(200)); Playback.skipTo(ui.previousIndex); swipeX.snapTo(0f) }
                                     }
-                                    axis == 1 -> scope.launch { swipeX.animateTo(0f, Specs.settle()) }
+                                    axis == 1 -> scope.launch { swipeX.backToRest(v.x) }
                                     dropY.value > mini.h * 0.6f || (v.y > 1400f && dropY.value > 0f) -> {
                                         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                                         scope.launch { dropY.animateTo(mini.h * 1.8f, Specs.leave(180)); close() }
                                     }
                                     e.value > 0.2f -> { Playback.expand(); scope.launch { e.animateTo(1f, settle) } }
                                     else -> scope.launch {
-                                        launch { dropY.animateTo(0f, Specs.settle()) }
+                                        launch { dropY.backToRest(v.y) }
                                         e.animateTo(0f, settle)
                                     }
                                 }
                             },
-                            onDragCancel = { dragging = false; scope.launch { swipeX.animateTo(0f); dropY.animateTo(0f); e.animateTo(0f, settle) } },
+                            onDragCancel = { dragging = false; scope.launch { launch { swipeX.backToRest() }; dropY.backToRest(); e.animateTo(0f, settle) } },
                         ) { change, drag ->
                             change.consume()
                             total += drag

@@ -12,11 +12,11 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.13"
+VERSION = "0.10.14"
 FEATURES = [
-    ("QUEUE & LYRICS IN TWO STEPS", "Half under the controls, or all the way up"),
-    ("CLEAN COVER SWIPES", "The next cover slides in without a flicker"),
-    ("HEADPHONES, ASSISTANTS, VOLUME", "Buttons that answer, volume that steps"),
+    ("CALMER, EASIER ON THE EYES", "Quiet badges, brighter hints, still waits"),
+    ("MOTION THAT SETTLES", "No replays, no blinks, no wobble"),
+    ("UNDO, KEYS & FULLSCREEN", "Undo for cancel, a computer that answers"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
@@ -24,7 +24,8 @@ FEATURES = [
 # 0.10.0 to 0.10.11: phone screens rendered by ReleaseScreensTest (shared/build/release); no phone or emulator
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
 # 0.10.13: emulator screenshots of the song player with the drawer closed, half and all the way up.
-SHOTS = [("phone_sheet_half.png", "Half"), ("phone_sheet_full.png", "Full"), ("phone_sheet_closed.png", "Closed")]
+# 0.10.14: emulator screenshots from tools/demo_screens.py: the calmer stash, the shorter share sheet, a song.
+SHOTS = [("stash.png", "Stash"), ("share.png", "Share"), ("music.png", "Song")]
 
 
 def sharing_panel(shots):

@@ -17,9 +17,9 @@
     <string name="err_full">手机存储已满</string>
     <string name="err_full_hint">请先腾出一些空间，再试一次。</string>
     <string name="err_unsupported">Hamstr 不认识这个链接</string>
-    <string name="err_unsupported_hint">yt-dlp 无法从这个页面读取媒体。</string>
+    <string name="err_unsupported_hint">Hamstr 在这个页面上找不到视频或歌曲。</string>
     <string name="err_drm">这个内容有复制保护</string>
-    <string name="err_drm_hint">它被 DRM 锁定，无法保存。</string>
+    <string name="err_drm_hint">该网站对它做了防复制保护，因此无法保存。</string>
     <string name="err_private">这是一个私密内容</string>
     <string name="err_private_hint">只有所有者或其允许的人才能看到。</string>
     <string name="err_age">年龄限制</string>
@@ -35,18 +35,18 @@
     <string name="err_format">不提供这个画质</string>
     <string name="err_format_hint">请选择其他画质，或选择“最佳”。</string>
     <string name="err_changed">该网站改了什么</string>
-    <string name="err_changed_hint">网站经常变动。更新到较新的 yt-dlp 通常能解决。</string>
+    <string name="err_changed_hint">网站经常变动。更新 Hamstr 的下载器通常就能解决。</string>
     <string name="err_ffmpeg">无法完成文件处理</string>
-    <string name="err_ffmpeg_hint">FFmpeg 在合并或转换文件时停止了。再试一次通常就好了。</string>
+    <string name="err_ffmpeg_hint">合成文件时中断了。再试一次通常就好了。</string>
     <string name="err_details">详情</string>
     <string name="err_copy">复制错误</string>
     <string name="err_copied">错误已复制</string>
-    <string name="err_update_retry">更新 yt-dlp 并重试</string>
-    <string name="err_updating">正在更新 yt-dlp …</string>
+    <string name="err_update_retry">更新并重试</string>
+    <string name="err_updating">正在更新下载器 …</string>
     <string name="err_try_again">重试</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">正在解析链接 …</string>
+    <string name="stage_resolving">正在读取链接 …</string>
     <string name="stage_merging">正在合并视频和音频 …</string>
     <string name="stage_extracting">正在转换音频 …</string>
     <string name="stage_remuxing">正在打包文件 …</string>
@@ -78,8 +78,8 @@
     <string name="notif_timeout_text">Android 每天只允许后台下载 6 小时。打开 Hamstr，下载就会继续。</string>
 
     <!-- Share sheet -->
-    <string name="share_sniffing">正在嗅探链接 …</string>
-    <string name="share_reading_formats">正在读取格式 …</string>
+    <string name="share_sniffing">正在查看链接 …</string>
+    <string name="share_reading_formats">正在查找画质 …</string>
     <string name="share_already_here">已经在你的囤货里了</string>
     <string name="share_already_coming">已经在路上了</string>
     <string name="share_open">打开</string>
@@ -91,7 +91,7 @@
     <string name="share_format">格式</string>
     <string name="share_subtitles">字幕（%1$s）</string>
     <string name="share_audio_format">音频格式</string>
-    <string name="share_custom_hint">yt-dlp 格式选择器（-f）</string>
+    <string name="share_custom_hint">供高级用户使用：yt-dlp 格式代码（-f）</string>
     <string name="share_custom_placeholder">格式代码</string>
     <string name="share_cancel">取消</string>
     <string name="share_stash">囤起来</string>
@@ -151,9 +151,9 @@
     <string name="hidden_many">已隐藏 %1$d 个 · 可在 设置 › 已隐藏 中找到</string>
     <string name="deleted_one">文件已删除</string>
     <string name="deleted_many">已删除 %1$d 个文件</string>
-    <string name="engine_restarting">正在重新启动 yt-dlp …</string>
-    <string name="engine_restarted">yt-dlp 正在运行</string>
-    <string name="engine_still_broken">yt-dlp 仍然无法启动</string>
+    <string name="engine_restarting">正在重新启动下载器 …</string>
+    <string name="engine_restarted">下载器正在运行</string>
+    <string name="engine_still_broken">下载器仍无法启动</string>
 
     <!-- File menu -->
     <string name="menu_play">在 Hamstr 中播放</string>
@@ -253,8 +253,8 @@
         <item quantity="other">已囤 %1$d 个文件</item>
     </plurals>
     <string name="stash_active">%1$d 个进行中</string>
-    <string name="stash_engine_starting">yt-dlp 启动中</string>
-    <string name="stash_engine_broken">yt-dlp 出错 · 点按重试</string>
+    <string name="stash_engine_starting">下载器正在启动</string>
+    <string name="stash_engine_broken">下载器未能启动 · 点按重试</string>
     <string name="stash_downloading">下载中</string>
     <string name="stash_running">%1$d 个运行中</string>
     <string name="stash_stashed">已囤好</string>
@@ -891,10 +891,10 @@
     <plurals name="stash_failed_all">
         <item quantity="other">%1$d 个下载失败</item>
     </plurals>
-    <string name="stash_failed_update_hint">网站有变化；通常更新 yt-dlp 就能解决</string>
+    <string name="stash_failed_update_hint">网站有变化；更新下载器通常就能解决</string>
     <string name="stash_update_retry">更新并重试</string>
     <string name="stash_retry_all">全部重试</string>
-    <string name="stash_updating">正在更新 yt-dlp，然后重试 …</string>
+    <string name="stash_updating">正在更新下载器，然后重试 …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">囤下复制的链接？</string>
     <string name="clip_offer_hint">剪贴板里有一个链接</string>
@@ -942,4 +942,37 @@
     <string name="follow_offer_channel">这是一个频道</string>
     <string name="follow_offer_playlist">这是一个播放列表</string>
     <string name="follow_unfollowed">已取消关注 %1$s</string>
+    <string name="share_more">更多选项</string>
+    <string name="share_custom">自定义格式</string>
+    <string name="share_no_subs">无字幕</string>
+    <string name="share_opens_done">完成后打开</string>
+    <string name="share_open_done_needs">需要“显示在其他应用上层”权限，可在 设置 › 下载 中允许</string>
+    <string name="share_stashed">好啦！已囤起来</string>
+    <string name="snack_canceled">下载已取消</string>
+    <string name="link_copied">链接已复制</string>
+    <string name="player_closed">播放器已关闭</string>
+    <string name="stash_moving">%2$d 个中有 %1$d 个在进行</string>
+    <string name="eta_left">还剩 %1$s</string>
+    <string name="intro_skip">点按跳过</string>
+    <string name="hidden_empty_desktop">没有隐藏的内容。从媒体库隐藏的文件会在这里等着，文件本身仍保留在这台电脑上。</string>
+    <string name="hidden_note_desktop">隐藏的文件仍保存在你的 Hamstr 文件夹中。点击文件可打开它的菜单。</string>
+    <plurals name="tray_downloading">
+        <item quantity="other">Hamstr · %1$d 个正在下载</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="other">Hamstr · %1$d 个等待中</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="other">%1$d 个下载已完成</item>
+    </plurals>
+    <string name="tray_failed">有一个下载没有成功</string>
+    <string name="drop_link">松开即可囤起来</string>
+    <plurals name="drop_files">
+        <item quantity="other">松开即可添加 %1$d 个文件</item>
+    </plurals>
+    <string name="drop_files_some">松开即可添加文件</string>
+    <string name="drop_no_link">这里面没有链接</string>
+    <plurals name="drop_added">
+        <item quantity="other">正在添加 %1$d 个文件</item>
+    </plurals>
 </resources>

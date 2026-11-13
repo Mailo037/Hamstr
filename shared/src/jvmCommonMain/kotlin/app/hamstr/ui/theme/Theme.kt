@@ -35,6 +35,8 @@ import app.hamstr.data.Base
 import app.hamstr.data.Prefs
 import app.hamstr.ui.components.LocalReduceMotion
 import app.hamstr.ui.components.systemReducesMotion
+import app.hamstr.ui.components.HamstrIndication
+import androidx.compose.foundation.LocalIndication
 
 /**
  * Raster: Slate's neutral dark surfaces with one accent (cheek orange).
@@ -49,7 +51,8 @@ data class Palette(
     val hover: Color = Color(0xFF343434),
     val ink: Color = Color(0xFFEEEEEE),
     val muted: Color = Color(0xFFAAAAAA),
-    val ghost: Color = Color(0xFF8A8A8A),
+    // At least 4.5:1 on surface and raised in every base (Graphite 5.1 / 4.7), still a step below muted.
+    val ghost: Color = Color(0xFF969696),
     val line: Color = Color(0xFF363636),
     val accent: Color = Color(0xFFFF9A3C),
     val onAccent: Color = Color(0xFF1A0F04),
@@ -87,6 +90,8 @@ data class Type(
     val title: TextStyle = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 21.sp, lineHeight = 26.sp),
     val hero: TextStyle = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 36.sp, lineHeight = 40.sp, letterSpacing = (-0.5).sp),
     val badge: TextStyle = TextStyle(fontFamily = code, fontWeight = FontWeight.SemiBold, fontSize = 10.5.sp, lineHeight = 14.sp, letterSpacing = 0.3.sp),
+    // A [ BADGE ] beside a meta line: regular weight, so it doesn't outshout the facts next to it.
+    val tag: TextStyle = TextStyle(fontFamily = code, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.3.sp),
     val mono: TextStyle = TextStyle(fontFamily = code, fontSize = 12.sp, lineHeight = 16.sp),
     val button: TextStyle = TextStyle(fontFamily = sans, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp),
 )
@@ -137,28 +142,28 @@ fun paletteFor(base: Base, accent: Color): Palette {
         Base.Cocoa -> Palette(
             canvas = Color(0xFF15120F), overlay = Color(0xFF1E1A16), surface = Color(0xFF27221D),
             raised = Color(0xFF2E2822), hover = Color(0xFF372F28), line = Color(0xFF3A322A),
-            ink = Color(0xFFF1EBE2), muted = Color(0xFFADA396), ghost = Color(0xFF8E8476),
+            ink = Color(0xFFF1EBE2), muted = Color(0xFFADA396), ghost = Color(0xFF9A9082),
             black = Color(0xFF0D0B09), accent = accent, onAccent = onAccent,
         )
         // Blue-black, like a night sky.
         Base.Midnight -> Palette(
             canvas = Color(0xFF0F121A), overlay = Color(0xFF171B26), surface = Color(0xFF1F2431),
             raised = Color(0xFF262C3A), hover = Color(0xFF2E3546), line = Color(0xFF303849),
-            ink = Color(0xFFE8ECF4), muted = Color(0xFFA3AABA), ghost = Color(0xFF828A9C),
+            ink = Color(0xFFE8ECF4), muted = Color(0xFFA3AABA), ghost = Color(0xFF8E96A8),
             black = Color(0xFF090B10), accent = accent, onAccent = onAccent,
         )
         // Green-black, like a forest floor.
         Base.Moss -> Palette(
             canvas = Color(0xFF111411), overlay = Color(0xFF191E19), surface = Color(0xFF212721),
             raised = Color(0xFF282F28), hover = Color(0xFF303830), line = Color(0xFF323A31),
-            ink = Color(0xFFE9EEE6), muted = Color(0xFFA4AC9F), ghost = Color(0xFF858D80),
+            ink = Color(0xFFE9EEE6), muted = Color(0xFFA4AC9F), ghost = Color(0xFF91998C),
             black = Color(0xFF0A0C0A), accent = accent, onAccent = onAccent,
         )
         // Violet-black.
         Base.Plum -> Palette(
             canvas = Color(0xFF141117), overlay = Color(0xFF1D1821), surface = Color(0xFF26202B),
             raised = Color(0xFF2D2633), hover = Color(0xFF362E3D), line = Color(0xFF3A3141),
-            ink = Color(0xFFF0EAF3), muted = Color(0xFFADA3B3), ghost = Color(0xFF8D8394),
+            ink = Color(0xFFF0EAF3), muted = Color(0xFFADA3B3), ghost = Color(0xFF998FA0),
             black = Color(0xFF0C0A0D), accent = accent, onAccent = onAccent,
         )
     }
@@ -199,6 +204,8 @@ fun HamstrTheme(content: @Composable () -> Unit) {
         LocalTextSelectionColors provides TextSelectionColors(palette.accent, palette.accent.copy(alpha = 0.35f)),
         LocalReduceMotion provides reduce,
         LocalFx provides fx,
+        // Hover, press and keyboard focus in Hamstr's colours instead of Foundation's grey.
+        LocalIndication provides HamstrIndication,
         LocalHapticFeedback provides if (s.haptics) LocalHapticFeedback.current else NoHaptics,
         content = content,
     )

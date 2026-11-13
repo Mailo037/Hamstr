@@ -17,9 +17,9 @@
     <string name="err_full">Telefonun alanı dolu</string>
     <string name="err_full_hint">Biraz yer aç, sonra tekrar dene.</string>
     <string name="err_unsupported">Hamstr bu bağlantıyı tanımıyor</string>
-    <string name="err_unsupported_hint">yt-dlp bu sayfadaki medyayı okuyamıyor.</string>
+    <string name="err_unsupported_hint">Hamstr bu sayfada video ya da şarkı bulamıyor.</string>
     <string name="err_drm">Bu içerik kopya korumalı</string>
-    <string name="err_drm_hint">DRM ile kilitli, bu yüzden kaydedilemez.</string>
+    <string name="err_drm_hint">Site bunu kopyalamaya karşı koruyor, bu yüzden kaydedilemez.</string>
     <string name="err_private">Bu içerik özel</string>
     <string name="err_private_hint">Yalnızca sahibi ya da sahibinin izin verdiği kişiler görebilir.</string>
     <string name="err_age">Yaş sınırlı</string>
@@ -35,18 +35,18 @@
     <string name="err_format">Bu kalite sunulmuyor</string>
     <string name="err_format_hint">Başka bir kalite seç ya da En iyi’yi seç.</string>
     <string name="err_changed">Site bir şeyi değiştirdi</string>
-    <string name="err_changed_hint">Siteler sürekli değişir. Daha yeni bir yt-dlp genellikle bunu düzeltir.</string>
+    <string name="err_changed_hint">Siteler sürekli değişir. Hamstr’ın indiricisi için bir güncelleme genellikle bunu düzeltir.</string>
     <string name="err_ffmpeg">Dosya tamamlanamadı</string>
-    <string name="err_ffmpeg_hint">FFmpeg dosyayı birleştirirken ya da dönüştürürken durdu. Tekrar denemek genellikle işe yarar.</string>
+    <string name="err_ffmpeg_hint">Dosyayı birleştirme durdu. Tekrar denemek genellikle işe yarar.</string>
     <string name="err_details">Ayrıntılar</string>
     <string name="err_copy">Hatayı kopyala</string>
     <string name="err_copied">Hata kopyalandı</string>
-    <string name="err_update_retry">yt-dlp’yi güncelle ve tekrar dene</string>
-    <string name="err_updating">yt-dlp güncelleniyor …</string>
+    <string name="err_update_retry">Güncelle &amp; tekrar dene</string>
+    <string name="err_updating">İndirici güncelleniyor …</string>
     <string name="err_try_again">Tekrar dene</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">Bağlantı çözümleniyor …</string>
+    <string name="stage_resolving">Bağlantı okunuyor …</string>
     <string name="stage_merging">Video ve ses birleştiriliyor …</string>
     <string name="stage_extracting">Ses dönüştürülüyor …</string>
     <string name="stage_remuxing">Dosya paketleniyor …</string>
@@ -78,8 +78,8 @@
     <string name="notif_timeout_text">Android, arka planda indirmelere günde 6 saat izin veriyor. Hamstr’ı aç, kaldığı yerden devam eder.</string>
 
     <!-- Share sheet -->
-    <string name="share_sniffing">Bağlantı koklanıyor …</string>
-    <string name="share_reading_formats">formatlar okunuyor …</string>
+    <string name="share_sniffing">Bağlantıya bakılıyor …</string>
+    <string name="share_reading_formats">kaliteler aranıyor …</string>
     <string name="share_already_here">Zula’nda zaten var</string>
     <string name="share_already_coming">Zaten yolda</string>
     <string name="share_open">Aç</string>
@@ -91,7 +91,7 @@
     <string name="share_format">Biçim</string>
     <string name="share_subtitles">Altyazılar (%1$s)</string>
     <string name="share_audio_format">Ses biçimi</string>
-    <string name="share_custom_hint">yt-dlp biçim seçici (-f)</string>
+    <string name="share_custom_hint">Uzmanlar için: bir yt-dlp biçim kodu (-f)</string>
     <string name="share_custom_placeholder">Biçim kodu</string>
     <string name="share_cancel">İptal</string>
     <string name="share_stash">Kaydet</string>
@@ -155,9 +155,9 @@
     <string name="hidden_many">%1$d gizlendi · Ayarlar › Gizlenenler’de bul</string>
     <string name="deleted_one">Dosya silindi</string>
     <string name="deleted_many">%1$d dosya silindi</string>
-    <string name="engine_restarting">yt-dlp yeniden başlatılıyor …</string>
-    <string name="engine_restarted">yt-dlp çalışıyor</string>
-    <string name="engine_still_broken">yt-dlp hâlâ başlamıyor</string>
+    <string name="engine_restarting">İndirici yeniden başlatılıyor …</string>
+    <string name="engine_restarted">İndirici çalışıyor</string>
+    <string name="engine_still_broken">İndirici hâlâ başlamıyor</string>
 
     <!-- File menu -->
     <string name="menu_play">Hamstr’da oynat</string>
@@ -258,8 +258,8 @@
         <item quantity="other">Zula’da %1$d dosya</item>
     </plurals>
     <string name="stash_active">%1$d etkin</string>
-    <string name="stash_engine_starting">yt-dlp başlıyor</string>
-    <string name="stash_engine_broken">yt-dlp bozuk · tekrar denemek için dokun</string>
+    <string name="stash_engine_starting">İndirici başlıyor</string>
+    <string name="stash_engine_broken">İndirici başlamadı · tekrar denemek için dokun</string>
     <string name="stash_downloading">İndiriliyor</string>
     <string name="stash_running">%1$d çalışıyor</string>
     <string name="stash_stashed">Kaydedildi</string>
@@ -908,10 +908,10 @@
         <item quantity="one">%1$d indirme başarısız oldu</item>
         <item quantity="other">%1$d indirme başarısız oldu</item>
     </plurals>
-    <string name="stash_failed_update_hint">Site değişti; genellikle daha yeni bir yt-dlp bunu düzeltir</string>
+    <string name="stash_failed_update_hint">Site değişti; indirici için bir güncelleme genellikle bunu düzeltir</string>
     <string name="stash_update_retry">Güncelle &amp; yeniden dene</string>
     <string name="stash_retry_all">Hepsini yeniden dene</string>
-    <string name="stash_updating">yt-dlp güncelleniyor, ardından yeniden denenecek …</string>
+    <string name="stash_updating">İndirici güncelleniyor, ardından yeniden denenecek …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">Kopyaladığın bağlantı zulaya eklensin mi?</string>
     <string name="clip_offer_hint">Panoda bir bağlantı var</string>
@@ -961,4 +961,42 @@
     <string name="follow_offer_channel">Bu bir kanal</string>
     <string name="follow_offer_playlist">Bu bir oynatma listesi</string>
     <string name="follow_unfollowed">%1$s takibi bırakıldı</string>
+    <string name="share_more">Diğer seçenekler</string>
+    <string name="share_custom">Özel biçim</string>
+    <string name="share_no_subs">Altyazı yok</string>
+    <string name="share_opens_done">Bitince açılır</string>
+    <string name="share_open_done_needs">“Diğer uygulamaların üzerinde göster” izni gerekir; Ayarlar › İndirmeler’den izin verebilirsin</string>
+    <string name="share_stashed">Nam! Zulada</string>
+    <string name="snack_canceled">İndirme iptal edildi</string>
+    <string name="link_copied">Bağlantı kopyalandı</string>
+    <string name="player_closed">Oynatıcı kapatıldı</string>
+    <string name="stash_moving">%1$d / %2$d ilerliyor</string>
+    <string name="eta_left">%1$s kaldı</string>
+    <string name="intro_skip">Geçmek için dokun</string>
+    <string name="hidden_empty_desktop">Gizli bir şey yok. Kitaplıktan gizlediklerin burada bekler, dosyalar bu bilgisayarda kalır.</string>
+    <string name="hidden_note_desktop">Gizlenen dosyalar Hamstr klasöründe kalır. Menüsü için birine tıkla.</string>
+    <plurals name="tray_downloading">
+        <item quantity="one">Hamstr · %1$d indiriliyor</item>
+        <item quantity="other">Hamstr · %1$d indiriliyor</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="one">Hamstr · %1$d bekliyor</item>
+        <item quantity="other">Hamstr · %1$d bekliyor</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="one">İndirme bitti</item>
+        <item quantity="other">%1$d indirme bitti</item>
+    </plurals>
+    <string name="tray_failed">Bir indirme olmadı</string>
+    <string name="drop_link">Zulaya atmak için bırak</string>
+    <plurals name="drop_files">
+        <item quantity="one">Dosyayı eklemek için bırak</item>
+        <item quantity="other">%1$d dosyayı eklemek için bırak</item>
+    </plurals>
+    <string name="drop_files_some">Dosyaları eklemek için bırak</string>
+    <string name="drop_no_link">Bunda bağlantı yok</string>
+    <plurals name="drop_added">
+        <item quantity="one">Dosya ekleniyor</item>
+        <item quantity="other">%1$d dosya ekleniyor</item>
+    </plurals>
 </resources>

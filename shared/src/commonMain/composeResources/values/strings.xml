@@ -17,9 +17,9 @@
     <string name="err_full">The phone is full</string>
     <string name="err_full_hint">Free up some space, then try again.</string>
     <string name="err_unsupported">Hamstr doesn’t know this link</string>
-    <string name="err_unsupported_hint">yt-dlp has no way to read media from this page.</string>
+    <string name="err_unsupported_hint">Hamstr can’t find a video or song on this page.</string>
     <string name="err_drm">This one is copy-protected</string>
-    <string name="err_drm_hint">It’s locked with DRM, so it can’t be saved.</string>
+    <string name="err_drm_hint">The site locks it against copying, so it can’t be saved.</string>
     <string name="err_private">This one is private</string>
     <string name="err_private_hint">Only its owner, or the people they allow, can see it.</string>
     <string name="err_age">Age-restricted</string>
@@ -35,18 +35,18 @@
     <string name="err_format">That quality isn’t offered</string>
     <string name="err_format_hint">Pick another quality, or Best.</string>
     <string name="err_changed">The site changed something</string>
-    <string name="err_changed_hint">Sites change all the time. A newer yt-dlp usually fixes this.</string>
+    <string name="err_changed_hint">Sites change all the time. An update for Hamstr’s downloader usually fixes it.</string>
     <string name="err_ffmpeg">Couldn’t finish the file</string>
-    <string name="err_ffmpeg_hint">FFmpeg stopped while joining or converting it. Trying again usually works.</string>
+    <string name="err_ffmpeg_hint">Putting the file together stopped. Trying again usually works.</string>
     <string name="err_details">Details</string>
     <string name="err_copy">Copy error</string>
     <string name="err_copied">Error copied</string>
-    <string name="err_update_retry">Update yt-dlp &amp; retry</string>
-    <string name="err_updating">Updating yt-dlp …</string>
+    <string name="err_update_retry">Update &amp; try again</string>
+    <string name="err_updating">Updating the downloader …</string>
     <string name="err_try_again">Try again</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">Resolving the link …</string>
+    <string name="stage_resolving">Reading the link …</string>
     <string name="stage_merging">Merging video and audio …</string>
     <string name="stage_extracting">Converting the audio …</string>
     <string name="stage_remuxing">Packing the file …</string>
@@ -78,8 +78,8 @@
     <string name="notif_timeout_text">Android allows downloads in the background for 6 hours a day. Open Hamstr and they carry on.</string>
 
     <!-- Share sheet -->
-    <string name="share_sniffing">Sniffing the link …</string>
-    <string name="share_reading_formats">reading the formats …</string>
+    <string name="share_sniffing">Looking at the link …</string>
+    <string name="share_reading_formats">looking for the qualities …</string>
     <string name="share_already_here">Already in your stash</string>
     <string name="share_already_coming">Already on its way</string>
     <string name="share_open">Open</string>
@@ -91,8 +91,13 @@
     <string name="share_format">Format</string>
     <string name="share_subtitles">Subtitles (%1$s)</string>
     <string name="share_audio_format">Audio format</string>
-    <string name="share_custom_hint">yt-dlp format selector (-f)</string>
+    <string name="share_custom_hint">For experts: a yt-dlp format code (-f)</string>
     <string name="share_custom_placeholder">Format code</string>
+    <string name="share_more">More options</string>
+    <string name="share_custom">Custom format</string>
+    <string name="share_no_subs">No subtitles</string>
+    <string name="share_opens_done">Opens when done</string>
+    <string name="share_open_done_needs">Needs “Display over other apps”, which Settings › Downloads can allow</string>
     <string name="share_cancel">Cancel</string>
     <string name="share_stash">Stash it</string>
     <string name="share_stash_sized">Stash it · %1$s</string>
@@ -136,6 +141,7 @@
     <string name="tab_settings">Settings</string>
     <string name="share_no_link">No link found</string>
     <string name="share_stashing">Nom! Stashing it</string>
+    <string name="share_stashed">Nom! In the stash</string>
     <string name="no_clipboard_link">No link in the clipboard</string>
     <string name="import_one">Bringing it in …</string>
     <string name="import_many">Bringing %1$d files in …</string>
@@ -150,14 +156,15 @@
     <string name="audio_saved">Audio saved next to the video</string>
     <string name="audio_failed">Couldn’t save the audio</string>
     <string name="undo">Undo</string>
+    <string name="snack_canceled">Download canceled</string>
     <string name="removed_from_list">Removed from the list</string>
     <string name="hidden_one">Hidden · find it in Settings › Hidden</string>
     <string name="hidden_many">%1$d hidden · find them in Settings › Hidden</string>
     <string name="deleted_one">File deleted</string>
     <string name="deleted_many">%1$d files deleted</string>
-    <string name="engine_restarting">Starting yt-dlp again …</string>
-    <string name="engine_restarted">yt-dlp is running</string>
-    <string name="engine_still_broken">yt-dlp still won’t start</string>
+    <string name="engine_restarting">Starting the downloader again …</string>
+    <string name="engine_restarted">The downloader is running</string>
+    <string name="engine_still_broken">The downloader still won’t start</string>
 
     <!-- File menu -->
     <string name="menu_play">Play in Hamstr</string>
@@ -184,6 +191,7 @@
     <string name="info_title">File info</string>
     <string name="info_tap_copy">Tap a line to copy it</string>
     <string name="info_copied">Copied</string>
+    <string name="link_copied">Link copied</string>
     <string name="info_name">Title</string>
     <string name="info_channel">Channel</string>
     <string name="info_site">Site</string>
@@ -231,6 +239,7 @@
     <string name="player_more">More options</string>
     <string name="player_cant_show">Hamstr can’t show .%1$s files itself. Open it in an app that can, or share it.</string>
     <string name="player_close">Close player</string>
+    <string name="player_closed">Player closed</string>
     <string name="player_exit_fullscreen">Exit fullscreen</string>
     <string name="player_fullscreen">Fullscreen</string>
     <string name="player_speed">Playback speed</string>
@@ -258,10 +267,11 @@
         <item quantity="other">%1$d files stashed</item>
     </plurals>
     <string name="stash_active">%1$d active</string>
-    <string name="stash_engine_starting">yt-dlp starting</string>
-    <string name="stash_engine_broken">yt-dlp broken · tap to retry</string>
+    <string name="stash_engine_starting">Downloader starting</string>
+    <string name="stash_engine_broken">Downloader didn’t start · tap to retry</string>
     <string name="stash_downloading">Downloading</string>
     <string name="stash_running">%1$d running</string>
+    <string name="stash_moving">%1$d of %2$d moving</string>
     <string name="stash_stashed">Stashed</string>
     <string name="stash_hide">Hide</string>
     <string name="stash_remove">Remove</string>
@@ -286,6 +296,7 @@
     <string name="status_downloading">downloading</string>
     <string name="status_failed">failed</string>
     <string name="status_canceled">canceled</string>
+    <string name="eta_left">%1$s left</string>
     <string name="ago_now">just now</string>
     <string name="ago_minutes">%1$d min ago</string>
     <string name="ago_hours">%1$d h ago</string>
@@ -405,6 +416,7 @@
     <string name="set_appearance_note">Changes apply right away, in the app, its widgets, shortcuts and notifications.</string>
     <string name="set_intro">Startup animation</string>
     <string name="set_intro_hint">The hamster assembles itself and waves hello</string>
+    <string name="intro_skip">Tap to skip</string>
     <string name="set_moods">Hamster moods</string>
     <string name="set_moods_hint">Blinking, winking and munching when something finishes</string>
     <string name="set_stretch">Stretchy motion</string>
@@ -607,12 +619,14 @@
         <item quantity="other">%1$d files · %2$s</item>
     </plurals>
     <string name="hidden_empty">Nothing is hidden. What you hide from the library waits here, and the files stay on the phone.</string>
+    <string name="hidden_empty_desktop">Nothing is hidden. What you hide from the library waits here, and the files stay on this computer.</string>
     <string name="hidden_restore">Show again</string>
     <string name="hidden_restore_all">Show all again</string>
     <string name="hidden_delete_all">Delete all</string>
     <string name="hidden_delete_confirm">Tap again to delete</string>
     <string name="hidden_restored">Back in the library</string>
     <string name="hidden_note">Hidden files stay in Download/Hamstr. Delete them here to free the space.</string>
+    <string name="hidden_note_desktop">Hidden files stay in your Hamstr folder. Click one for its menu.</string>
     <string name="set_icon_accent">App icon follows the accent</string>
     <string name="set_icon_accent_hint">The launcher icon’s cheeks take the accent when you leave the app. Some launchers need a moment, or the icon placed on the home screen again.</string>
 
@@ -744,6 +758,31 @@
     <string name="tray_open">Open Hamstr</string>
     <string name="tray_paste">Stash copied link</string>
     <string name="tray_quit">Quit Hamstr</string>
+    <!-- The tray icon's tooltip while downloads run; the app adds how far they are (“ · 64 %”). -->
+    <plurals name="tray_downloading">
+        <item quantity="one">Hamstr · %1$d downloading</item>
+        <item quantity="other">Hamstr · %1$d downloading</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="one">Hamstr · %1$d waiting</item>
+        <item quantity="other">Hamstr · %1$d waiting</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="one">Download finished</item>
+        <item quantity="other">%1$d downloads finished</item>
+    </plurals>
+    <string name="tray_failed">A download didn’t work</string>
+    <string name="drop_link">Drop to stash</string>
+    <plurals name="drop_files">
+        <item quantity="one">Drop to add the file</item>
+        <item quantity="other">Drop to add %1$d files</item>
+    </plurals>
+    <string name="drop_files_some">Drop to add the files</string>
+    <string name="drop_no_link">No link in that</string>
+    <plurals name="drop_added">
+        <item quantity="one">Adding the file</item>
+        <item quantity="other">Adding %1$d files</item>
+    </plurals>
     <string name="set_this_computer">This computer</string>
     <string name="set_tray">Keep running in the tray</string>
     <string name="set_tray_hint">Closing the window leaves Hamstr in the tray: downloads go on and your other devices can still send links</string>
@@ -908,10 +947,10 @@
         <item quantity="one">%1$d download failed</item>
         <item quantity="other">%1$d downloads failed</item>
     </plurals>
-    <string name="stash_failed_update_hint">The site changed; a newer yt-dlp usually fixes that</string>
+    <string name="stash_failed_update_hint">The site changed; an update for the downloader usually fixes that</string>
     <string name="stash_update_retry">Update &amp; retry</string>
     <string name="stash_retry_all">Retry all</string>
-    <string name="stash_updating">Updating yt-dlp, then trying again …</string>
+    <string name="stash_updating">Updating the downloader, then trying again …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">Stash the link you copied?</string>
     <string name="clip_offer_hint">There’s a link on the clipboard</string>

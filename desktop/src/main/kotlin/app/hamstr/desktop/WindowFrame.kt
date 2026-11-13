@@ -57,7 +57,9 @@ import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.IntByReference
 import java.awt.Cursor
+import androidx.compose.ui.window.WindowPlacement
 import java.awt.Frame
+import java.awt.GraphicsEnvironment
 import java.awt.MouseInfo
 import java.awt.Point
 import java.awt.Rectangle
@@ -73,6 +75,13 @@ import java.awt.event.MouseEvent
 class WindowFrame(val window: ComposeWindow) {
     var maximized by mutableStateOf(false)
         private set
+    /** Pushed to a screen's side by the bar: half the screen, until it is dragged away again. */
+    var snapped by mutableStateOf(false)
+        private set
+    /** A video fills the whole screen, without the bar and the taskbar. */
+    var fullscreen by mutableStateOf(false)
+        private set
+    private var beforeFullscreen: Rectangle? = null
     /**
      * Where the pointer is over the window, in dp from its top left; null when it is elsewhere.
      * Read straight from AWT: Compose's own hover loses track when the window jumps (minimised,
@@ -110,22 +119,93 @@ class WindowFrame(val window: ComposeWindow) {
     fun toggleMaximized() = if (maximized) restore() else maximize()
 
     fun maximize() {
-        normal = window.bounds
-        val gc = window.graphicsConfiguration
-        val screen = gc.bounds
-        val insets = Toolkit.getDefaultToolkit().getScreenInsets(gc)
-        window.bounds = Rectangle(screen.x + insets.left, screen.y + insets.top, screen.width - insets.left - insets.right, screen.height - insets.top - insets.bottom)
+        // From half a screen, back means the size it had before it went to the side.
+        if (!snapped) normal = window.bounds
+        window.bounds = workArea(window.graphicsConfiguration)
         maximized = true
+        snapped = false
         pointer = null
         round(false)
     }
 
-    /** Back to the size it had; dragged out of maximised, it comes along under the pointer. */
+    /** Back to the size it had; dragged out of maximised or half the screen, it comes along under the pointer. */
     fun restore(under: Point? = null) {
         normal?.let { n -> window.bounds = if (under == null) n else Rectangle(under.x - n.width / 2, under.y - 18, n.width, n.height) }
         maximized = false
+        snapped = false
         pointer = null
         round(true)
+    }
+
+    /**
+     * Let go of the bar at a screen's edge, like the system's own windows: at the top it fills the
+     * screen, at a side it takes that half. macOS tiles windows itself.
+     */
+    fun snapAt(p: Point) {
+        if (Paths.mac || maximized) return
+        val gc = GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
+            .map { it.defaultConfiguration }.firstOrNull { it.bounds.contains(p) } ?: return
+        val screen = gc.bounds
+        val work = workArea(gc)
+        val edge = 2
+        when {
+            p.y <= screen.y + edge -> maximize()
+            p.x <= screen.x + edge -> snapTo(Rectangle(work.x, work.y, work.width / 2, work.height))
+            p.x >= screen.x + screen.width - 1 - edge -> snapTo(Rectangle(work.x + work.width - work.width / 2, work.y, work.width / 2, work.height))
+        }
+    }
+
+    private fun snapTo(r: Rectangle) {
+        if (!snapped) normal = window.bounds
+        window.bounds = r
+        snapped = true
+        pointer = null
+    }
+
+    fun toggleFullscreen() = if (fullscreen) exitFullscreen() else enterFullscreen()
+
+    fun enterFullscreen() {
+        if (fullscreen) return
+        if (Paths.mac) {
+            // macOS has a fullscreen of its own, with its own space and animation.
+            window.placement = WindowPlacement.Fullscreen
+        } else {
+            beforeFullscreen = window.bounds
+            // The whole screen, taskbar's part too: Windows hides it for a window that covers its monitor.
+            window.bounds = window.graphicsConfiguration.bounds
+            round(false)
+        }
+        fullscreen = true
+        pointer = null
+    }
+
+    fun exitFullscreen() {
+        if (!fullscreen) return
+        if (Paths.mac) {
+            window.placement = WindowPlacement.Floating
+        } else {
+            beforeFullscreen?.let { window.bounds = it }
+            beforeFullscreen = null
+            round(!maximized)
+        }
+        fullscreen = false
+        pointer = null
+    }
+
+    /** Where the window is when it floats, and whether it fills the screen: what a new start comes back to. */
+    fun place(): Pair<Rectangle, Boolean> {
+        val floating = when {
+            fullscreen && !Paths.mac -> if (maximized || snapped) normal ?: beforeFullscreen else beforeFullscreen
+            maximized || snapped -> normal
+            else -> null
+        } ?: window.bounds
+        return floating to maximized
+    }
+
+    private fun workArea(gc: java.awt.GraphicsConfiguration): Rectangle {
+        val screen = gc.bounds
+        val insets = Toolkit.getDefaultToolkit().getScreenInsets(gc)
+        return Rectangle(screen.x + insets.left, screen.y + insets.top, screen.width - insets.left - insets.right, screen.height - insets.top - insets.bottom)
     }
 
     fun minimize() {
@@ -149,9 +229,13 @@ class WindowFrame(val window: ComposeWindow) {
     }
 }
 
-/** How big the title bar and its buttons are: small rounded keys in the bar, not full-height slabs. */
+/**
+ * How big the title bar and its buttons are: small rounded keys in the bar, not full-height slabs,
+ * each in a 42 dp hit area as tall as the bar, so Close reaches the corner of a maximised window.
+ */
 internal val TITLE_BAR = 34.dp
 private val BUTTON = DpSize(30.dp, 24.dp)
+private val HIT = DpSize(42.dp, TITLE_BAR)
 private val GLYPH = 8.dp
 
 /** The title bar: the hamster and the name on the left, the window buttons on the right. */
@@ -170,10 +254,11 @@ fun TitleBar(frame: WindowFrame, onClose: () -> Unit) {
                     var origin = Point()
                     detectDragGestures(
                         onDragStart = {
-                            if (frame.maximized) frame.restore(MouseInfo.getPointerInfo().location)
+                            if (frame.maximized || frame.snapped) frame.restore(MouseInfo.getPointerInfo().location)
                             start = MouseInfo.getPointerInfo().location
                             origin = frame.window.location
                         },
+                        onDragEnd = { frame.snapAt(MouseInfo.getPointerInfo().location) },
                         onDrag = { change, _ ->
                             change.consume()
                             val p = MouseInfo.getPointerInfo().location
@@ -215,7 +300,6 @@ fun TitleBar(frame: WindowFrame, onClose: () -> Unit) {
                 drawLine(it, m + Offset(-s, -s), m + Offset(s, s), 1.dp.toPx())
                 drawLine(it, m + Offset(-s, s), m + Offset(s, -s), 1.dp.toPx())
             }
-            Spacer(Modifier.width(6.dp))
         }
     }
 }
@@ -245,17 +329,18 @@ private fun WindowButton(label: String, frame: WindowFrame, danger: Boolean = fa
     val hovered = frame.pointer?.let { p -> with(density) { bounds.contains(Offset(p.x.toPx(), p.y.toPx())) } } == true
     val p = animateSelection(hovered)
     val bg = if (danger) Color(0xFFC42B1C) else c.hover
+    // The whole hit area answers; the key in its middle shows it.
     Box(
         Modifier
-            .padding(horizontal = 1.dp)
-            .size(BUTTON)
+            .size(HIT)
             .onGloballyPositioned { bounds = it.boundsInWindow() }
-            .clip(RoundedCornerShape(8.dp))
-            .background(bg.copy(alpha = bg.alpha * p))
             .clickable(remember { MutableInteractionSource() }, null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(BUTTON)) { glyph(if (danger && hovered) Color.White else c.muted) }
+        Box(Modifier.size(BUTTON).clip(RoundedCornerShape(8.dp)).background(bg.copy(alpha = bg.alpha * p))) {
+            Canvas(Modifier.size(BUTTON)) { glyph(if (danger && hovered) Color.White else c.muted) }
+        }
         Tip(hovered, label)
     }
 }

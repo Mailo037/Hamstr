@@ -51,6 +51,10 @@ import app.hamstr.ui.LookBlocks
 import app.hamstr.ui.LanguageBlock
 import app.hamstr.ui.SettingBlock
 import app.hamstr.ui.SettingLabel
+import app.hamstr.ui.HiddenSettings
+import app.hamstr.data.DownloadTask
+import app.hamstr.ui.components.ScrollIndicator
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import app.hamstr.ui.components.ButtonKind
 import app.hamstr.ui.components.Divider
 import app.hamstr.ui.components.Group
@@ -79,36 +83,53 @@ internal enum class Page(val title: StringResource, val icon: DrawableResource) 
     Playback(Res.string.page_playback, Res.drawable.ic_play_arrow),
     Engine(Res.string.page_engine, Res.drawable.ic_code),
     Devices(Res.string.page_devices, Res.drawable.ic_devices),
+    Hidden(Res.string.page_hidden, Res.drawable.ic_visibility_off),
     Data(Res.string.page_data, Res.drawable.ic_pie_chart),
     About(Res.string.page_about, Res.drawable.ic_info),
 }
 
-/** A settings page, the same categories as on the phone; the side bar lists them. */
+/**
+ * A settings page, the same categories as on the phone; the side bar lists them. Each page keeps
+ * where it was scrolled while another one shows.
+ */
 @Composable
-internal fun DesktopSettings(page: Page, engine: EngineState, onQuit: () -> Unit, onTour: () -> Unit, onDevice: (String) -> Unit, onFollowing: (app.hamstr.data.Subscription) -> Unit = {}) {
+internal fun DesktopSettings(
+    page: Page, engine: EngineState, onQuit: () -> Unit, onTour: () -> Unit, onDevice: (String) -> Unit,
+    onFollowing: (app.hamstr.data.Subscription) -> Unit = {},
+    // A hidden file's menu, at the pointer.
+    onFileMenu: (DownloadTask) -> Unit = {},
+) {
+    val pages = rememberSaveableStateHolder()
     AnimatedContent(page, Modifier.fillMaxSize(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "page") { p ->
-        val scroll = rememberScrollState()
-        // A readable column in the middle of the window, its title over it, like the stash.
-        Column(Modifier.fillMaxSize().edgeFade(scroll, Orientation.Vertical).verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
-            Column(Modifier.widthIn(max = 640.dp).fillMaxWidth()) {
-                Txt(stringResource(p.title), style = Hamstr.type.title, modifier = Modifier.padding(start = 6.dp, top = 8.dp, bottom = 14.dp))
-                when (p) {
-                    Page.Appearance -> Group {
-                        LookBlocks()
-                        val s by Prefs.settings.collectAsState()
-                        LanguageBlock(s.language, Language::pick)
+        pages.SaveableStateProvider(p.name) {
+            val scroll = rememberScrollState()
+            Box(Modifier.fillMaxSize()) {
+                // A readable column in the middle of the window, its title over it, like the stash.
+                Column(Modifier.fillMaxSize().edgeFade(scroll, Orientation.Vertical).verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.widthIn(max = 640.dp).fillMaxWidth()) {
+                        Txt(stringResource(p.title), style = Hamstr.type.title, modifier = Modifier.padding(start = 6.dp, top = 8.dp, bottom = 14.dp))
+                        when (p) {
+                            Page.Appearance -> Group {
+                                LookBlocks()
+                                val s by Prefs.settings.collectAsState()
+                                LanguageBlock(s.language, Language::pick)
+                            }
+                            Page.Motion -> MotionPage()
+                            Page.Downloads -> DownloadsPage()
+                            Page.Following -> FollowingSettings(onOpen = onFollowing)
+                            // The computer plays one file at a time: no queue to crossfade.
+                            Page.Playback -> Group { EqualizerBlock() }
+                            Page.Engine -> EnginePage(engine)
+                            Page.Devices -> NearbySettings(bluetooth = { BluetoothRow() }, onDevice = onDevice)
+                            // No deleting here yet: the computer only shows them again.
+                            Page.Hidden -> HiddenSettings(onDelete = null, onHint = { Snacks.show(it) }, onMenu = onFileMenu)
+                            Page.Data -> DataSettings(DesktopData::measure, DesktopData::clearCache, DesktopData::export, DesktopData::import)
+                            Page.About -> AboutPage(onQuit, onTour)
+                        }
+                        Spacer(Modifier.height(24.dp))
                     }
-                    Page.Motion -> MotionPage()
-                    Page.Downloads -> DownloadsPage()
-                    Page.Following -> FollowingSettings(onOpen = onFollowing)
-                    // The computer plays one file at a time: no queue to crossfade.
-                    Page.Playback -> Group { EqualizerBlock() }
-                    Page.Engine -> EnginePage(engine)
-                    Page.Devices -> NearbySettings(bluetooth = { BluetoothRow() }, onDevice = onDevice)
-                    Page.Data -> DataSettings(DesktopData::measure, DesktopData::clearCache, DesktopData::export, DesktopData::import)
-                    Page.About -> AboutPage(onQuit, onTour)
                 }
-                Spacer(Modifier.height(24.dp))
+                ScrollIndicator(scroll, Modifier.align(Alignment.TopEnd))
             }
         }
     }

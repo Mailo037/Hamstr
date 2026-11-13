@@ -226,7 +226,8 @@ internal fun TaskMenu(
         }
         when {
             t.status.active -> MenuGroup {
-                MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_cancel), danger = true) { DownloadService.send(context, DownloadService.ACTION_CANCEL, t.id); onClose() }
+                // Gone at once, but its parts wait behind Undo in the snack before they really go.
+                MenuRow(Res.drawable.ic_close, stringResource(R.string.menu_cancel), danger = true) { app.hamstr.data.PendingCancel.request(t); onClose() }
             }
             file != null -> MenuGroup {
                 // Opened from Settings › Hidden, the file comes back instead.

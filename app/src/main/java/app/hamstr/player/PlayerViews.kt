@@ -159,9 +159,9 @@ internal fun VideoSurface(
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             if (forced) onExitFullscreen() else onMinimize()
                         }
-                        scope.launch { pull.animateTo(0f, Specs.settle()) }
+                        scope.launch { pull.animateTo(0f, Specs.release()) }
                     },
-                    onDragCancel = { scope.launch { pull.animateTo(0f, Specs.settle()) } },
+                    onDragCancel = { scope.launch { pull.animateTo(0f, Specs.release()) } },
                 )
             } else Modifier),
         contentAlignment = Alignment.Center,
@@ -327,7 +327,7 @@ internal fun Cover(
                         }
                     }
                     detectHorizontalDragGestures(
-                        onDragStart = { total = 0f; armed = false; tracker.resetTracking() },
+                        onDragStart = { total = 0f; armed = false; tracker.resetTracking(); swipeX.updateBounds(null, null) },
                         onHorizontalDrag = { change, dx ->
                             change.consume()
                             total += dx
@@ -360,10 +360,10 @@ internal fun Cover(
                                         settleAfterSkip(swipeX) { id }
                                     }
                                 }
-                                else -> scope.launch { swipeX.animateTo(0f, Specs.settle()) }
+                                else -> scope.launch { swipeX.backToRest(vx) }
                             }
                         },
-                        onDragCancel = { scope.launch { swipeX.animateTo(0f, Specs.settle()) } },
+                        onDragCancel = { scope.launch { swipeX.backToRest() } },
                     )
                 } else Modifier
             ),
@@ -408,7 +408,7 @@ internal fun Cover(
 private suspend fun settleAfterSkip(swipeX: Animatable<Float, androidx.compose.animation.core.AnimationVector1D>, id: () -> String) {
     val before = id()
     kotlinx.coroutines.withTimeoutOrNull(1_500) { snapshotFlow(id).first { it != before } }
-    if (id() == before) swipeX.animateTo(0f, Specs.settle())
+    if (id() == before) swipeX.backToRest()
 }
 
 /** Image viewer with pinch-zoom and pan. */

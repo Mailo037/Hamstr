@@ -11,12 +11,23 @@ import app.hamstr.res.*
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** Time left, as 1:23 or 1:02:03; empty when unknown. */
-fun eta(sec: Long) = when {
-    sec <= 0 -> ""
-    sec >= 3600 -> "%d:%02d:%02d".format(sec / 3600, sec / 60 % 60, sec % 60)
-    else -> "%d:%02d".format(sec / 60, sec % 60)
+/**
+ * Time left as "48 s", "3 min" or "1 h 5 min"; empty when unknown. Not 0:48, which reads like a
+ * length. The units are the international symbols, like the retry countdown's "12 s".
+ */
+fun eta(sec: Long): String {
+    if (sec <= 0) return ""
+    if (sec < 60) return "$sec s"
+    val minutes = (sec + 30) / 60
+    if (minutes < 60) return "$minutes min"
+    val h = minutes / 60
+    val m = minutes % 60
+    return if (m == 0L) "$h h" else "$h h $m min"
 }
+
+/** "48 s left"; empty when unknown. */
+@Composable
+fun etaLeft(sec: Long): String = eta(sec).let { if (it.isEmpty()) it else stringResource(Res.string.eta_left, it) }
 
 /**
  * What a download is doing right now, when it's more than fetching bytes: the string and
@@ -50,7 +61,7 @@ fun stageText(t: DownloadTask, now: Long = System.currentTimeMillis()): String? 
 @Composable
 fun statusLine(t: DownloadTask, versions: List<DownloadTask> = listOf(t)): String = when (t.status) {
     Status.Queued -> if (t.progress > 0f) stringResource(Res.string.status_queued_at, (t.progress * 100).toInt()) else stringResource(Res.string.status_queued)
-    Status.Running -> listOf(t.speed, eta(t.etaSec)).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { t.source ?: stringResource(Res.string.status_loading) }
+    Status.Running -> listOf(t.speed, etaLeft(t.etaSec)).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { t.source ?: stringResource(Res.string.status_loading) }
     Status.Paused -> stringResource(Res.string.status_paused, (t.progress * 100).toInt())
     Status.Failed -> stringResource(Failures.explain(t.error).title)
     Status.Done -> listOfNotNull(

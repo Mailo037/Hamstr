@@ -241,7 +241,8 @@ fun ColumnScope.QueueList(fill: Boolean, onClose: () -> Unit, rowColor: Color = 
         }
     }
     Spacer(Modifier.height(10.dp))
-    HButton(stringResource(R.string.player_close), { Playback.close(); onClose() }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_close)
+    // Like flinging the mini bar down: Undo in the snack brings it back.
+    HButton(stringResource(R.string.player_close), { Playback.closeKeeping(); onClose() }, Modifier.fillMaxWidth(), kind = ButtonKind.Ghost, icon = Res.drawable.ic_close)
 }
 
 /** Stops playback after a while, or when the song that plays now ends. */

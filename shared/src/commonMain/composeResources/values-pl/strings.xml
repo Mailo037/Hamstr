@@ -17,9 +17,9 @@
     <string name="err_full">Telefon jest pełny</string>
     <string name="err_full_hint">Zwolnij trochę miejsca i spróbuj ponownie.</string>
     <string name="err_unsupported">Hamstr nie zna tego linku</string>
-    <string name="err_unsupported_hint">yt-dlp nie ma sposobu, by odczytać multimedia z tej strony.</string>
+    <string name="err_unsupported_hint">Hamstr nie znajduje na tej stronie żadnego filmu ani utworu.</string>
     <string name="err_drm">To jest chronione przed kopiowaniem</string>
-    <string name="err_drm_hint">Jest zablokowane DRM-em, więc nie da się tego zapisać.</string>
+    <string name="err_drm_hint">Serwis chroni to przed kopiowaniem, więc nie da się tego zapisać.</string>
     <string name="err_private">To jest prywatne</string>
     <string name="err_private_hint">Widzi to tylko właściciel i osoby, którym na to pozwoli.</string>
     <string name="err_age">Ograniczone wiekowo</string>
@@ -35,18 +35,18 @@
     <string name="err_format">Ta jakość nie jest dostępna</string>
     <string name="err_format_hint">Wybierz inną jakość albo Najlepszą.</string>
     <string name="err_changed">Serwis coś zmienił</string>
-    <string name="err_changed_hint">Serwisy zmieniają się cały czas. Nowszy yt-dlp zwykle to naprawia.</string>
+    <string name="err_changed_hint">Serwisy zmieniają się cały czas. Aktualizacja modułu pobierania Hamstra zwykle to naprawia.</string>
     <string name="err_ffmpeg">Nie udało się dokończyć pliku</string>
-    <string name="err_ffmpeg_hint">FFmpeg zatrzymał się podczas łączenia lub konwersji. Ponowna próba zwykle działa.</string>
+    <string name="err_ffmpeg_hint">Składanie pliku zostało przerwane. Ponowna próba zwykle działa.</string>
     <string name="err_details">Szczegóły</string>
     <string name="err_copy">Kopiuj błąd</string>
     <string name="err_copied">Skopiowano błąd</string>
-    <string name="err_update_retry">Zaktualizuj yt-dlp &amp; spróbuj ponownie</string>
-    <string name="err_updating">Aktualizacja yt-dlp …</string>
+    <string name="err_update_retry">Zaktualizuj &amp; spróbuj ponownie</string>
+    <string name="err_updating">Aktualizowanie modułu pobierania …</string>
     <string name="err_try_again">Spróbuj ponownie</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">Sprawdzanie linku …</string>
+    <string name="stage_resolving">Odczytywanie linku …</string>
     <string name="stage_merging">Łączenie wideo i dźwięku …</string>
     <string name="stage_extracting">Konwersja dźwięku …</string>
     <string name="stage_remuxing">Pakowanie pliku …</string>
@@ -79,7 +79,7 @@
 
     <!-- Share sheet -->
     <string name="share_sniffing">Sprawdzanie linku …</string>
-    <string name="share_reading_formats">odczytywanie formatów …</string>
+    <string name="share_reading_formats">szukanie jakości …</string>
     <string name="share_already_here">Już w Twoich zapasach</string>
     <string name="share_already_coming">Już w drodze</string>
     <string name="share_open">Otwórz</string>
@@ -91,7 +91,7 @@
     <string name="share_format">Format</string>
     <string name="share_subtitles">Napisy (%1$s)</string>
     <string name="share_audio_format">Format dźwięku</string>
-    <string name="share_custom_hint">Selektor formatu yt-dlp (-f)</string>
+    <string name="share_custom_hint">Dla ekspertów: kod formatu yt-dlp (-f)</string>
     <string name="share_custom_placeholder">Kod formatu</string>
     <string name="share_cancel">Anuluj</string>
     <string name="share_stash">Zachomikuj</string>
@@ -163,9 +163,9 @@
     <string name="hidden_many">%1$d ukrytych · znajdziesz je w Ustawienia › Ukryte</string>
     <string name="deleted_one">Plik usunięty</string>
     <string name="deleted_many">Usunięto plików: %1$d</string>
-    <string name="engine_restarting">Ponowne uruchamianie yt-dlp …</string>
-    <string name="engine_restarted">yt-dlp działa</string>
-    <string name="engine_still_broken">yt-dlp nadal nie chce wystartować</string>
+    <string name="engine_restarting">Ponowne uruchamianie modułu pobierania …</string>
+    <string name="engine_restarted">Moduł pobierania działa</string>
+    <string name="engine_still_broken">Moduł pobierania wciąż się nie uruchamia</string>
 
     <!-- File menu -->
     <string name="menu_play">Odtwórz w Hamstrze</string>
@@ -268,8 +268,8 @@
         <item quantity="other">%1$d plików w zapasach</item>
     </plurals>
     <string name="stash_active">%1$d aktywne</string>
-    <string name="stash_engine_starting">uruchamianie yt-dlp</string>
-    <string name="stash_engine_broken">yt-dlp uszkodzony · dotknij, by spróbować ponownie</string>
+    <string name="stash_engine_starting">Moduł pobierania się uruchamia</string>
+    <string name="stash_engine_broken">Moduł pobierania się nie uruchomił · dotknij, by spróbować ponownie</string>
     <string name="stash_downloading">Pobieranie</string>
     <string name="stash_running">%1$d w toku</string>
     <string name="stash_stashed">Zachomikowano</string>
@@ -942,10 +942,10 @@
         <item quantity="many">%1$d pobrań się nie udało</item>
         <item quantity="other">%1$d pobrań się nie udało</item>
     </plurals>
-    <string name="stash_failed_update_hint">Strona się zmieniła; zwykle pomaga nowszy yt-dlp</string>
+    <string name="stash_failed_update_hint">Serwis się zmienił; aktualizacja modułu pobierania zwykle to naprawia</string>
     <string name="stash_update_retry">Zaktualizuj &amp; ponów</string>
     <string name="stash_retry_all">Ponów wszystkie</string>
-    <string name="stash_updating">Aktualizowanie yt-dlp, potem ponowna próba …</string>
+    <string name="stash_updating">Aktualizowanie modułu pobierania, potem kolejna próba …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">Zachomikować skopiowany link?</string>
     <string name="clip_offer_hint">W schowku jest link</string>
@@ -999,4 +999,52 @@
     <string name="follow_offer_channel">To jest kanał</string>
     <string name="follow_offer_playlist">To jest playlista</string>
     <string name="follow_unfollowed">Przestano obserwować: %1$s</string>
+    <string name="share_more">Więcej opcji</string>
+    <string name="share_custom">Własny format</string>
+    <string name="share_no_subs">Bez napisów</string>
+    <string name="share_opens_done">Otworzy się po zakończeniu</string>
+    <string name="share_open_done_needs">Wymaga „Wyświetlania nad innymi aplikacjami”, na które pozwolisz w Ustawienia › Pobieranie</string>
+    <string name="share_stashed">Nom! Już w zapasach</string>
+    <string name="snack_canceled">Pobieranie anulowane</string>
+    <string name="link_copied">Link skopiowany</string>
+    <string name="player_closed">Odtwarzacz zamknięty</string>
+    <string name="stash_moving">%1$d z %2$d w toku</string>
+    <string name="eta_left">zostało %1$s</string>
+    <string name="intro_skip">Dotknij, by pominąć</string>
+    <string name="hidden_empty_desktop">Nic nie jest ukryte. To, co ukryjesz w bibliotece, czeka tutaj, a pliki zostają na tym komputerze.</string>
+    <string name="hidden_note_desktop">Ukryte pliki zostają w twoim folderze Hamstr. Kliknij plik, by otworzyć jego menu.</string>
+    <plurals name="tray_downloading">
+        <item quantity="one">Hamstr · pobieranie: %1$d</item>
+        <item quantity="few">Hamstr · pobieranie: %1$d</item>
+        <item quantity="many">Hamstr · pobieranie: %1$d</item>
+        <item quantity="other">Hamstr · pobieranie: %1$d</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="one">Hamstr · czeka: %1$d</item>
+        <item quantity="few">Hamstr · czeka: %1$d</item>
+        <item quantity="many">Hamstr · czeka: %1$d</item>
+        <item quantity="other">Hamstr · czeka: %1$d</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="one">Pobieranie zakończone</item>
+        <item quantity="few">Zakończono %1$d pobrania</item>
+        <item quantity="many">Zakończono %1$d pobrań</item>
+        <item quantity="other">Zakończono %1$d pobrania</item>
+    </plurals>
+    <string name="tray_failed">Pobieranie się nie udało</string>
+    <string name="drop_link">Upuść, by zachomikować</string>
+    <plurals name="drop_files">
+        <item quantity="one">Upuść, by dodać plik</item>
+        <item quantity="few">Upuść, by dodać %1$d pliki</item>
+        <item quantity="many">Upuść, by dodać %1$d plików</item>
+        <item quantity="other">Upuść, by dodać %1$d pliku</item>
+    </plurals>
+    <string name="drop_files_some">Upuść, by dodać pliki</string>
+    <string name="drop_no_link">Tu nie ma linku</string>
+    <plurals name="drop_added">
+        <item quantity="one">Dodawanie pliku</item>
+        <item quantity="few">Dodawanie %1$d plików</item>
+        <item quantity="many">Dodawanie %1$d plików</item>
+        <item quantity="other">Dodawanie %1$d pliku</item>
+    </plurals>
 </resources>

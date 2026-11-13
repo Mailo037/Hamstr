@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -68,17 +69,35 @@ fun Modifier.hoverTip(tip: TipState): Modifier = if (!Platform.desktop) this els
 fun Tip(tip: TipState, text: String) = Tip(tip.hovered, text)
 
 /**
+ * Once a tip has shown, its neighbours' tips come quickly for a moment, as with the system's own:
+ * sliding along a row of buttons reads them one after another without waiting at each.
+ */
+private object TipWarmth {
+    var open = 0
+    var until = 0L
+}
+
+/**
  * Hamstr's own tooltip, not the system's: after the pointer rested on its thing for half a
- * second, [text] fades in on a raised pill under it (over it where the window ends). It sits
- * in the composable it explains and only shows on the desktop.
+ * second (a tenth right after another tip), [text] fades in on a raised pill under it (over it
+ * where the window ends). It sits in the composable it explains and only shows on the desktop.
  */
 @Composable
 fun Tip(visible: Boolean, text: String) {
     if (!Platform.desktop || text.isEmpty()) return
     var due by remember { mutableStateOf(false) }
     LaunchedEffect(visible) {
-        if (visible) delay(500)
+        if (visible) delay(if (TipWarmth.open > 0 || System.currentTimeMillis() < TipWarmth.until) 100 else 500)
         due = visible
+    }
+    DisposableEffect(due) {
+        if (due) TipWarmth.open++
+        onDispose {
+            if (due) {
+                TipWarmth.open--
+                TipWarmth.until = System.currentTimeMillis() + 800
+            }
+        }
     }
     val shown = remember { MutableTransitionState(false) }
     shown.targetState = due

@@ -15,10 +15,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +42,7 @@ import app.hamstr.ui.components.IconButton
 import app.hamstr.ui.components.MenuDivider
 import app.hamstr.ui.components.MenuItem
 import app.hamstr.ui.components.MenuLabel
+import app.hamstr.ui.components.ScrollIndicator
 import app.hamstr.ui.components.SearchField
 import app.hamstr.ui.components.Txt
 import app.hamstr.ui.components.edgeFade
@@ -55,14 +59,36 @@ private enum class Shelf { All, Video, Audio, Other }
  * right-click has the rest.
  */
 @Composable
-internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask, List<DownloadTask>) -> Unit, onMenu: (DownloadTask) -> Unit) {
+internal fun DesktopLibrary(
+    tasks: List<DownloadTask>,
+    onPlay: (DownloadTask, List<DownloadTask>) -> Unit,
+    onMenu: (DownloadTask) -> Unit,
+    // The download whose menu is open: its row stays lifted while the menu shows.
+    menuOpen: String? = null,
+    // The stash's "Show all": from the top, newest first, nothing filtered; once, then onShowAllDone.
+    showAll: Boolean = false,
+    onShowAllDone: () -> Unit = {},
+    // Ctrl+F: the caret goes into the search; once, then onSearchAsked.
+    searchAsk: Boolean = false,
+    onSearchAsked: () -> Unit = {},
+) {
     val c = Hamstr.colors
     val s by Prefs.settings.collectAsState()
     val missing by FileChecks.missing.collectAsState()
     val resume by Positions.all.collectAsState()
-    var query by remember { mutableStateOf("") }
-    var shelf by remember { mutableStateOf(Shelf.All) }
+    // Saved with the tab, so a look at Settings doesn't throw away the search.
+    var query by rememberSaveable { mutableStateOf("") }
+    var shelf by rememberSaveable { mutableStateOf(Shelf.All) }
     var filtering by remember { mutableStateOf(false) }
+    val list = rememberLazyListState()
+    LaunchedEffect(showAll) {
+        if (!showAll) return@LaunchedEffect
+        query = ""
+        shelf = Shelf.All
+        if (Prefs.settings.value.librarySort != LibrarySort.Newest) Prefs.edit { it.copy(librarySort = LibrarySort.Newest) }
+        list.requestScrollToItem(0)
+        onShowAllDone()
+    }
     val done = remember(tasks) { collapseVersions(tasks.filter { it.status == Status.Done && !it.hidden }) }
     val shown = remember(done, query, shelf, s.librarySort) {
         val q = query.trim().lowercase()
@@ -100,7 +126,13 @@ internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask, Li
     Column(Modifier.fillMaxSize().padding(top = 8.dp)) {
         Txt(stringResource(Res.string.tab_library), style = Hamstr.type.title, modifier = Modifier.padding(start = 6.dp, bottom = 12.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SearchField(query, { query = it }, stringResource(Res.string.lib_search_hint), Modifier.weight(1f))
+            val searchFocus = remember { FocusRequester() }
+            LaunchedEffect(searchAsk) {
+                if (!searchAsk) return@LaunchedEffect
+                runCatching { searchFocus.requestFocus() }
+                onSearchAsked()
+            }
+            SearchField(query, { query = it }, stringResource(Res.string.lib_search_hint), Modifier.weight(1f), focus = searchFocus)
             val changed = shelf != Shelf.All || s.librarySort != LibrarySort.Newest
             Box {
                 IconButton(
@@ -125,15 +157,17 @@ internal fun DesktopLibrary(tasks: List<DownloadTask>, onPlay: (DownloadTask, Li
                 style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(6.dp),
             )
         } else {
-            val list = rememberLazyListState()
-            LazyColumn(Modifier.fillMaxSize().edgeFade(list, Orientation.Vertical), state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(shown, key = { it.first.id }) { (t, versions) ->
-                    TaskRow(
-                        t, versions = versions, gone = t.id in missing,
-                        resume = resume[t.id]?.fraction,
-                        onClick = { onPlay(t, shown.map { it.first }) }, onLongClick = { onMenu(t) },
-                    )
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize().edgeFade(list, Orientation.Vertical), state = list, contentPadding = PaddingValues(bottom = 24.dp)) {
+                    items(shown, key = { it.first.id }) { (t, versions) ->
+                        TaskRow(
+                            t, highlighted = t.id == menuOpen, versions = versions, gone = t.id in missing,
+                            resume = resume[t.id]?.fraction,
+                            onClick = { onPlay(t, shown.map { it.first }) }, onLongClick = { onMenu(t) },
+                        )
+                    }
                 }
+                ScrollIndicator(list, Modifier.align(Alignment.TopEnd).padding(bottom = 24.dp))
             }
         }
     }

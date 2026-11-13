@@ -856,7 +856,7 @@ class DownloadService : Service() {
                     val stage = t.stage?.let { stageText(context, t) }
                     card.copy(
                         title = t.title,
-                        text = stage ?: listOf("$pct %", t.speed, eta(t.etaSec), if (queued.isNotEmpty()) context.getString(R.string.notif_queued, queued.size) else "")
+                        text = stage ?: listOf("$pct %", t.speed, etaLeft(context, t.etaSec), if (queued.isNotEmpty()) context.getString(R.string.notif_queued, queued.size) else "")
                             .filter { it.isNotEmpty() }.joinToString(" · "),
                         max = 100, progress = pct, indeterminate = t.progress <= 0f || t.stage?.waiting == false,
                         buttons = listOf(ACTION_PAUSE to t.id, ACTION_CANCEL to t.id),
@@ -962,7 +962,20 @@ class DownloadService : Service() {
                 val picked = ids.toHashSet()
                 if (DownloadStore.updateAll(which = { it.id in picked && it.status != Status.Running }) { resumedTask(it) } > 0) send(context, ACTION_START)
             }
-            override fun cancel(id: String) = send(context, ACTION_CANCEL, id)
+            override fun cancel(id: String) {
+                // Paused, nothing runs for it (Cancel with Undo pauses first): the queue isn't needed.
+                // That matters when the Undo runs out with Hamstr in the background, where Android
+                // wouldn't start the service and the download would come back as paused.
+                if (DownloadStore.get(id)?.status == Status.Paused) {
+                    DownloadStore.update(id) { if (it.status == Status.Paused) it.copy(status = Status.Canceled, speed = "", etaSec = -1, stage = null, retryAt = 0) else it }
+                    if (DownloadStore.get(id)?.status == Status.Canceled) Thread {
+                        File(context.cacheDir, "parts/$id").deleteRecursively()
+                        File(context.cacheDir, "parts/$id.path").delete()
+                    }.start()
+                    return
+                }
+                send(context, ACTION_CANCEL, id)
+            }
 
             override fun retry(ids: List<String>, updateFirst: Boolean) {
                 if (!updateFirst) return resumeAll(ids)
@@ -1016,7 +1029,8 @@ class DownloadService : Service() {
 
         private fun prettySpeed(s: String) = s.replace("MiB/s", " MB/s").replace("KiB/s", " KB/s").replace("GiB/s", " GB/s").replace("  ", " ")
 
-        fun eta(sec: Long) = app.hamstr.ui.eta(sec)
+        /** "3 min left", so it doesn't read like the length; empty when unknown. */
+        fun etaLeft(context: Context, sec: Long) = app.hamstr.ui.eta(sec).let { if (it.isEmpty()) it else context.getString(R.string.eta_left, it) }
 
         private fun cleanError(msg: String?): String {
             val line = msg?.lines()?.lastOrNull { it.contains("ERROR") } ?: msg?.lines()?.lastOrNull { it.isNotBlank() } ?: "Unknown error"

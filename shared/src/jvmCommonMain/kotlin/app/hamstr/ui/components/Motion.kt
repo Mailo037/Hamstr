@@ -77,8 +77,14 @@ object Specs {
     /** Something arriving with an overshoot: the done check, an armed swipe action. */
     fun <T> pop() = spring<T>(dampingRatio = 0.4f, stiffness = 500f)
 
-    /** Back to rest after a drag lets go: a short, visible wobble. */
+    /** A small handle back to rest after a drag lets go: a short, visible wobble. */
     fun <T> settle() = spring<T>(dampingRatio = 0.5f, stiffness = 480f)
+
+    /**
+     * A whole surface (a row, a sheet, the pulled list) back to rest after a drag that didn't
+     * commit: nearly critically damped, so it doesn't swing past rest and show the other side.
+     */
+    fun <T> release() = spring<T>(dampingRatio = 0.82f, stiffness = 520f)
 
     /** Values that follow data, such as progress, instead of jumping between updates. */
     fun <T> glide() = spring<T>(stiffness = Spring.StiffnessLow)

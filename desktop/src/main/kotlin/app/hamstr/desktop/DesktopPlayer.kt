@@ -2,6 +2,18 @@ package app.hamstr.desktop
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import app.hamstr.ui.components.LocalReduceMotion
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -297,6 +309,9 @@ fun DesktopPlayer(
     stream: FfPlayer? = null,
     onMinimize: () -> Unit = {},
     onClose: () -> Unit,
+    // A video over the whole screen ([WindowFrame.fullscreen]), its controls over scrims.
+    fullscreen: Boolean = false,
+    onFullscreen: (() -> Unit)? = null,
 ) {
     val c = Hamstr.colors
     val managedPlayer by DesktopPlayback.player.collectAsState()
@@ -360,6 +375,12 @@ fun DesktopPlayer(
     val useTrackSkip = isAudio || queue.size > 1
     val onPrevTrack = { if (stream != null) DesktopStage.previous() else { DesktopPlayback.previous(); Unit } }
     val onNextTrack = { if (stream != null) DesktopStage.next() else { DesktopPlayback.next(); Unit } }
+    val setVolume = { v: Float -> val l = v.coerceIn(0f, 1f); if (there) cast!!.setVolume(l) else player.setVolume(l) }
+    var beforeMute by remember { mutableStateOf<Float?>(null) }
+    val canFullscreen = onFullscreen != null && info?.video == true
+    val onFullscreenNow by rememberUpdatedState(onFullscreen.takeIf { canFullscreen })
+    // A song took the video's place: the window comes back from fullscreen.
+    LaunchedEffect(fullscreen, info) { if (fullscreen && info != null && !info.video) onFullscreen?.invoke() }
 
     val keys = Modifier
         .focusRequester(focus)
@@ -368,11 +389,16 @@ fun DesktopPlayer(
             if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             when (e.key) {
                 Key.Spacebar, Key.K -> { toggle(); true }
-                Key.DirectionLeft, Key.J -> { seek(position - 10); true }
-                Key.DirectionRight, Key.L -> { seek(position + 10); true }
+                Key.DirectionLeft, Key.J -> { if (e.isShiftPressed && useTrackSkip) onPrevTrack() else seek(position - 10); true }
+                Key.DirectionRight, Key.L -> { if (e.isShiftPressed && useTrackSkip) onNextTrack() else seek(position + 10); true }
+                Key.DirectionUp -> { beforeMute = null; setVolume(volume + 0.05f); true }
+                Key.DirectionDown -> { setVolume(volume - 0.05f); true }
+                Key.M -> { if (volume > 0f) { beforeMute = volume; setVolume(0f) } else { setVolume(beforeMute ?: 1f); beforeMute = null }; true }
+                Key.F -> onFullscreenNow?.let { it(); true } ?: false
                 Key.N -> if (useTrackSkip) { onNextTrack(); true } else false
                 Key.P -> if (useTrackSkip) { onPrevTrack(); true } else false
-                Key.Escape -> { onMinimize(); true }
+                // Out of fullscreen first, then down into the mini player.
+                Key.Escape -> { if (fullscreen) onFullscreen?.invoke() else onMinimize(); true }
                 else -> false
             }
         }
@@ -417,12 +443,82 @@ fun DesktopPlayer(
     }
     val topButtons = @Composable {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(Res.drawable.ic_expand_more, stringResource(Res.string.player_minimize), onMinimize, tint = c.muted, background = Color.Transparent, size = 34.dp)
+            if (canFullscreen) {
+                IconButton(
+                    if (fullscreen) Res.drawable.ic_fullscreen_exit else Res.drawable.ic_fullscreen,
+                    stringResource(if (fullscreen) Res.string.player_exit_fullscreen else Res.string.player_fullscreen),
+                    { onFullscreen?.invoke() }, tint = c.muted, background = Color.Transparent, size = 34.dp,
+                )
+            }
+            if (!fullscreen) IconButton(Res.drawable.ic_expand_more, stringResource(Res.string.player_minimize), onMinimize, tint = c.muted, background = Color.Transparent, size = 34.dp)
             IconButton(Res.drawable.ic_close, stringResource(Res.string.player_close), onClose, tint = c.muted, background = Color.Transparent, size = 34.dp)
         }
     }
 
-    if (info?.video == true) {
+    if (info?.video == true && fullscreen) {
+        // The picture fills the screen; the controls come with the pointer and go 2.5 s after it
+        // rests, over scrims, while the video plays. Paused, they stay.
+        var moved by remember { mutableStateOf(0L) }
+        var shown by remember { mutableStateOf(true) }
+        LaunchedEffect(moved, playing) {
+            shown = true
+            if (playing) { kotlinx.coroutines.delay(2_500); shown = false }
+        }
+        val reduce = LocalReduceMotion.current
+        val chrome by animateFloatAsState(if (shown) 1f else 0f, if (reduce) snap() else tween(if (shown) 160 else 420), label = "fullscreenChrome")
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .then(keys)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Initial)
+                            if (ev.type == PointerEventType.Move || ev.type == PointerEventType.Press) moved = System.nanoTime()
+                        }
+                    }
+                }
+                .pointerHoverIcon(if (shown) PointerIcon.Default else BlankPointer)
+                .pointerInput(there) { detectTapGestures(onTap = { toggleNow() }, onDoubleTap = { onFullscreenNow?.invoke() }) },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (cast != null) {
+                val preparing by cast.preparing.collectAsState()
+                app.hamstr.ui.CastingCard(cast.device, preparing = preparing)
+            } else frame?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+            if (chrome > 0.01f) {
+                Row(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = chrome }
+                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent)))
+                        .padding(start = 28.dp, end = 16.dp, top = 16.dp, bottom = 40.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Txt(t.title, style = Hamstr.type.section, color = Color.White, maxLines = 1, modifier = Modifier.weight(1f))
+                    topButtons()
+                }
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = chrome }
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
+                        .padding(start = 28.dp, end = 28.dp, top = 48.dp, bottom = 20.dp),
+                ) {
+                    error?.let { Txt(it, style = Hamstr.type.small, color = Color.White, modifier = Modifier.padding(bottom = 8.dp)) }
+                    bar()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { times() }
+                        buttons()
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { sound() }
+                    }
+                }
+            }
+        }
+    } else if (info?.video == true) {
         // As big as the window allows, in the video's own shape, with room for the controls.
         BoxWithConstraints {
             val ratio = (if (info.width > 0 && info.height > 0) info.width.toFloat() / info.height else 16f / 9f).coerceIn(0.5f, 3f)
@@ -438,7 +534,8 @@ fun DesktopPlayer(
             ) {
                 Box(
                     Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(Radii.row)).background(Color.Black)
-                        .pointerInput(there) { detectTapGestures(onTap = { toggleNow() }, onDoubleTap = { offset -> seekNow(positionNow + if (offset.x < size.width / 2) -10 else 10) }) },
+                        // A click plays or pauses, a double click fills the screen (J and L skip 10 s).
+                        .pointerInput(there) { detectTapGestures(onTap = { toggleNow() }, onDoubleTap = { onFullscreenNow?.invoke() }) },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (cast != null) {
@@ -566,6 +663,8 @@ fun DesktopMiniPlayer() {
             .width(216.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(c.overlay)
+            // The wheel over the mini player turns the volume.
+            .wheel { up -> PlayingNow.volumeBy(if (up) 0.05f else -0.05f) }
             .clickable(onClick = onExpand),
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(3.dp).background(c.line)) {
@@ -706,14 +805,35 @@ internal fun castMime(file: File, video: Boolean): String {
 private val VIDEO_CHROME = 150.dp
 private val COVER = 220.dp
 
-/** How loud, on a short bar; its tooltip says what it is. */
+/** How loud, on a short bar; its tooltip says what it is, and the wheel over it steps by 5 %. */
 @Composable
 private fun Volume(volume: Float, onChange: (Float) -> Unit) {
     val tip = rememberTip()
-    Box(Modifier.width(96.dp).hoverTip(tip)) {
+    val now by rememberUpdatedState(volume)
+    val change by rememberUpdatedState(onChange)
+    Box(Modifier.width(96.dp).hoverTip(tip).wheel { up -> change((now + if (up) 0.05f else -0.05f).coerceIn(0f, 1f)) }) {
         SeekBar(volume, onSeek = onChange)
         Tip(tip, stringResource(Res.string.desktop_volume))
     }
+}
+
+/** The mouse wheel over this: [onStep] with true for up (away from you), once per notch. */
+internal fun Modifier.wheel(onStep: (Boolean) -> Unit) = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val ev = awaitPointerEvent()
+            if (ev.type != PointerEventType.Scroll) continue
+            val dy = ev.changes.sumOf { it.scrollDelta.y.toDouble() }
+            if (dy == 0.0) continue
+            onStep(dy < 0)
+            ev.changes.forEach { it.consume() }
+        }
+    }
+}
+
+/** No pointer over a fullscreen video whose controls have gone. */
+private val BlankPointer by lazy {
+    PointerIcon(java.awt.Toolkit.getDefaultToolkit().createCustomCursor(java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB), java.awt.Point(0, 0), "none"))
 }
 
 /** A thin bar: click or drag anywhere on it to go there. With [onLoop], holding it marks an A-B loop. */
@@ -724,10 +844,15 @@ private fun SeekBar(fraction: Float, loop: AbLoop? = null, durationMs: Long = 0,
     val hold = rememberLoopHold()
     val fractionNow by rememberUpdatedState(fraction)
     val onSeekNow by rememberUpdatedState(onSeek)
+    // Thin at rest; under the pointer or while dragged it thickens and shows its thumb.
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    val lift by animateFloatAsState(if (hovered || dragging != null) 1f else 0f, if (LocalReduceMotion.current) snap() else tween(120), label = "seekLift")
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
             .height(22.dp)
+            .hoverable(source)
             .pointerInput(Unit) {
                 detectTapGestures { onSeekNow((it.x / size.width).coerceIn(0f, 1f)) }
             }
@@ -743,9 +868,14 @@ private fun SeekBar(fraction: Float, loop: AbLoop? = null, durationMs: Long = 0,
     ) {
         if (onLoop != null) LoopBand(hold.shown(loop, durationMs), durationMs, Modifier.matchParentSize())
         val shown = (dragging ?: fraction).coerceIn(0f, 1f)
-        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(c.line))
-        Box(Modifier.width(maxWidth * shown).height(4.dp).clip(RoundedCornerShape(2.dp)).background(c.accent))
-        Box(Modifier.padding(start = (maxWidth * shown - 6.dp).coerceAtLeast(0.dp)).size(12.dp).clip(RoundedCornerShape(6.dp)).background(c.accent))
+        val track = 4.dp + 2.dp * lift
+        Box(Modifier.fillMaxWidth().height(track).clip(RoundedCornerShape(3.dp)).background(c.line))
+        Box(Modifier.width(maxWidth * shown).height(track).clip(RoundedCornerShape(3.dp)).background(c.accent))
+        Box(
+            Modifier.padding(start = (maxWidth * shown - 6.dp).coerceAtLeast(0.dp)).size(12.dp)
+                .graphicsLayer { alpha = lift; scaleX = 0.5f + 0.5f * lift; scaleY = 0.5f + 0.5f * lift }
+                .clip(RoundedCornerShape(6.dp)).background(c.accent),
+        )
     }
 }
 

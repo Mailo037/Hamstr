@@ -58,7 +58,9 @@ panel (the library's filter, the search field).
 | `ghost` | Hints, placeholders, meta lines, small labels, chevrons. |
 | `accent` | The one thing to do or the thing that is on. |
 | `red` | Errors and destructive actions only. |
-| `green` | Only the done check. |
+| `green` | Only the done check, and only on a fresh file (finished in the last day, not played yet). |
+
+`ghost` stays at 4.5:1 or more on `surface` and `raised` in every base, a step below `muted`.
 
 Meta lines join facts with ` · ` in `ghost`: `channel · 212 MB · 3 h ago`.
 
@@ -91,7 +93,8 @@ Inter for everything people read, JetBrains Mono for what machines produce.
 | `button` | 15 / 600 | Button labels. |
 | `small` | 12 | Subtitles, meta lines, snack text. |
 | `mono` | 12 | Percentages, times (`1:23 / 4:56`), links, file names, info values, engine messages. |
-| `badge` | 10.5 mono | `[ BADGES ]` and small group labels above chip rows. |
+| `tag` | 11 mono, regular | `[ BADGES ]` beside a meta line, in `ghost` (accent for live state), so they don't outshout the facts next to them. A row shows its best version and a count (`[ 1080P +1 ]`); the rest is in the menu. |
+| `badge` | 10.5 mono | Small group labels above chip rows. |
 
 - Numbers that change while you look at them are mono, so they don't jitter.
 - Capitals only inside `[ ]` badges; everything else is sentence case.
@@ -254,6 +257,10 @@ dialogs (the desktop turns the same sheets into modals, see [Desktop](#desktop))
   play button) on a quick spring. It takes an `onLongClick` too (library tiles).
 - Rows inside a panel use `clickable`, which dims; a scaling row would pull away from
   its neighbours.
+- Hover and keyboard focus come from `HamstrIndication` (`ui/components/Indication.kt`), the
+  theme's `LocalIndication`: under the pointer `ink` at 5 %, pressed 9 %, fading in over 120 ms
+  and out over 180 ms. Keyboard focus, and only keyboard focus, draws a 2 dp accent ring at 65 %:
+  the one outline in Hamstr, because without it a keyboard can't see where it is.
 
 ### Choosing
 
@@ -286,10 +293,16 @@ leave 6 dp less space around it.
 
 - The snack: `raised`, 14 dp corners, above the tab bar, one short line and at most one
   action (Undo, Open, Retry) in accent. It stays 2.6 s, or as long as Undo is possible.
+  It shows over open sheets too; while one is open it sits at the top, clear of the sheet's
+  buttons. The desktop has the same snack (`Snacks`), at the foot of the content column.
+- Something done answers where it was done: stashing from the share sheet turns its button
+  into a check and *Nom! In the stash* for a moment before the sheet leaves.
 - Empty states: the mark at 96 dp, a `section` title, one `muted` sentence, centred.
 - Errors: what happened in plain words (`Failures.explain`), a `muted` hint, the
   engine's own message in mono behind *Details*, and a way out (try again, update
-  yt-dlp, copy the error). Never the raw message alone.
+  the downloader, copy the error). Never the raw message alone.
+- Everyday words don't name the tools: messages say *the downloader*, *putting the file
+  together*. yt-dlp and FFmpeg are named in Settings › Engine and behind *Details*.
 
 ### ASCII
 
@@ -298,10 +311,14 @@ ASCII appears in exactly these places:
 - The background raster: a faint character field under the accent glow at the top of
   the canvas, drifting at about 15 fps. The only ambient motion.
 - `AsciiImage`: thumbnails drawn as coloured characters while they load, with a
-  falling-character rain when there is no picture yet.
+  falling-character rain when there is no picture yet. Only a download that really runs
+  rains; one that waits (for Wi-Fi, the night, a retry) shows still noise. A picture already
+  loaded in this run is there on the first frame; a new one fades in.
 - `DecodeText`: text that *arrives* (screen titles, the stash total, sheet titles, the
-  title of a running download) decodes in from noise. Not for every text. Screen readers
-  get the real text.
+  title of a running download) decodes in from noise. Not for every text, and once: a text
+  that already arrived in this run shows plainly when it comes back into view (another tab,
+  a scroll, the player opening). Screen readers get the real text. The done check pops the
+  same way, only when a file has just finished.
 - `[ BADGES ]` for facts about a thing: site, quality, duration, state.
 - The mark, the `[×]` checkboxes, and the mono *or* between two ways in.
 
@@ -331,7 +348,8 @@ why (the mark's choreography, the sheet's softer entry, the switch thumb).
 | `press` | spring (0.55, 900) | Press feedback, with a 1 dp drop over 90 ms |
 | `swap` | spring (0.5, 600) | A state icon scaling in; `iconSwap()` is the whole crossfade |
 | `pop` | spring (0.4, 500) | Arrivals with an overshoot: done check, armed swipe, chosen swatch |
-| `settle` | spring (0.5, 480) | Back to rest after a drag: a short, visible wobble |
+| `settle` | spring (0.5, 480) | A small handle back to rest after a drag: a short, visible wobble |
+| `release` | spring (0.82, 520) | A whole surface back to rest after a drag that didn't commit (swipe rows, the sheet, the mini bar, the cover, pull to stash): no swing past rest, so the other side never flashes |
 | `arrive` | spring (0.62, 520) | A selection pill reaching its option |
 | `enter` | spring (0.86, 420) | A sub page sliding in, the pager moving to a tab |
 | `glide` | spring (StiffnessLow) | Progress and other values that follow data |
@@ -361,7 +379,11 @@ eases over 260 ms when the accent or base changes.
   icon and ticks; disarming ticks again; releasing armed confirms.
 - Every gesture has a visible equivalent: swipe actions are also in the file menu, pull
   to stash is also the + button, dragging a sub page away is also the back button.
-- Destructive swipes fly the row out and offer Undo in the snack.
+- Destructive swipes fly the row out and offer Undo in the snack. The row stays where it
+  flew and fades there; it never snaps back first.
+- What throws work away can be undone: a canceled download pauses and goes for good only
+  when its Undo has passed (`PendingCancel`); a mini player flung away keeps its queue for
+  a moment behind *Player closed · Undo*.
 
 ### Haptics
 
@@ -382,6 +404,8 @@ Always through `LocalHapticFeedback`, so the switch in Settings silences them.
   ASCII thumbnails, moods, stretch) and has a row in Settings > Motion & effects.
 - `LocalReduceMotion` is true when the system's animator scale is 0: travel snaps,
   decorative loops don't start, and nothing else breaks.
+- The intro plays at a cold start; a tap (or a key) skips it at once, and a ghost
+  *Tap to skip* says so.
 - Every endless loop checks one of the two before it starts.
 
 ## Layout
@@ -389,7 +413,8 @@ Always through `LocalHapticFeedback`, so the switch in Settings silences them.
 - Upright: the tab bar floats 12 dp above the bottom, the mini player above it, and
   screens get matching bottom padding. Sideways: tabs and mini player move into a 216 dp
   side bar on the left, so screens keep their full height.
-- Swiping sideways anywhere changes tabs; the tab pill and the pager follow each other.
+- Swiping sideways anywhere changes tabs; the tab pill and the pager follow each other: the
+  pill rides on the pager's position, so it moves with the finger and lands with the page.
 - A screen starts with a header row: the title on the left, icon buttons on the right.
 - Settings are split into category pages, never one long page. The root has search; a
   hit opens its page and flashes the setting.
@@ -410,10 +435,14 @@ The desktop app (`desktop/`) is the sideways layout for a pointer instead of a f
 above holds; these differ, because a mouse is precise and a window is wide:
 
 - The window has no system frame: a 34 dp title bar on the canvas carries the hamster as solid
-  cells (glyphs blur at that size), the name in `small`/`muted`, and 42 dp window buttons whose
-  glyphs are 10 dp lines; hover lifts them to `hover`, close turns red. Dragging the bar moves the
-  window, a double click maximises it. The corners are rounded like the system's (Windows 11 via
-  DWM, clipped on Linux, native on macOS, where the traffic lights stay).
+  cells (glyphs blur at that size), the name in `small`/`muted`, and window buttons: a 30 × 24 dp
+  key with an 8 dp glyph in a 42 dp hit area as tall as the bar, so Close reaches the corner of a
+  maximised window; hover lifts the key to `hover`, close turns red. Dragging the bar moves the
+  window, a double click maximises it; let go at a screen's top edge it fills the screen, at a side
+  it takes that half (macOS tiles by itself). The corners are rounded like the system's (Windows 11
+  via DWM, clipped on Linux, native on macOS, where the traffic lights stay).
+- The window comes back where it was, at that size, maximised if it was (`WindowPlace`), unless
+  no screen shows half of it any more; the first start takes at most 85 % of the screen.
 - The side bar is always there: a 216 dp `overlay` panel (16 radius, 4 padding, 12 pill) with
   40 dp tabs. Settings opens its category pages as 36 dp rows right under the tab; the open one
   lifts to `surface`. The page itself fills the rest, at most 640 dp wide.
@@ -428,7 +457,25 @@ above holds; these differ, because a mouse is precise and a window is wide:
   else uses `hoverTip` and `Tip` (`ui/components/Tooltip.kt`). Hamstr draws it, the system
   doesn't: `small` text on a `raised` pill with 8 dp corners, half a second after the pointer
   comes to rest, under the thing or above it at the window's edge; a press hides it.
-- Ctrl+V (⌘V) anywhere stashes the copied link, the desktop's share button; Esc closes sheets.
+- The keyboard reaches everything (`Shortcuts`, `PlayingNow`), except while a field takes what is
+  typed: Ctrl+V (⌘V) stashes the copied link, the desktop's share button, and says so when there
+  is none; Ctrl+N opens Add with the caret in the link field, Ctrl+F the library's search, Ctrl+1/2/3
+  and Ctrl+, the tabs. Space or K plays and pauses, ← → (J, L) skip 10 s, Shift+← → change the
+  song, ↑ ↓ turn the volume by 5 % and M mutes, also with the player down in the mini player. Esc
+  closes sheets. The mouse wheel over a volume bar or the mini player turns the volume.
+- A video fills the screen with F, its fullscreen button or a double click on the picture; Esc
+  leaves. The controls lie over the scrims of the landscape player and go, with the pointer,
+  2.5 s after it rests while the video plays.
+- Seek bars are thin at rest; under the pointer or while dragged they thicken from 4 to 6 dp and
+  show their thumb.
+- Lists that scroll show a thin scroll bar (`ScrollIndicator`), only while they scroll or the
+  pointer is over them: 6 dp, `hover` at rest, `ghost` under the pointer.
+- Something dragged over the window dims it and says what letting go does (*Drop to stash*,
+  *Drop to add 3 files*), the hamster's cheeks open; *No link in that* refuses it. The snack
+  confirms the drop.
+- The window answers outside itself too: the taskbar button fills while downloads run (paused
+  while they wait), the tray's tooltip counts them, and with the window away a notification says
+  when they are through or one failed. What plays names the window.
 - Touch targets may be smaller than 48 dp where only a pointer reaches them (window buttons,
   side bar rows); shared components keep their sizes.
 

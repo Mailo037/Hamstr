@@ -81,6 +81,20 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import app.hamstr.ui.components.Specs
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import app.hamstr.ui.components.LocalReduceMotion
+import app.hamstr.ui.components.iconSwap
+import app.hamstr.ui.components.pressable
 
 sealed interface InfoState {
     data object Loading : InfoState
@@ -180,7 +194,10 @@ private fun MediaSheet(
         mutableStateOf<InfoState>(Engine.cachedInfo(url)?.let(InfoState::Loaded) ?: InfoState.Loading)
     }
     var peek by remember(url) { mutableStateOf<Peek?>(null) }
-    var mode by remember { mutableStateOf(defaults.mode) }
+    // Video or Audio; a custom format (behind More options) stands in for both while it is on.
+    var base by remember { mutableStateOf(defaults.mode.takeIf { it != Mode.Custom } ?: Mode.Video) }
+    var customOn by remember { mutableStateOf(false) }
+    val mode = if (customOn) Mode.Custom else base
     var modeTouched by remember { mutableStateOf(false) }
     var height by remember { mutableStateOf(defaults.height) }
     var container by remember { mutableStateOf(defaults.container) }
@@ -192,7 +209,12 @@ private fun MediaSheet(
     var reload by remember { mutableIntStateOf(0) }
     var updating by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }
     val net by Network.state.collectAsState()
+    val haptics = LocalHapticFeedback.current
+    // Stashed: the primary button says so until the sheet leaves, and what the sheet shows stays as it was.
+    var stashed by remember(url) { mutableStateOf(false) }
+    var frozen by remember(url) { mutableStateOf<List<DownloadTask>?>(null) }
 
     LaunchedEffect(url) { if (Engine.cachedInfo(url) == null) peek = Peeker.peek(url) }
     LaunchedEffect(url, reload, net.online) {
@@ -216,7 +238,7 @@ private fun MediaSheet(
     // Stashed before yt-dlp is done: the first look's title and picture go with the task until yt-dlp's arrive.
     val stashInfo = info ?: peek?.let { MediaInfo(url, it.title ?: url, it.thumbnail, null, 0, null, emptyList(), 0) }
     // Sound-only links (SoundCloud, YouTube Music, a podcast) start in Audio unless picked otherwise.
-    LaunchedEffect(info) { if (info != null && !modeTouched && looksLikeAudio(url, info)) mode = Mode.Audio }
+    LaunchedEffect(info) { if (info != null && !modeTouched && looksLikeAudio(url, info)) base = Mode.Audio }
 
     // The site's own picture shows first; yt-dlp's takes over when it's in.
     val infoBitmap: ImageBitmap? = rememberImage(info?.thumbnail)
@@ -243,7 +265,7 @@ private fun MediaSheet(
     // Already stashed or on its way: the same video under any of its links.
     val tasks by DownloadStore.tasks.collectAsState()
     val missing by DownloadFiles.missing.collectAsState()
-    val same = tasks.filter { t ->
+    val same = frozen ?: tasks.filter { t ->
         t.status != Status.Canceled && t.status != Status.Failed &&
             (t.url == url || (info != null && (t.url == info.url || (info.key != null && t.mediaKey == info.key))))
     }
@@ -259,6 +281,15 @@ private fun MediaSheet(
         Mode.Custom -> 0
     }
     val size = if (bytes > 0) "~" + formatBytes(bytes) else null
+    // A stash answers at once: a tick in the hand, the button turns into "In the stash", and the
+    // sheet leaves a moment later ([STASHED_HOLD_MS], the caller waits for it).
+    fun confirm(stash: () -> Unit) {
+        if (stashed) return
+        frozen = same
+        stashed = true
+        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        stash()
+    }
 
     Sheet {
         AsciiImage(
@@ -306,7 +337,7 @@ private fun MediaSheet(
                     // The page names the song, the artist and the length where it can (Spotify, Apple
                     // Music, SoundCloud); without them the card reads the page again itself.
                     ElsewhereCard(url, peek?.title, peek?.artist, peek?.durationSec ?: 0) { hit ->
-                        onStashOther(hit.url, hit.toInfo(), if (modeTouched && mode == Mode.Video) choice else choice.copy(mode = Mode.Audio))
+                        confirm { onStashOther(hit.url, hit.toInfo(), if (modeTouched && mode == Mode.Video) choice else choice.copy(mode = Mode.Audio)) }
                     }
                 }
                 if (s.message.isNotBlank()) {
@@ -347,20 +378,28 @@ private fun MediaSheet(
             }
         }
         Spacer(Modifier.height(12.dp))
+        // Every share asks only this: Video or Audio, and its quality. The rest waits behind More options.
         val modeLabels = mapOf(
             Mode.Video to stringResource(R.string.mode_video),
             Mode.Audio to stringResource(R.string.mode_audio),
-            Mode.Custom to stringResource(R.string.mode_custom),
         )
         Segmented(
-            options = Mode.entries.toList(),
-            selected = mode,
+            options = listOf(Mode.Video, Mode.Audio),
+            selected = base,
             label = { modeLabels.getValue(it) },
-            onSelect = { mode = it; modeTouched = true; open = null },
+            // Picking one of the two leaves a custom format.
+            onSelect = { base = it; customOn = false; modeTouched = true; open = null },
         )
         Spacer(Modifier.height(4.dp))
-        when (mode) {
-            Mode.Video -> {
+        if (!customOn) when (base) {
+            Mode.Audio -> ExpandRow(
+                stringResource(R.string.share_audio_format),
+                listOfNotNull(audio, size).joinToString(" · "),
+                open == "a", { open = if (open == "a") null else "a" },
+            ) {
+                Chips(Prefs.audioFormats, audio, { it }) { audio = it; open = null }
+            }
+            else -> {
                 val offered = info?.heights?.takeIf { it.isNotEmpty() }
                 val heights = Prefs.heights.filter { h -> h == null || offered == null || offered.any { it >= h } || h == offered.max() }
                 val sizeOf = { h: Int? -> info?.bytesFor(h)?.takeIf { it > 0 }?.let { "~" + formatBytes(it) } }
@@ -371,43 +410,56 @@ private fun MediaSheet(
                 ) {
                     Chips(heights, height, ::heightLabel, sub = sizeOf) { height = it; open = null }
                 }
-                Divider()
-                ExpandRow(stringResource(R.string.share_format), container, open == "f", { open = if (open == "f") null else "f" }) {
-                    Chips(Prefs.containers, container, { it }) { container = it; open = null }
+            }
+        }
+        if (!customOn) Divider()
+        val opensDone = stringResource(R.string.share_opens_done).takeIf { openDone }
+        val summary = when {
+            customOn -> "${stringResource(R.string.mode_custom)} · ${custom.text}"
+            base == Mode.Video -> listOfNotNull(container, stringResource(if (subs) R.string.add_subs_short else R.string.share_no_subs), opensDone).joinToString(" · ")
+            else -> opensDone
+        }
+        SettingRow(stringResource(R.string.share_more), subtitle = summary, onClick = { more = !more; open = null }) {
+            Chevron(more, c.muted)
+        }
+        AnimatedVisibility(more, enter = expandVertically(Specs.blend()) + fadeIn(Specs.blend()), exit = shrinkVertically(tween(150)) + fadeOut(tween(150))) {
+            Column {
+                if (base == Mode.Video && !customOn) {
+                    ExpandRow(stringResource(R.string.share_format), container, open == "f", { open = if (open == "f") null else "f" }) {
+                        Chips(Prefs.containers, container, { it }) { container = it; open = null }
+                    }
+                    Divider()
+                    SettingRow(
+                        // The languages by name, as Settings shows them, not as codes.
+                        stringResource(R.string.share_subtitles, defaults.subtitleLanguages().joinToString(", ") { languageName(it) }),
+                        onClick = { subs = !subs },
+                        checked = subs,
+                    ) { HSwitch(subs, { subs = it }) }
+                    Divider()
                 }
+                // Here it only switches on; the permission it may need is for Settings, not for the middle of a share.
+                OpenWhenDoneRow(openDone, hint = false, sendsAway = false) { openDone = it }
                 Divider()
                 SettingRow(
-                    stringResource(R.string.share_subtitles, defaults.subtitleLanguages().joinToString(", ")),
-                    onClick = { subs = !subs },
-                    checked = subs,
-                ) { HSwitch(subs, { subs = it }) }
-            }
-            Mode.Audio -> {
-                ExpandRow(
-                    stringResource(R.string.share_audio_format),
-                    listOfNotNull(audio, size).joinToString(" · "),
-                    open == "a", { open = if (open == "a") null else "a" },
-                ) {
-                    Chips(Prefs.audioFormats, audio, { it }) { audio = it; open = null }
-                }
-            }
-            Mode.Custom -> {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Txt(stringResource(R.string.share_custom_hint), style = Hamstr.type.small, color = c.ghost)
-                    Spacer(Modifier.height(6.dp))
-                    SheetField(
-                        custom, { custom = it }, stringResource(R.string.share_custom_placeholder), Res.drawable.ic_code,
-                        mono = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
-                    )
+                    stringResource(R.string.share_custom),
+                    subtitle = stringResource(R.string.share_custom_hint),
+                    onClick = { customOn = !customOn; open = null },
+                    checked = customOn,
+                ) { HSwitch(customOn, { customOn = it; open = null }) }
+                AnimatedVisibility(customOn, enter = expandVertically(Specs.blend()) + fadeIn(Specs.blend()), exit = shrinkVertically(tween(150)) + fadeOut(tween(150))) {
+                    Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 8.dp)) {
+                        SheetField(
+                            custom, { custom = it }, stringResource(R.string.share_custom_placeholder), Res.drawable.ic_code,
+                            mono = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
+                        )
+                    }
                 }
             }
         }
-        Divider()
-        OpenWhenDoneRow(openDone, hint = false) { openDone = it }
         Spacer(Modifier.height(12.dp))
         val keepChoice = {
-            Prefs.edit { it.copy(mode = if (mode == Mode.Custom) it.mode else mode, height = height, container = container, audioFormat = audio, subtitles = subs, openWhenDone = openDone) }
+            Prefs.edit { it.copy(mode = if (customOn) it.mode else base, height = height, container = container, audioFormat = audio, subtitles = subs, openWhenDone = openDone) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // Or hand the link to another Hamstr nearby, like AirDrop: a small square before the rest.
@@ -415,11 +467,19 @@ private fun MediaSheet(
             HButton(stringResource(R.string.share_cancel), onDismiss, Modifier.weight(1f))
             val primary = Modifier.weight(2f)
             val s = state
-            when {
+            // What the primary button stashes, if it stashes: its words and what it does.
+            val stash: Pair<String, () -> Unit>? = when {
                 // Offline: it can still be queued; it starts on its own once the phone is back online.
-                !net.online -> HButton(
-                    stringResource(R.string.share_stash_later), { keepChoice(); onStash(stashInfo, choice) },
-                    primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_download,
+                !net.online -> stringResource(R.string.share_stash_later) to { onStash(stashInfo, choice) }
+                s is InfoState.Failed || exact != null -> null
+                head != null -> stringResource(R.string.share_stash_too, if (mode == Mode.Audio) audio else heightLabel(height)) to { onStashVersion(head, choice) }
+                else -> (if (size != null) stringResource(R.string.share_stash_sized, size) else stringResource(R.string.share_stash)) to { onStash(stashInfo, choice) }
+            }
+            when {
+                stashed || stash != null -> StashButton(
+                    stash?.first.orEmpty(), done = stashed,
+                    onClick = { stash?.let { (_, run) -> keepChoice(); confirm(run) } },
+                    modifier = primary,
                 )
                 s is InfoState.Failed -> {
                     val fix = Failures.explain(s.message).fix
@@ -443,18 +503,41 @@ private fun MediaSheet(
                     )
                 }
                 exact != null -> HButton(stringResource(R.string.share_open_it), { onOpen(exact) }, primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_play_arrow)
-                head != null -> HButton(
-                    stringResource(R.string.share_stash_too, if (mode == Mode.Audio) audio else heightLabel(height)),
-                    { keepChoice(); onStashVersion(head, choice) },
-                    primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_download,
-                )
-                else -> HButton(
-                    if (size != null) stringResource(R.string.share_stash_sized, size) else stringResource(R.string.share_stash),
-                    { keepChoice(); onStash(stashInfo, choice) },
-                    primary, kind = ButtonKind.Primary, icon = Res.drawable.ic_download,
-                )
             }
         }
+    }
+}
+
+/** How long the share sheet shows "In the stash" before it leaves; the callers wait this long. */
+const val STASHED_HOLD_MS = 650L
+
+/**
+ * The sheet's primary button for stashing. Once [done] it turns into its own confirmation:
+ * the icon swaps to a check and the words to "In the stash", and it takes no second tap.
+ */
+@Composable
+private fun StashButton(text: String, done: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val c = Hamstr.colors
+    Row(
+        modifier
+            .height(46.dp)
+            .clip(RoundedCornerShape(Radii.control))
+            .background(c.accent)
+            .pressable({ if (!done) onClick() })
+            // A screen reader hears the confirmation as it comes.
+            .semantics { liveRegion = LiveRegionMode.Polite }
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AnimatedContent(done, transitionSpec = { iconSwap() }, label = "stashIcon") { d ->
+            Icon(if (d) Res.drawable.ic_check else Res.drawable.ic_download, tint = c.onAccent, size = 18.dp)
+        }
+        AnimatedContent(
+            if (done) stringResource(R.string.share_stashed) else text,
+            transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) },
+            label = "stashLabel",
+        ) { label -> Txt(label, style = Hamstr.type.button, color = c.onAccent, maxLines = 1) }
     }
 }
 
@@ -465,12 +548,19 @@ private fun ExpandRow(title: String, value: String, expanded: Boolean, onToggle:
         SettingRow(title, onClick = onToggle) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Txt(value, color = Hamstr.colors.muted)
-                Icon(Res.drawable.ic_expand_more, tint = Hamstr.colors.muted, size = 18.dp)
+                Chevron(expanded, Hamstr.colors.muted)
             }
         }
         AnimatedVisibility(expanded, enter = expandVertically(Specs.blend()) + fadeIn(Specs.blend()), exit = shrinkVertically(tween(150)) + fadeOut(tween(150))) {
             Box(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 4.dp)) { content() }
         }
     }
+}
+
+/** The chevron of a row that opens in place: it turns over while the row is open. */
+@Composable
+private fun Chevron(open: Boolean, tint: Color) {
+    val turn by animateFloatAsState(if (open) 180f else 0f, if (LocalReduceMotion.current) snap() else Specs.blend(), label = "chevron")
+    Icon(Res.drawable.ic_expand_more, tint = tint, size = 18.dp, modifier = Modifier.graphicsLayer { rotationZ = turn })
 }
 

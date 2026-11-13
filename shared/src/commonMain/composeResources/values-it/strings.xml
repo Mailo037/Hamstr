@@ -17,9 +17,9 @@
     <string name="err_full">Il telefono è pieno</string>
     <string name="err_full_hint">Libera un po’ di spazio, poi riprova.</string>
     <string name="err_unsupported">Hamstr non riconosce questo link</string>
-    <string name="err_unsupported_hint">yt-dlp non sa leggere i contenuti multimediali da questa pagina.</string>
+    <string name="err_unsupported_hint">Hamstr non trova né video né brani in questa pagina.</string>
     <string name="err_drm">Questo è protetto da copia</string>
-    <string name="err_drm_hint">È bloccato con DRM, quindi non può essere salvato.</string>
+    <string name="err_drm_hint">Il sito lo protegge dalla copia, quindi non può essere salvato.</string>
     <string name="err_private">Questo contenuto è privato</string>
     <string name="err_private_hint">Possono vederlo solo il proprietario e le persone che lui autorizza.</string>
     <string name="err_age">Riservato ai maggiorenni</string>
@@ -35,18 +35,18 @@
     <string name="err_format">Questa qualità non è disponibile</string>
     <string name="err_format_hint">Scegli un’altra qualità, oppure Migliore.</string>
     <string name="err_changed">Il sito ha cambiato qualcosa</string>
-    <string name="err_changed_hint">I siti cambiano di continuo. Di solito una versione più recente di yt-dlp risolve il problema.</string>
+    <string name="err_changed_hint">I siti cambiano di continuo. Di solito un aggiornamento del downloader di Hamstr risolve il problema.</string>
     <string name="err_ffmpeg">Impossibile completare il file</string>
-    <string name="err_ffmpeg_hint">FFmpeg si è fermato durante l’unione o la conversione. Riprovare di solito funziona.</string>
+    <string name="err_ffmpeg_hint">La composizione del file si è fermata. Riprovare di solito funziona.</string>
     <string name="err_details">Dettagli</string>
     <string name="err_copy">Copia errore</string>
     <string name="err_copied">Errore copiato</string>
-    <string name="err_update_retry">Aggiorna yt-dlp e riprova</string>
-    <string name="err_updating">Aggiornamento di yt-dlp …</string>
+    <string name="err_update_retry">Aggiorna e riprova</string>
+    <string name="err_updating">Aggiornamento del downloader …</string>
     <string name="err_try_again">Riprova</string>
 
     <!-- Download stages -->
-    <string name="stage_resolving">Analisi del link …</string>
+    <string name="stage_resolving">Lettura del link …</string>
     <string name="stage_merging">Unione di video e audio …</string>
     <string name="stage_extracting">Conversione dell’audio …</string>
     <string name="stage_remuxing">Creazione del file …</string>
@@ -78,8 +78,8 @@
     <string name="notif_timeout_text">Android consente i download in background per 6 ore al giorno. Apri Hamstr e proseguono.</string>
 
     <!-- Share sheet -->
-    <string name="share_sniffing">Analisi del link …</string>
-    <string name="share_reading_formats">lettura dei formati …</string>
+    <string name="share_sniffing">Controllo del link …</string>
+    <string name="share_reading_formats">ricerca delle qualità …</string>
     <string name="share_already_here">Già nella tua scorta</string>
     <string name="share_already_coming">Già in arrivo</string>
     <string name="share_open">Apri</string>
@@ -91,7 +91,7 @@
     <string name="share_format">Formato</string>
     <string name="share_subtitles">Sottotitoli (%1$s)</string>
     <string name="share_audio_format">Formato audio</string>
-    <string name="share_custom_hint">Selettore di formato di yt-dlp (-f)</string>
+    <string name="share_custom_hint">Per esperti: un codice di formato yt-dlp (-f)</string>
     <string name="share_custom_placeholder">Codice formato</string>
     <string name="share_cancel">Annulla</string>
     <string name="share_stash">Salva</string>
@@ -155,9 +155,9 @@
     <string name="hidden_many">%1$d nascosti · trovali in Impostazioni › Nascosti</string>
     <string name="deleted_one">File eliminato</string>
     <string name="deleted_many">%1$d file eliminati</string>
-    <string name="engine_restarting">Riavvio di yt-dlp …</string>
-    <string name="engine_restarted">yt-dlp è in esecuzione</string>
-    <string name="engine_still_broken">yt-dlp non si avvia ancora</string>
+    <string name="engine_restarting">Riavvio del downloader …</string>
+    <string name="engine_restarted">Il downloader è in esecuzione</string>
+    <string name="engine_still_broken">Il downloader ancora non si avvia</string>
 
     <!-- File menu -->
     <string name="menu_play">Riproduci in Hamstr</string>
@@ -258,8 +258,8 @@
         <item quantity="other">%1$d file salvati</item>
     </plurals>
     <string name="stash_active">%1$d attivi</string>
-    <string name="stash_engine_starting">yt-dlp si sta avviando</string>
-    <string name="stash_engine_broken">yt-dlp non funziona · tocca per riprovare</string>
+    <string name="stash_engine_starting">Avvio del downloader</string>
+    <string name="stash_engine_broken">Il downloader non si è avviato · tocca per riprovare</string>
     <string name="stash_downloading">Download in corso</string>
     <string name="stash_running">%1$d in esecuzione</string>
     <string name="stash_stashed">Salvato</string>
@@ -908,10 +908,10 @@
         <item quantity="one">%1$d download non riuscito</item>
         <item quantity="other">%1$d download non riusciti</item>
     </plurals>
-    <string name="stash_failed_update_hint">Il sito è cambiato; di solito una yt-dlp più recente risolve il problema</string>
+    <string name="stash_failed_update_hint">Il sito è cambiato; di solito un aggiornamento del downloader lo risolve</string>
     <string name="stash_update_retry">Aggiorna &amp; riprova</string>
     <string name="stash_retry_all">Riprova tutti</string>
-    <string name="stash_updating">Aggiornamento di yt-dlp, poi nuovo tentativo …</string>
+    <string name="stash_updating">Aggiornamento del downloader, poi nuovo tentativo …</string>
     <!-- A link copied in another app, offered on the stash. -->
     <string name="clip_offer_title">Salvare il link copiato?</string>
     <string name="clip_offer_hint">Negli appunti c’è un link</string>
@@ -961,4 +961,42 @@
     <string name="follow_offer_channel">Questo è un canale</string>
     <string name="follow_offer_playlist">Questa è una playlist</string>
     <string name="follow_unfollowed">Non segui più %1$s</string>
+    <string name="share_more">Altre opzioni</string>
+    <string name="share_custom">Formato personalizzato</string>
+    <string name="share_no_subs">Nessun sottotitolo</string>
+    <string name="share_opens_done">Si apre alla fine</string>
+    <string name="share_open_done_needs">Serve «Mostra sopra altre app», che puoi consentire in Impostazioni › Download</string>
+    <string name="share_stashed">Gnam! Nella scorta</string>
+    <string name="snack_canceled">Download annullato</string>
+    <string name="link_copied">Link copiato</string>
+    <string name="player_closed">Player chiuso</string>
+    <string name="stash_moving">%1$d di %2$d in corso</string>
+    <string name="eta_left">ancora %1$s</string>
+    <string name="intro_skip">Tocca per saltare</string>
+    <string name="hidden_empty_desktop">Non c’è niente di nascosto. Ciò che nascondi dalla libreria aspetta qui, e i file restano su questo computer.</string>
+    <string name="hidden_note_desktop">I file nascosti restano nella tua cartella di Hamstr. Clicca su uno per il suo menu.</string>
+    <plurals name="tray_downloading">
+        <item quantity="one">Hamstr · %1$d in download</item>
+        <item quantity="other">Hamstr · %1$d in download</item>
+    </plurals>
+    <plurals name="tray_waiting">
+        <item quantity="one">Hamstr · %1$d in attesa</item>
+        <item quantity="other">Hamstr · %1$d in attesa</item>
+    </plurals>
+    <plurals name="tray_done">
+        <item quantity="one">Download completato</item>
+        <item quantity="other">%1$d download completati</item>
+    </plurals>
+    <string name="tray_failed">Un download non è riuscito</string>
+    <string name="drop_link">Rilascia per salvare</string>
+    <plurals name="drop_files">
+        <item quantity="one">Rilascia per aggiungere il file</item>
+        <item quantity="other">Rilascia per aggiungere %1$d file</item>
+    </plurals>
+    <string name="drop_files_some">Rilascia per aggiungere i file</string>
+    <string name="drop_no_link">Lì non c’è nessun link</string>
+    <plurals name="drop_added">
+        <item quantity="one">Aggiunta del file</item>
+        <item quantity="other">Aggiunta di %1$d file</item>
+    </plurals>
 </resources>

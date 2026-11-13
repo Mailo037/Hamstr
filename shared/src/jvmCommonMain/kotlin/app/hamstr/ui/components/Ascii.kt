@@ -3,6 +3,7 @@ package app.hamstr.ui.components
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Rect
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -122,9 +124,10 @@ fun AsciiImage(
     val fx = LocalFx.current
     val accent = Hamstr.colors.accent
     val bg = Hamstr.colors.black
+    val arrival = rememberArrival(bitmap)
     // A fully revealed image covers every ASCII cell; skip sampling and glyph drawing.
     if ((bitmap != null && reveal >= 1f) || !fx.asciiThumbs || (!fx.rain && bitmap == null)) {
-        PlainImage(bitmap, reveal, modifier, bg, accent)
+        PlainImage(bitmap, reveal, modifier, bg, accent, arrival)
         return
     }
     val paint = rememberMonoPaint()
@@ -147,6 +150,7 @@ fun AsciiImage(
             cache[0]?.takeIf { it.cols == cols && it.rows == rows } ?: sample(b, cols, rows).also { cache[0] = it }
         }
         val head = accent.toArgb()
+        val shown = arrival.value
         paint.textSize = min(cw, chh) * 1.05f
         val sec = time / 1000f
         val canvas = drawContext.canvas
@@ -178,7 +182,7 @@ fun AsciiImage(
                 if (ch == ' ') continue
                 val p = samples.pixels[i]
                 val k = 0.55f + l * 0.6f
-                val a = min(1f, 1f - rain * 2f + rainA * rain)
+                val a = min(1f, 1f - rain * 2f + rainA * rain) * shown
                 paint.color = ((a * 255).toInt() shl 24) or
                     (min(255, (((p shr 16) and 0xFF) * k + 40).toInt()) shl 16) or
                     (min(255, (((p shr 8) and 0xFF) * k + 40).toInt()) shl 8) or
@@ -188,10 +192,22 @@ fun AsciiImage(
         }
         if (image != null && reveal > 0f) {
             val edge = size.height * reveal.coerceIn(0f, 1f)
-            clipRect(bottom = edge) { drawCover(image) }
+            clipRect(bottom = edge) { drawCover(image, alpha = shown) }
             if (reveal < 1f) drawRect(accent, Offset(0f, edge - 1.dp.toPx()), Size(size.width, 1.dp.toPx()))
         }
     }
+}
+
+/**
+ * 1 for a picture that is there from the first frame (it was shown lately, see rememberImage);
+ * one that arrives later fades in over Specs.appear instead of cutting in. Read while drawing.
+ */
+@Composable
+private fun rememberArrival(bitmap: ImageBitmap?): State<Float> {
+    val has = bitmap != null
+    val arrival = remember { Animatable(if (has) 1f else 0f) }
+    LaunchedEffect(has) { if (has) arrival.animateTo(1f, Specs.appear()) else arrival.snapTo(0f) }
+    return arrival.asState()
 }
 
 /** The loading rain's columns at one moment: where each drop is, how long its trail, its noise's phase. */
@@ -218,17 +234,18 @@ private class RainColumns {
 
 /** ASCII effects off: the plain thumbnail, dimmed below the progress edge. */
 @Composable
-private fun PlainImage(image: ImageBitmap?, reveal: Float, modifier: Modifier, bg: Color, accent: Color) {
+private fun PlainImage(image: ImageBitmap?, reveal: Float, modifier: Modifier, bg: Color, accent: Color, arrival: State<Float>) {
     Canvas(modifier) {
         drawRect(bg)
         if (image == null) return@Canvas
+        val shown = arrival.value
         if (reveal >= 1f) {
-            drawCover(image)
+            drawCover(image, alpha = shown)
             return@Canvas
         }
-        drawCover(image, alpha = 0.3f)
+        drawCover(image, alpha = 0.3f * shown)
         val edge = size.height * reveal.coerceIn(0f, 1f)
-        clipRect(bottom = edge) { drawCover(image) }
+        clipRect(bottom = edge) { drawCover(image, alpha = shown) }
         if (reveal in 0.001f..0.999f) drawRect(accent, Offset(0f, edge - 1.dp.toPx()), Size(size.width, 1.dp.toPx()))
     }
 }
@@ -311,7 +328,13 @@ private class RasterCache {
     }
 }
 
-/** Text that decodes in from ASCII noise, left to right (Glyph's "text arrives"). */
+/**
+ * Text that decodes in from ASCII noise, left to right (Glyph's "text arrives"). Only when it
+ * really arrives: a text that already decoded in this run of the app (a tab coming back, a row
+ * scrolling in again, the player opening on the same song) shows as it is, and decodes again only
+ * when it changes while on screen. [once] = false decodes every time it comes on screen (the
+ * tour's pictures, which show the effect).
+ */
 @Composable
 fun DecodeText(
     text: String,
@@ -321,14 +344,23 @@ fun DecodeText(
     maxLines: Int = 1,
     durationMs: Int = 520,
     delayMs: Long = 0,
+    once: Boolean = true,
 ) {
-    // Starts as noise of the same length, so a delayed decode never flashes the final text.
     if (!LocalFx.current.decode) {
         Txt(text, style = style, color = color, modifier = modifier, maxLines = maxLines)
         return
     }
-    var shown by remember { mutableStateOf(text.map { if (it == ' ') ' ' else NOISE.random() }.joinToString("")) }
+    val known = remember { once && Decoded.has(text) }
+    // Otherwise it starts as noise of the same length, so a delayed decode never flashes the final text.
+    var shown by remember { mutableStateOf(if (known) text else text.map { if (it == ' ') ' ' else NOISE.random() }.joinToString("")) }
+    val first = remember { booleanArrayOf(true) }
     LaunchedEffect(text) {
+        val skip = first[0] && known
+        first[0] = false
+        if (skip) {
+            shown = text
+            return@LaunchedEffect
+        }
         delay(delayMs)
         val start = System.nanoTime()
         while (true) {
@@ -342,7 +374,24 @@ fun DecodeText(
             if (p >= 1f) break
             withInfiniteAnimationFrameMillis { }
         }
+        if (once) Decoded.add(text)
     }
     // Screen readers get the real title, not the noise on its way there.
     Txt(shown, style = style, color = color, modifier = modifier.clearAndSetSemantics { contentDescription = text }, maxLines = maxLines)
+}
+
+/** The texts that decoded in this run of the app, the last few hundred of them. */
+private object Decoded {
+    private const val KEEP = 512
+    private val texts = LinkedHashSet<String>()
+
+    @Synchronized
+    fun has(text: String) = text in texts
+
+    @Synchronized
+    fun add(text: String) {
+        texts.remove(text)
+        texts.add(text)
+        if (texts.size > KEEP) texts.remove(texts.first())
+    }
 }

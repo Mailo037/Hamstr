@@ -17,6 +17,10 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import app.hamstr.data.PendingCancel
+import app.hamstr.ui.components.FocusIndication
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -45,7 +49,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
@@ -164,6 +175,70 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
         menuAt = IntOffset(pointer.x.roundToInt(), pointer.y.roundToInt())
         menuFor = t
     }
+    // Files and running downloads hide (Settings › Hidden has the files); failed or stopped ones
+    // just leave the list. The snack's Undo brings both back.
+    fun hide(list: List<DownloadTask>) {
+        val (keep, drop) = list.partition { it.status == Status.Done || it.status.active }
+        val ids = keep.map { it.id }.toSet()
+        DownloadStore.setHidden(ids, true)
+        val removed = DownloadStore.removeAll(drop.map { it.id }.toSet())
+        val undo: () -> Unit = { DownloadStore.setHidden(ids, false); DownloadStore.restore(removed) }
+        when {
+            keep.isEmpty() -> Snacks.show(Res.string.removed_from_list, action = Res.string.undo, onAction = undo)
+            list.size == 1 -> Snacks.show(Res.string.hidden_one, action = Res.string.undo, onAction = undo)
+            else -> Snacks.show(Res.string.hidden_many, list.size, action = Res.string.undo, onAction = undo)
+        }
+    }
+    // A download canceled anywhere waits a moment before it really goes, behind Undo.
+    LaunchedEffect(Unit) {
+        PendingCancel.requests.collect { t -> Snacks.show(Res.string.snack_canceled, action = Res.string.undo) { PendingCancel.undo(t.id) } }
+    }
+    // "Show all" on the stash: the library from its top, newest first, nothing filtered.
+    var showAll by remember { mutableStateOf(false) }
+    var searchAsk by remember { mutableStateOf(false) }
+    var castSheet by remember { mutableStateOf(false) }
+    // Something dropped on the window shows on the stash.
+    SideEffect { Drop.onLanded = { tab = Tab.Stash } }
+    // Fullscreen belongs to a video that is open: minimised, closed or gone, the window comes back.
+    val playerOpen = (playing != null && playerExpanded) || (staged != null && stageExpanded)
+    LaunchedEffect(frame.fullscreen, playerOpen) { if (frame.fullscreen && !playerOpen) frame.exitFullscreen() }
+
+    // The window's keys (Shortcuts), the ones nothing focused took: a field keeps what is typed
+    // into it, and an open player has its own.
+    fun shortcut(e: KeyEvent): Boolean {
+        if (e.type != KeyEventType.KeyDown) return false
+        val cmd = e.isCtrlPressed || e.isMetaPressed
+        if (cmd && !e.isAltPressed && !e.isShiftPressed) {
+            if (sheetOpen) return false
+            when (e.key) {
+                // Ctrl+V (⌘V) anywhere stashes the copied link, the desktop's share button.
+                Key.V -> clipboardLink()?.let { Queue.stash(it); tab = Tab.Stash } ?: Snacks.show(Res.string.no_clipboard_link)
+                Key.N -> { clipLink = clipboardLink(); adding = true }
+                Key.F -> { tab = Tab.Library; searchAsk = true }
+                Key.One -> tab = Tab.Stash
+                Key.Two -> tab = Tab.Library
+                Key.Three, Key.Comma -> tab = Tab.Settings
+                else -> return false
+            }
+            return true
+        }
+        if (cmd || e.isAltPressed || sheetOpen) return false
+        return when (e.key) {
+            Key.Spacebar, Key.K -> PlayingNow.toggle()
+            Key.DirectionLeft, Key.J -> if (e.isShiftPressed) PlayingNow.previous() else PlayingNow.seekBy(-10.0)
+            Key.DirectionRight, Key.L -> if (e.isShiftPressed) PlayingNow.next() else PlayingNow.seekBy(10.0)
+            Key.DirectionUp -> PlayingNow.volumeBy(0.05f)
+            Key.DirectionDown -> PlayingNow.volumeBy(-0.05f)
+            Key.M -> PlayingNow.toggleMute()
+            else -> false
+        }
+    }
+    SideEffect { Shortcuts.handle = { shortcut(it) } }
+    // Keys only arrive where the keyboard is: with no sheet open, the window's content holds it.
+    val keysFocus = remember { FocusRequester() }
+    LaunchedEffect(sheetOpen, focused) { if (!sheetOpen && focused) runCatching { keysFocus.requestFocus() } }
+    // Each tab keeps its state (the library's search and filter, where a list was) while another one shows.
+    val tabs = rememberSaveableStateHolder()
 
     Box(
         Modifier
@@ -175,11 +250,9 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                     while (true) awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull()?.let { pointer = it.position }
                 }
             }
-            // Ctrl+V (⌘V) anywhere stashes the copied link, the desktop's share button.
-            .onKeyEvent { e ->
-                val paste = e.type == KeyEventType.KeyDown && e.key == Key.V && (e.isCtrlPressed || e.isMetaPressed)
-                if (paste && !sheetOpen) clipboardLink()?.let { Queue.stash(it); tab = Tab.Stash; true } ?: false else false
-            },
+            .focusRequester(keysFocus)
+            .focusable()
+            .onKeyEvent { Shortcuts.handle(it) },
     ) {
         RasterBackground(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
@@ -193,27 +266,38 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                     }
                     Spacer(Modifier.width(12.dp))
                     AnimatedContent(tab, Modifier.weight(1f).fillMaxHeight(), transitionSpec = { fadeIn(Specs.appear()) togetherWith fadeOut(Specs.disappear()) }, label = "tab") { t ->
-                        when (t) {
-                            Tab.Stash -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                                Box(Modifier.widthIn(max = 880.dp)) {
-                                    StashScreen(
-                                        visible, engine, PaddingValues(top = 8.dp, bottom = 24.dp),
-                                        onAdd = { clipboardLink()?.let(Queue::stash) ?: run { clipLink = null; adding = true } },
-                                        onOpenAdd = { clipLink = clipboardLink(); adding = true },
-                                        onMenu = ::openMenu,
-                                        onPlay = ::play,
-                                        onHide = { list -> DownloadStore.setHidden(list.map { it.id }.toSet(), true) },
-                                        onRetryEngine = Queue::retryStart,
-                                        onShowAll = {},
-                                        clip = clip,
-                                        onClip = { take -> clip?.link?.takeIf { take }?.let(Queue::stash); clip = null },
-                                    )
+                        tabs.SaveableStateProvider(t.name) {
+                            when (t) {
+                                Tab.Stash -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                    Box(Modifier.widthIn(max = 880.dp)) {
+                                        StashScreen(
+                                            visible, engine, PaddingValues(top = 8.dp, bottom = 24.dp),
+                                            onAdd = { clipboardLink()?.let(Queue::stash) ?: run { clipLink = null; adding = true } },
+                                            onOpenAdd = { clipLink = clipboardLink(); adding = true },
+                                            onMenu = ::openMenu,
+                                            onPlay = ::play,
+                                            onHide = ::hide,
+                                            onRetryEngine = Queue::retryStart,
+                                            onShowAll = { showAll = true; tab = Tab.Library },
+                                            clip = clip,
+                                            onClip = { take -> clip?.link?.takeIf { take }?.let(Queue::stash); clip = null },
+                                        )
+                                    }
                                 }
+                                Tab.Library -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                    Box(Modifier.widthIn(max = 880.dp)) {
+                                        DesktopLibrary(
+                                            visible, onPlay = ::play, onMenu = ::openMenu, menuOpen = menuFor?.id,
+                                            showAll = showAll, onShowAllDone = { showAll = false },
+                                            searchAsk = searchAsk, onSearchAsked = { searchAsk = false },
+                                        )
+                                    }
+                                }
+                                Tab.Settings -> DesktopSettings(
+                                    page, engine, onQuit = onQuit, onTour = { touring = true }, onDevice = { clipLink = clipboardLink(); deviceFor = it },
+                                    onFollowing = { followFor = it }, onFileMenu = ::openMenu,
+                                )
                             }
-                            Tab.Library -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-                                Box(Modifier.widthIn(max = 880.dp)) { DesktopLibrary(visible, onPlay = ::play, onMenu = ::openMenu) }
-                            }
-                            Tab.Settings -> DesktopSettings(page, engine, onQuit = onQuit, onTour = { touring = true }, onDevice = { clipLink = clipboardLink(); deviceFor = it }, onFollowing = { followFor = it })
                         }
                     }
                 }
@@ -255,7 +339,7 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                 DesktopSheet {
                     SharingSheet(
                         content,
-                        onCopyLink = { Files.copy(it); sharing = null },
+                        onCopyLink = { Files.copy(it); sharing = null; Snacks.show(Res.string.link_copied) },
                         onCopyFiles = { Files.copyFiles(content.files.mapNotNull { it.filePath?.let(::File) }); sharing = null },
                         onShareFiles = { content.files.firstOrNull()?.filePath?.let { Files.reveal(File(it)) }; sharing = null },
                         fileActionLabel = Res.string.desktop_show_in_folder,
@@ -280,12 +364,11 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
                 }
             }
         }
-        var castSheet by remember { mutableStateOf(false) }
-        Overlay(playing != null && playerExpanded, onDismiss = DesktopPlayback::minimize) {
-            playing?.let { t -> DesktopPlayer(t, onCast = { castSheet = true }, onMinimize = DesktopPlayback::minimize, onClose = DesktopPlayback::close) }
+        Overlay(playing != null && playerExpanded && !frame.fullscreen, onDismiss = DesktopPlayback::minimize) {
+            playing?.let { t -> DesktopPlayer(t, onCast = { castSheet = true }, onMinimize = DesktopPlayback::minimize, onClose = DesktopPlayback::close, onFullscreen = frame::toggleFullscreen) }
         }
-        Overlay(staged != null && stageExpanded, onDismiss = DesktopStage::minimize) {
-            staged?.let { s -> DesktopPlayer(s.task, stream = s.player, onMinimize = DesktopStage::minimize, onClose = DesktopStage::close) }
+        Overlay(staged != null && stageExpanded && !frame.fullscreen, onDismiss = DesktopStage::minimize) {
+            staged?.let { s -> DesktopPlayer(s.task, stream = s.player, onMinimize = DesktopStage::minimize, onClose = DesktopStage::close, onFullscreen = frame::toggleFullscreen) }
         }
         Overlay(castSheet, onDismiss = { castSheet = false }) {
             DesktopSheet { app.hamstr.ui.CastSheet { castSheet = false } }
@@ -297,11 +380,28 @@ fun DesktopApp(frame: WindowFrame, onClose: () -> Unit, onQuit: () -> Unit) {
         // A download's menu, where it was right-clicked (or clicked, for a running one).
         FileMenu(
             menuFor, menuAt, onShare = { t -> menuFor = null; sharing = ShareContent.from(listOf(t)) }, onPlay = { t -> menuFor = null; play(t) },
-            onInfo = { t -> menuFor = null; infoFor = t },
+            onInfo = { t -> menuFor = null; infoFor = t }, onHide = { t -> menuFor = null; hide(listOf(t)) },
         ) { menuFor = null }
         TourOverlay(touring, onDone = { TourGate.done(); touring = false; tab = Tab.Stash }, startAt = (tourAt ?: 1) - 1, top = TITLE_BAR)
-        TitleBar(frame, onClose)
-        ResizeEdges(frame)
+        // A video over the whole screen: no bar, no edges, nothing else.
+        if (frame.fullscreen) {
+            val s = staged?.takeIf { stageExpanded }
+            val t = playing?.takeIf { playerExpanded }
+            when {
+                s != null -> DesktopPlayer(s.task, stream = s.player, onMinimize = DesktopStage::minimize, onClose = DesktopStage::close, fullscreen = true, onFullscreen = frame::toggleFullscreen)
+                t != null -> DesktopPlayer(t, onCast = { castSheet = true }, onMinimize = DesktopPlayback::minimize, onClose = DesktopPlayback::close, fullscreen = true, onFullscreen = frame::toggleFullscreen)
+            }
+        }
+        DropOverlay()
+        // The snacks, over the modals: at the foot of the content column (right of the side bar),
+        // or at its top while a modal is open.
+        Box(Modifier.fillMaxSize().padding(top = TITLE_BAR, start = 10.dp + 216.dp + 12.dp, end = 12.dp, bottom = 12.dp)) {
+            SnackHost(top = sheetOpen || followFor != null || deviceFor != null || castSheet)
+        }
+        if (!frame.fullscreen) {
+            TitleBar(frame, onClose)
+            ResizeEdges(frame)
+        }
     }
 }
 
@@ -333,12 +433,17 @@ private fun SideBar(selected: Tab, page: Page, onTab: (Tab) -> Unit, onPage: (Pa
             Column {
                 Tab.entries.forEach { t ->
                     val on = t == selected
+                    val source = remember { MutableInteractionSource() }
+                    val hovered by source.collectIsHoveredAsState()
+                    // The pointer on another tab shows half the pill under it.
+                    val hover = animateSelection(hovered && !on)
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .height(ITEM)
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable(remember { MutableInteractionSource() }, null) {
+                            .background(c.hover.copy(alpha = 0.5f * hover))
+                            .clickable(source, FocusIndication) {
                                 if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onTab(t)
                             }
@@ -394,7 +499,10 @@ private val ITEM = 40.dp
  * A pointer gets there with one right-click, so it is a small menu rather than a sheet.
  */
 @Composable
-private fun FileMenu(t: DownloadTask?, at: IntOffset, onShare: (DownloadTask) -> Unit, onPlay: (DownloadTask) -> Unit, onInfo: (DownloadTask) -> Unit, onClose: () -> Unit) {
+private fun FileMenu(
+    t: DownloadTask?, at: IntOffset, onShare: (DownloadTask) -> Unit, onPlay: (DownloadTask) -> Unit, onInfo: (DownloadTask) -> Unit,
+    onHide: (DownloadTask) -> Unit, onClose: () -> Unit,
+) {
     // The last download stays in the menu while it fades out.
     var last by remember { mutableStateOf(t) }
     if (t != null) last = t
@@ -411,7 +519,14 @@ private fun FileMenu(t: DownloadTask?, at: IntOffset, onShare: (DownloadTask) ->
                 MenuItem(stringResource(Res.string.menu_tile_share), { onShare(shown) }, Res.drawable.ic_share)
             if (shown.status == Status.Done) MenuItem(stringResource(Res.string.menu_info), { onInfo(shown) }, Res.drawable.ic_info)
             MenuDivider()
-            MenuItem(stringResource(Res.string.menu_hide), { DownloadStore.setHidden(setOf(shown.id), true); onClose() }, Res.drawable.ic_visibility_off)
+            // From Settings › Hidden the file comes back instead.
+            if (shown.hidden) {
+                MenuItem(stringResource(Res.string.hidden_restore), {
+                    DownloadStore.setHidden(setOf(shown.id), false)
+                    onClose()
+                    Snacks.show(Res.string.hidden_restored)
+                }, Res.drawable.ic_restore)
+            } else MenuItem(stringResource(Res.string.menu_hide), { onHide(shown) }, Res.drawable.ic_visibility_off)
         }
     }
 }

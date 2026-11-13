@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.Orientation
 import app.hamstr.ui.components.edgeFade
+import app.hamstr.ui.components.ScrollIndicator
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -79,6 +80,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.hamstr.data.DownloadStore
 import app.hamstr.data.DownloadTask
+import app.hamstr.data.PendingCancel
 import app.hamstr.data.Positions
 import app.hamstr.data.collapseVersions
 import app.hamstr.data.Mode
@@ -94,6 +96,7 @@ import app.hamstr.ui.components.DecodeText
 import app.hamstr.ui.components.HamstrMark
 import app.hamstr.ui.components.Icon
 import app.hamstr.ui.components.IconButton
+import app.hamstr.ui.components.LocalDesktop
 import app.hamstr.ui.components.LocalReduceMotion
 import app.hamstr.ui.components.ProgressLine
 import app.hamstr.ui.components.SectionHeader
@@ -145,16 +148,19 @@ fun StashScreen(
 ) {
     val c = Hamstr.colors
     val haptics = LocalHapticFeedback.current
+    // Downloads canceled a moment ago are off the lists while their Undo is offered.
+    val cancelling by PendingCancel.pending.collectAsState()
+    val list = remember(tasks, cancelling) { if (cancelling.isEmpty()) tasks else tasks.filter { it.id !in cancelling } }
     // A new list (a download started, finished, moved on): one pass sorts it, the rest only reads.
     // Progress ticks don't come here; the rows that show them listen for them (rememberCurrent).
-    val lists = remember(tasks) { StashLists(tasks) }
+    val lists = remember(list) { StashLists(list) }
     val active = lists.active
     val done = lists.done
     val shelf = remember(done) { collapseVersions(done) }
     val albums = remember(shelf) { shelfOf(shelf) }
     val heads = remember(albums) { albums.flatMap { e -> if (e is Stashed.Album) e.tracks.map { it.head } else listOf((e as Stashed.One).head) } }
     // Albums that show their songs.
-    var openAlbums by remember { mutableStateOf(emptySet<String>()) }
+    val openAlbums = StashOpen.albums
     val shelfRows = remember(albums, openAlbums) {
         albums.take(SHELF).flatMap { e ->
             when (e) {
@@ -164,14 +170,13 @@ fun StashScreen(
         }
     }
     val totalBytes = lists.totalBytes
-    val running = lists.running
     val mark = rememberMarkState()
     val moods = LocalFx.current.moods
     val missing by FileChecks.missing.collectAsState()
     val positions by Positions.all.collectAsState()
     // Groups whose waiting downloads are shown too, not just the ones that are moving.
-    var openGroups by remember { mutableStateOf(emptySet<String>()) }
-    val rows = remember(tasks, openGroups) { activeRows(tasks, active, openGroups) }
+    val openGroups = StashOpen.groups
+    val rows = remember(list, active, openGroups) { activeRows(list, active, openGroups) }
     val line = lists.line
     val held = lists.held
     val failed = lists.failed
@@ -224,7 +229,8 @@ fun StashScreen(
                     add()
                 }
                 armed = false
-                animate(pull, 0f, animationSpec = Specs.settle()) { v, _ -> pull = v }
+                // The list goes back up without bouncing past its place.
+                animate(pull, 0f, animationSpec = Specs.release()) { v, _ -> pull = v.coerceAtLeast(0f) }
                 pull = 0f
                 return available
             }
@@ -267,7 +273,6 @@ fun StashScreen(
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Txt(pluralStringResource(Res.plurals.stash_files, done.size, done.size), color = c.muted)
-                        if (running > 0) Badge(stringResource(Res.string.stash_active, running), accent = true)
                         when (engine) {
                             EngineState.Starting -> Badge(stringResource(Res.string.stash_engine_starting))
                             // A broken start can be tried again right here.
@@ -297,7 +302,8 @@ fun StashScreen(
                 item(key = "h_active") {
                     SectionHeader(
                         stringResource(Res.string.stash_downloading),
-                        trailing = stringResource(Res.string.stash_running, lists.moving),
+                        // How many of the listed ones move bytes right now; nothing while all of them wait.
+                        trailing = if (lists.moving > 0) stringResource(Res.string.stash_moving, lists.moving, active.size) else null,
                         modifier = Modifier.padding(horizontal = 12.dp).animateItem(),
                     )
                 }
@@ -340,12 +346,20 @@ fun StashScreen(
                     GroupedItem(i, rows.size) {
                         when (r) {
                             is ActiveRow.Header -> GroupRow(r.title, r.members, expanded = r.group in openGroups) {
-                                openGroups = if (r.group in openGroups) openGroups - r.group else openGroups + r.group
+                                StashOpen.groups = if (r.group in openGroups) openGroups - r.group else openGroups + r.group
                             }
-                            is ActiveRow.More -> MoreRow(r.count) { openGroups = openGroups + r.group }
+                            is ActiveRow.More -> MoreRow(r.count) { StashOpen.groups = openGroups + r.group }
                             is ActiveRow.Item -> Box(Modifier.padding(start = if (r.nested) 12.dp else 0.dp)) {
-                                SwipeRow(start = primarySwipe(r.task), end = cancelSwipe(r.task, onHide), icons = false) {
-                                    TaskRow(r.task, highlighted = r.task.status == Status.Running, ahead = line[r.task.id], onClick = { onMenu(r.task) }, onLongClick = { onMenu(r.task) })
+                                val t = r.task
+                                // On the desktop the row's own button already pauses, resumes, retries or
+                                // cancels a waiting one; the icons on hover add only what it lacks.
+                                val desktop = LocalDesktop.current
+                                SwipeRow(
+                                    start = primarySwipe(t).takeIf { !desktop || t.status == Status.Queued },
+                                    end = cancelSwipe(t, onHide).takeIf { !desktop || t.status != Status.Queued },
+                                    iconsOnHover = true,
+                                ) {
+                                    TaskRow(t, highlighted = t.status == Status.Running, ahead = line[t.id], onClick = { onMenu(t) }, onLongClick = { onMenu(t) })
                                 }
                             }
                         }
@@ -354,7 +368,8 @@ fun StashScreen(
             }
             if (done.isNotEmpty()) {
                 item(key = "h_done") {
-                    SectionHeader(stringResource(Res.string.stash_stashed), trailing = "${done.size}", modifier = Modifier.padding(horizontal = 12.dp).animateItem())
+                    // No count here: the line under the total already says how many.
+                    SectionHeader(stringResource(Res.string.stash_stashed), modifier = Modifier.padding(horizontal = 12.dp).animateItem())
                 }
                 itemsIndexed(shelfRows, key = { _, r -> r.key }) { i, r ->
                     GroupedItem(i, shelfRows.size) {
@@ -369,10 +384,10 @@ fun StashScreen(
                                     end = SwipeAction(Res.drawable.ic_visibility_off, stringResource(Res.string.stash_hide), c.muted, removes = true) {
                                         onHide(album.tracks.flatMap { it.versions })
                                     },
-                                    icons = false,
+                                    iconsOnHover = true,
                                 ) {
                                     AlbumRow(album, expanded = album.group in openAlbums) {
-                                        openAlbums = if (album.group in openAlbums) openAlbums - album.group else openAlbums + album.group
+                                        StashOpen.albums = if (album.group in openAlbums) openAlbums - album.group else openAlbums + album.group
                                     }
                                 }
                             }
@@ -386,7 +401,7 @@ fun StashScreen(
                                     SwipeRow(
                                         start = if (gone) null else SwipeAction(Res.drawable.ic_play_arrow, stringResource(Res.string.player_play), c.accent) { onPlay(t, queue) },
                                         end = SwipeAction(Res.drawable.ic_visibility_off, stringResource(Res.string.stash_hide), c.muted, removes = true) { onHide(versions) },
-                                        icons = false,
+                                        iconsOnHover = true,
                                     ) {
                                         TaskRow(
                                             t, versions = versions, gone = gone, resume = positions[t.id]?.fraction,
@@ -408,7 +423,19 @@ fun StashScreen(
             }
             item(key = "end") { Spacer(Modifier.height(24.dp)) }
         }
+        // The desktop's scrollbar; nothing on the phone.
+        ScrollIndicator(listState, Modifier.align(Alignment.TopEnd).padding(top = contentPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding()))
     }
+}
+
+/**
+ * Which albums and playlists show their songs. Kept while the app runs, not with the screen: the
+ * stash leaves composition on a tab change (the desktop's tabs, the phone's pager), and an album
+ * opened a moment ago shouldn't be closed when it comes back.
+ */
+private object StashOpen {
+    var albums by mutableStateOf(emptySet<String>())
+    var groups by mutableStateOf(emptySet<String>())
 }
 
 /** The stash's lists out of all downloads, made in one pass over them. */
@@ -667,7 +694,8 @@ private fun primarySwipe(t: DownloadTask): SwipeAction? {
 private fun cancelSwipe(t: DownloadTask, onHide: (List<DownloadTask>) -> Unit): SwipeAction {
     val c = Hamstr.colors
     return if (t.status == Status.Failed) SwipeAction(Res.drawable.ic_close, stringResource(Res.string.stash_remove), c.red, removes = true) { onHide(listOf(t)) }
-    else SwipeAction(Res.drawable.ic_close, stringResource(Res.string.notif_cancel), c.red, removes = true) { Downloads.control.cancel(t.id) }
+    // Paused and hidden at once, canceled for real once the snack's Undo is gone.
+    else SwipeAction(Res.drawable.ic_close, stringResource(Res.string.notif_cancel), c.red, removes = true) { PendingCancel.request(t) }
 }
 
 /** Ticks once a second while a retry counts down, so its "in 12 s" stays true. */
@@ -731,6 +759,16 @@ fun TaskRow(
     // it is drawn (Animated), so they redraw the thumbnail and the line, not the whole row.
     val progress = animateFloatAsState(t.progress, Specs.glide(), label = "progress")
     val stage = rememberStageText(t)
+    // Only a download that moves bytes rains and decodes; one that waits (its turn, Wi-Fi, the
+    // night) holds still, so the real sign of work keeps its meaning.
+    val moving = t.status == Status.Running && t.stage?.waiting != true
+    val playing by NowPlaying.id.collectAsState()
+    val now = playing != null && versions.any { it.id == playing }
+    // New in the stash: in the last day and not played yet. Only that gets the green check.
+    val played by NowPlaying.played.collectAsState()
+    val newest = versions.maxOf { it.finishedAt }
+    val fresh = t.status == Status.Done && !gone && resume == null && !now &&
+        versions.none { it.id in played } && System.currentTimeMillis() - newest < FRESH_MS
     Row(
         Modifier
             .fillMaxWidth()
@@ -751,7 +789,14 @@ fun TaskRow(
                 AsciiImage(
                     bitmap = bitmap,
                     reveal = if (t.status == Status.Done) 1f else p,
-                    rain = if (bitmap == null && t.status.active) 1f else 0f,
+                    rain = when {
+                        bitmap != null -> 0f
+                        moving -> 1f
+                        // Waiting: a still, fainter field of characters.
+                        t.status.active -> 0.6f
+                        else -> 0f
+                    },
+                    animate = moving,
                     cell = 5.dp,
                     modifier = Modifier.size(52.dp).graphicsLayer { alpha = if (gone) 0.35f else 1f },
                 )
@@ -761,13 +806,11 @@ fun TaskRow(
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            val playing by NowPlaying.id.collectAsState()
-            val now = playing != null && versions.any { it.id == playing }
-            if (t.status.active) DecodeText(t.title, style = Hamstr.type.bodyMedium)
+            if (moving) DecodeText(t.title, style = Hamstr.type.bodyMedium)
             else Txt(t.title, style = if (now) Hamstr.type.bodyStrong else Hamstr.type.bodyMedium, color = if (now) c.accent else c.ink, maxLines = 1)
             Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Badge(versionsBadge(versions))
+                Badge(bestBadge(versions))
                 if (!gone && t.status == Status.Done) ChangedMark(t.id)
                 Txt(
                     when {
@@ -805,10 +848,24 @@ fun TaskRow(
         ) { status ->
             when (status) {
                 Status.Running -> IconButton(Res.drawable.ic_pause, stringResource(Res.string.notif_pause), { Downloads.control.pause(t.id) }, size = 34.dp)
-                Status.Queued -> IconButton(Res.drawable.ic_close, stringResource(Res.string.notif_cancel), { Downloads.control.cancel(t.id) }, size = 34.dp)
+                // Waiting is calm: a quiet cancel without a tile, which Undo can take back.
+                Status.Queued -> IconButton(
+                    Res.drawable.ic_close, stringResource(Res.string.notif_cancel), { PendingCancel.request(t) },
+                    size = 34.dp, tint = c.ghost, background = Color.Transparent,
+                )
                 Status.Paused -> IconButton(Res.drawable.ic_play_arrow, stringResource(Res.string.stash_resume), { Downloads.control.resume(t.id) }, size = 34.dp, tint = c.accent)
                 Status.Failed -> IconButton(Res.drawable.ic_refresh, stringResource(Res.string.notif_retry), { Downloads.control.resume(t.id) }, size = 34.dp, tint = c.accent)
-                Status.Done -> if (gone) Icon(Res.drawable.ic_error, tint = c.red, size = 20.dp, modifier = Modifier.padding(7.dp)) else DoneCheck()
+                Status.Done -> when {
+                    gone -> Icon(Res.drawable.ic_error, tint = c.red, size = 20.dp, modifier = Modifier.padding(7.dp))
+                    fresh -> DoneCheck(newest)
+                    // The menu a long press opens, in sight. The desktop has the right-click (and
+                    // the row's icons on hover), so it leaves the place empty.
+                    !LocalDesktop.current -> IconButton(
+                        Res.drawable.ic_more_vert, stringResource(Res.string.stash_menu), onLongClick,
+                        size = 34.dp, tint = c.ghost, background = Color.Transparent,
+                    )
+                    else -> {}
+                }
                 Status.Canceled -> Spacer(Modifier.size(34.dp))
             }
         }
@@ -834,12 +891,19 @@ private fun StageLine(progress: Float, t: DownloadTask) {
     )
 }
 
-/** The check pops in with a little overshoot. */
+/** How long a finished file counts as new in the stash (with its green check), unless it was played. */
+private const val FRESH_MS = 24 * 3_600_000L
+
+/**
+ * A new file's check. Only one that came in just now pops in with a little overshoot; one that
+ * scrolls back into view or comes back with the tab simply is there.
+ */
 @Composable
-private fun DoneCheck() {
+private fun DoneCheck(finishedAt: Long) {
     val reduce = LocalReduceMotion.current
-    val pop = remember { Animatable(if (reduce) 1f else 0f) }
-    if (!reduce) LaunchedEffect(Unit) { pop.animateTo(1f, Specs.pop()) }
+    val arriving = remember { !reduce && System.currentTimeMillis() - finishedAt < 3_000 }
+    val pop = remember { Animatable(if (arriving) 0f else 1f) }
+    if (arriving) LaunchedEffect(Unit) { pop.animateTo(1f, Specs.pop()) }
     Box(Modifier.size(34.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value; rotationZ = (1f - pop.value) * -40f }, contentAlignment = Alignment.Center) {
         Icon(Res.drawable.ic_check, tint = Hamstr.colors.green, size = 20.dp)
     }
@@ -920,10 +984,22 @@ private fun Notice(
 private fun hostOf(link: String): String =
     runCatching { URI(link).host?.removePrefix("www.") }.getOrNull()?.takeIf { it.isNotBlank() } ?: link
 
-/** All qualities of a link in one badge, best first: [ 1080P · 480P ]. */
-fun versionsBadge(versions: List<DownloadTask>) =
+/** A link's qualities as badge texts, best first. */
+private fun qualities(versions: List<DownloadTask>) =
     versions.sortedWith(compareByDescending<DownloadTask> { it.choice.mode != Mode.Audio }.thenByDescending { it.videoHeight })
-        .map(::formatBadge).distinct().joinToString(" · ")
+        .map(::formatBadge).distinct()
+
+/** All qualities of a link in one badge, best first: [ 1080P · 480P ]. */
+fun versionsBadge(versions: List<DownloadTask>) = qualities(versions).joinToString(" · ")
+
+/**
+ * The best quality of a link and how many more there are, for a row's badge: [ 1080P +1 ]. The
+ * file info and the quality sheet list them all.
+ */
+fun bestBadge(versions: List<DownloadTask>): String {
+    val all = qualities(versions)
+    return if (all.size > 1) "${all[0]} +${all.size - 1}" else all.firstOrNull().orEmpty()
+}
 
 fun formatBadge(t: DownloadTask): String {
     val file = t.filePath?.let(::File)

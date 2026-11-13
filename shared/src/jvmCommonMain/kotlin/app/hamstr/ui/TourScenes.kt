@@ -327,7 +327,7 @@ private fun PasteScene(active: Boolean, modifier: Modifier) {
                 Txt("+", style = Hamstr.type.mono, color = c.ghost)
                 Keycap(key ?: "V", pressed = key != null)
             }
-            SectionHeader(stringResource(Res.string.stash_downloading), trailing = stringResource(Res.string.stash_running, if (arrived) 1 else 0))
+            SectionHeader(stringResource(Res.string.stash_downloading), trailing = if (arrived) stringResource(Res.string.stash_moving, 1, 1) else null)
             Group {
                 AnimatedVisibility(arrived, enter = expandVertically(Specs.enter()) + fadeIn(Specs.listIn()), exit = shrinkVertically(Specs.leave()) + fadeOut(Specs.listOut())) {
                     MockRow(Sample.VIDEO, "1080p", speedLine(progress.value), poster, progress.value, done = false, highlighted = true)
@@ -471,20 +471,23 @@ private fun ArriveScene(active: Boolean, desktop: Boolean, modifier: Modifier) {
                 Spacer(Modifier.height(2.dp))
                 Txt(pluralStringResource(Res.plurals.stash_files, files, files), color = Hamstr.colors.muted)
             }
-            SectionHeader(stringResource(Res.string.stash_downloading), trailing = stringResource(Res.string.stash_running, if (landed) 1 else 2))
+            val moving = if (landed) 1 else 2
+            SectionHeader(stringResource(Res.string.stash_downloading), trailing = stringResource(Res.string.stash_moving, moving, moving))
             Group {
                 AnimatedVisibility(!landed, enter = expandVertically(Specs.enter()) + fadeIn(Specs.listIn()), exit = shrinkVertically(Specs.leave()) + fadeOut(Specs.listOut())) {
                     MockRow(Sample.VIDEO, "1080p", speedLine(first.value), northern, first.value, done = false, highlighted = true)
                 }
                 MockRow(Sample.TRAIN, "720p", speedLine(second.value, slow = true), train, second.value, done = false)
             }
-            SectionHeader(stringResource(Res.string.stash_stashed), trailing = "$files")
+            SectionHeader(stringResource(Res.string.stash_stashed))
             Group {
                 AnimatedVisibility(landed, enter = expandVertically(Specs.enter()) + fadeIn(Specs.listIn()), exit = shrinkVertically(Specs.leave()) + fadeOut(Specs.listOut())) {
                     MockRow(Sample.VIDEO, "1080p", doneLine(Sample.CHANNEL, 431 * Sample.MB, 0), northern, 1f, done = true)
                 }
-                MockRow(Sample.SONG, "m4a", doneLine(Sample.ARTIST, 8 * Sample.MB, 2), rainy, 1f, done = true)
-                MockRow(Sample.PASTA, "720p", doneLine(Sample.PASTA_BY, 475 * Sample.MB, 26), pasta, 1f, done = true)
+                // The song plays on the next page and the pasta is older than a day: no longer new,
+                // so no check, as in the stash.
+                MockRow(Sample.SONG, "m4a", doneLine(Sample.ARTIST, 8 * Sample.MB, 2), rainy, 1f, done = true, fresh = false, menu = !desktop)
+                MockRow(Sample.PASTA, "720p", doneLine(Sample.PASTA_BY, 475 * Sample.MB, 26), pasta, 1f, done = true, fresh = false, menu = !desktop)
             }
         }
     }
@@ -992,7 +995,8 @@ private fun HamstrSheetPeek(poster: ImageBitmap) {
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                DecodeText(Sample.VIDEO, style = Hamstr.type.bodyMedium)
+                // Every time the sheet comes up: the picture shows the effect.
+                DecodeText(Sample.VIDEO, style = Hamstr.type.bodyMedium, once = false)
                 Spacer(Modifier.height(3.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Badge("youtube")
@@ -1084,9 +1088,23 @@ private fun StashHeader(mark: MarkState) {
     }
 }
 
-/** A download as the stash lists it: the thumbnail resolving out of characters as it comes in. */
+/**
+ * A download as the stash lists it: the thumbnail resolving out of characters as it comes in. A
+ * finished one ends in the green check while it is [fresh], otherwise in the ghost ⋮ of its menu
+ * ([menu], the phone) or in nothing (the computer, which has the right-click).
+ */
 @Composable
-private fun MockRow(title: String, badge: String, meta: String, poster: ImageBitmap, progress: Float, done: Boolean, highlighted: Boolean = false) {
+private fun MockRow(
+    title: String,
+    badge: String,
+    meta: String,
+    poster: ImageBitmap,
+    progress: Float,
+    done: Boolean,
+    highlighted: Boolean = false,
+    fresh: Boolean = true,
+    menu: Boolean = true,
+) {
     val c = Hamstr.colors
     Row(
         Modifier
@@ -1113,8 +1131,11 @@ private fun MockRow(title: String, badge: String, meta: String, poster: ImageBit
             }
         }
         Spacer(Modifier.width(8.dp))
-        if (done) Icon(Res.drawable.ic_check, tint = c.green, size = 20.dp, modifier = Modifier.padding(7.dp))
-        else Txt("${(progress * 100).toInt()}%", style = Hamstr.type.mono, modifier = Modifier.padding(end = 6.dp))
+        when {
+            !done -> Txt("${(progress * 100).toInt()}%", style = Hamstr.type.mono, modifier = Modifier.padding(end = 6.dp))
+            fresh -> Icon(Res.drawable.ic_check, tint = c.green, size = 20.dp, modifier = Modifier.padding(7.dp))
+            menu -> Icon(Res.drawable.ic_more_vert, tint = c.ghost, size = 20.dp, modifier = Modifier.padding(7.dp))
+        }
     }
 }
 
@@ -1201,9 +1222,10 @@ private fun Handle() {
 }
 
 /** How fast and how long, for a made-up download at [progress]. */
+@Composable
 private fun speedLine(progress: Float, slow: Boolean = false): String {
     val left = ((1f - progress) * if (slow) 48f else 14f).roundToInt().toLong()
-    return listOf(if (slow) "1.9 MB/s" else "6.4 MB/s", eta(left)).filter { it.isNotEmpty() }.joinToString(" · ")
+    return listOf(if (slow) "1.9 MB/s" else "6.4 MB/s", etaLeft(left)).filter { it.isNotEmpty() }.joinToString(" · ")
 }
 
 /** Who, how big and how long ago, for a made-up finished download. */

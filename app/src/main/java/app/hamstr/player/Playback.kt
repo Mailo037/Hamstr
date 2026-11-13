@@ -17,8 +17,12 @@ import app.hamstr.R
 import app.hamstr.data.DownloadTask
 import app.hamstr.data.Mode
 import app.hamstr.data.Positions
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -299,9 +303,10 @@ object Playback {
     private val _sleep = MutableStateFlow<Sleep?>(null)
     val sleep: StateFlow<Sleep?> = _sleep.asStateFlow()
 
-    fun sleepIn(minutes: Int) {
+    fun sleepIn(minutes: Int) = sleepUntil(System.currentTimeMillis() + minutes * 60_000L)
+
+    private fun sleepUntil(at: Long) {
         timer?.cancel()
-        val at = System.currentTimeMillis() + minutes * 60_000L
         _sleep.value = Sleep.At(at)
         timer = timerScope.launch {
             delay(at - System.currentTimeMillis())
@@ -383,6 +388,63 @@ object Playback {
         _queue.value = emptyList()
         added.clear()
         _controller.value?.takeIf { it.isConnected }?.run { pause(); stop(); clearMediaItems() }
+    }
+
+    /** What the player held when it was closed by hand: [reopen] brings it back (Undo). */
+    data class Kept(
+        internal val queue: List<DownloadTask>,
+        internal val index: Int,
+        internal val position: Long,
+        internal val playing: Boolean,
+        internal val sleep: Sleep?,
+        internal val added: Set<String>,
+        internal val generation: Long = 0,
+    )
+
+    private val _closed = MutableSharedFlow<Kept>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** Each close by hand that Undo can still take back ([closeKeeping]), for the snack. */
+    val closed: SharedFlow<Kept> = _closed.asSharedFlow()
+
+    /**
+     * Closes the player like [close], by hand (the mini bar flung down, Close player), and keeps
+     * what it held for Undo ([closed], [reopen]); what can't come back that way (a picture, a
+     * stream from another Hamstr) just closes.
+     */
+    fun closeKeeping() {
+        val c = live()
+        val kept = c?.let { Kept(_queue.value, it.currentMediaItemIndex, it.currentPosition, it.playWhenReady, _sleep.value, added.toSet()) }
+        close()
+        kept?.let { _closed.tryEmit(it.copy(generation = openGeneration)) }
+    }
+
+    /**
+     * Undo for [closeKeeping]: the same queue, song, spot and sleep timer, playing or paused as it
+     * was, in the mini player. Does nothing once something else was opened since.
+     */
+    suspend fun reopen(context: Context, kept: Kept): Boolean = withContext(Dispatchers.Main.immediate) {
+        if (kept.generation != openGeneration || _current.value != null) return@withContext false
+        val now = kept.queue.getOrNull(kept.index) ?: return@withContext false
+        // Files deleted meanwhile drop out; without the one that played there is nothing to come back to.
+        val entries = kept.queue.filter(::playable)
+        val index = entries.indexOfFirst { it.id == now.id }
+        if (index < 0) return@withContext false
+        val request = ++openGeneration
+        _current.value = now
+        _queue.value = entries
+        val c = connect(context)
+        if (request != openGeneration || _current.value?.id != now.id) return@withContext false
+        c.setMediaItems(entries.map { t -> item(t, File(t.filePath!!)) }, index, kept.position)
+        c.prepare()
+        added.clear()
+        added += kept.added
+        if (kept.playing) c.play() else c.pause()
+        when (val s = kept.sleep) {
+            is Sleep.At -> if (s.endsAt > System.currentTimeMillis()) sleepUntil(s.endsAt)
+            Sleep.EndOfTrack -> sleepAtEnd()
+            null -> {}
+        }
+        true
     }
 
     /** Different history entries can point at the same downloaded file. */

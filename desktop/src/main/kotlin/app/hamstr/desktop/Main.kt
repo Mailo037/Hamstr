@@ -43,13 +43,19 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import app.hamstr.ui.components.LocalAmbient
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import app.hamstr.data.DownloadTask
+import app.hamstr.data.Status
+import org.jetbrains.compose.resources.getPluralString
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.pluralStringResource
 import java.awt.Dimension
 import java.awt.SystemTray
-import java.awt.datatransfer.DataFlavor
-import java.awt.dnd.DnDConstants
-import java.awt.dnd.DropTarget
-import java.awt.dnd.DropTargetDropEvent
+import java.awt.Taskbar
 import java.io.File
+import kotlin.math.roundToInt
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -108,11 +114,27 @@ fun main(args: Array<String>) {
                 if (tray && kept.isNotEmpty()) trayState.sendNotification(Notification(received.replace("%s", from.name), kept.joinToString(", ") { it.name }))
             }
         }
+        // How the downloads are doing, outside the window too: the tray's tooltip, the taskbar
+        // button's progress, a notification when they are through while the window is away.
+        val tasks by DownloadStore.tasks.collectAsState()
+        val live by DownloadStore.live.collectAsState()
+        val active = remember(tasks, live) { tasks.filter { it.status.active && !it.hidden }.map { DownloadStore.current(it, live) } }
+        val moving = active.count { it.status == Status.Running && it.stage?.waiting != true }
+        val percent = if (active.isEmpty()) 0 else (active.sumOf { it.progress.toDouble() } / active.size * 100).roundToInt().coerceIn(0, 100)
+        val tooltip = key(language) {
+            when {
+                moving > 0 -> pluralStringResource(Res.plurals.tray_downloading, moving, moving) + " · $percent %"
+                active.isNotEmpty() -> pluralStringResource(Res.plurals.tray_waiting, active.size, active.size)
+                else -> "Hamstr"
+            }
+        }
+        var windowFocused by remember { mutableStateOf(false) }
+        TrayNews(tasks, away = !visible || !windowFocused) { title, text -> if (tray) trayState.sendNotification(Notification(title, text)) }
         if (tray) key(language) {
             Tray(
                 icon = icon ?: painterResource(Res.drawable.ic_download),
                 state = trayState,
-                tooltip = "Hamstr",
+                tooltip = tooltip,
                 onAction = show,
                 menu = {
                     Item(stringResource(Res.string.tray_open), onClick = show)
@@ -122,12 +144,18 @@ fun main(args: Array<String>) {
                 },
             )
         }
+        // What plays names the window, in the taskbar and the window switcher.
+        val playing by DesktopPlayback.current.collectAsState()
+        val staged by DesktopStage.now.collectAsState()
+        val place = remember { WindowPlace.load() }
         Window(
             onCloseRequest = close,
             visible = visible,
-            state = rememberWindowState(size = DpSize(1120.dp, 760.dp), position = WindowPosition(Alignment.Center)),
-            title = "Hamstr",
+            state = rememberWindowState(size = place.size, position = place.position),
+            title = (staged?.task ?: playing)?.title?.let { "$it — Hamstr" } ?: "Hamstr",
             icon = icon,
+            // Keys nothing in the window took: Space plays, Ctrl+N adds, and so on (DesktopApp).
+            onKeyEvent = { Shortcuts.handle(it) },
             // Hamstr draws its own title bar; macOS keeps its traffic lights over it. Linux has no
             // rounded frameless windows, so there the window is see-through and the app clips itself.
             undecorated = !Paths.mac,
@@ -144,23 +172,11 @@ fun main(args: Array<String>) {
             LaunchedEffect(Unit) { Instance.show.collect { visible = true; window.isMinimized = false; window.toFront() } }
             LaunchedEffect(Unit) {
                 window.minimumSize = Dimension(760, 520)
-                // Files dropped on the window come in like picked ones; a dropped link is stashed.
-                window.contentPane.dropTarget = object : DropTarget() {
-                    override fun drop(e: DropTargetDropEvent) {
-                        e.acceptDrop(DnDConstants.ACTION_COPY)
-                        val t = e.transferable
-                        runCatching {
-                            when {
-                                t.isDataFlavorSupported(DataFlavor.javaFileListFlavor) ->
-                                    Files.import((t.getTransferData(DataFlavor.javaFileListFlavor) as List<*>).filterIsInstance<File>())
-                                t.isDataFlavorSupported(DataFlavor.stringFlavor) ->
-                                    (t.getTransferData(DataFlavor.stringFlavor) as? String)?.let(MediaLinks::find)?.let { Queue.stash(it) }
-                            }
-                        }
-                        e.dropComplete(true)
-                    }
-                }
+                // Files dropped on the window come in like picked ones; a dropped link is stashed (Drop).
+                window.contentPane.dropTarget = Drop.target()
                 frame.round()
+                if (place.maximized && !Paths.mac) frame.maximize()
+                WindowPlace.watch(frame)
                 if (Paths.mac) window.rootPane.apply {
                     putClientProperty("apple.awt.fullWindowContent", true)
                     putClientProperty("apple.awt.transparentTitleBar", true)
@@ -169,7 +185,10 @@ fun main(args: Array<String>) {
             }
             // Back in front: files changed or deleted meanwhile show, as on the phone.
             val focused = LocalWindowInfo.current.isWindowFocused
-            LaunchedEffect(focused) { if (focused) FileChecks.refresh() }
+            LaunchedEffect(focused) { windowFocused = focused; if (focused) FileChecks.refresh() }
+            LaunchedEffect(moving, active.size, percent) { TaskbarProgress.show(window, moving, active.size, percent) }
+            // Where it was, for the next start; also when Quit ends it without a move first.
+            DisposableEffect(Unit) { onDispose { WindowPlace.save(frame) } }
             // Ambient motion only while the window is in front: in the background Hamstr draws nothing.
             CompositionLocalProvider(LocalAmbient provides (visible && LocalWindowInfo.current.isWindowFocused)) {
                 key(language) { HamstrTheme { DesktopApp(frame, onClose = close, onQuit = ::exitApplication) } }
@@ -178,4 +197,53 @@ fun main(args: Array<String>) {
     }
     // Quit means gone: a thread left running would keep Hamstr's files in use for an update.
     exitProcess(0)
+}
+
+/**
+ * The tray's notifications about downloads, only while the window is away (hidden in the tray,
+ * or behind other windows): one when the queue is through, one when a download fails.
+ */
+@Composable
+private fun TrayNews(tasks: List<DownloadTask>, away: Boolean, notify: (String, String) -> Unit) {
+    val seen = remember { HashMap<String, Status>() }
+    val finished = remember { ArrayList<String>() }
+    val awayNow by rememberUpdatedState(away)
+    val notifyNow by rememberUpdatedState(notify)
+    LaunchedEffect(tasks) {
+        val first = seen.isEmpty()
+        for (t in tasks) {
+            val before = seen.put(t.id, t.status)
+            if (first || before == null || before == t.status || !before.active) continue
+            if (t.status == Status.Done) finished += t.title
+            if (t.status == Status.Failed && awayNow) notifyNow(getString(Res.string.tray_failed), t.title)
+        }
+        if (tasks.none { it.status.active } && finished.isNotEmpty()) {
+            val titles = finished.toList()
+            finished.clear()
+            if (!awayNow) return@LaunchedEffect
+            val done = getPluralString(Res.plurals.tray_done, titles.size, titles.size)
+            if (titles.size == 1) notifyNow(titles[0], done) else notifyNow(done, titles.joinToString(", "))
+        }
+    }
+}
+
+/** The taskbar button fills while downloads run (Windows), or the dock icon (macOS). */
+private object TaskbarProgress {
+    private val bar = runCatching { if (Taskbar.isTaskbarSupported()) Taskbar.getTaskbar() else null }.getOrNull()
+
+    fun show(window: java.awt.Window, moving: Int, active: Int, percent: Int) {
+        val b = bar ?: return
+        runCatching {
+            if (b.isSupported(Taskbar.Feature.PROGRESS_STATE_WINDOW) && b.isSupported(Taskbar.Feature.PROGRESS_VALUE_WINDOW)) {
+                when {
+                    moving > 0 -> { b.setWindowProgressState(window, Taskbar.State.NORMAL); b.setWindowProgressValue(window, percent) }
+                    // Waiting for Wi-Fi, the night or a retry: the bar stays, paused.
+                    active > 0 -> { b.setWindowProgressValue(window, percent); b.setWindowProgressState(window, Taskbar.State.PAUSED) }
+                    else -> b.setWindowProgressState(window, Taskbar.State.OFF)
+                }
+            } else if (b.isSupported(Taskbar.Feature.PROGRESS_VALUE)) {
+                b.setProgressValue(if (moving > 0) percent else -1)
+            }
+        }.onFailure { app.hamstr.Log.d("HamstrTaskbar", "No taskbar progress", it) }
+    }
 }

@@ -320,9 +320,9 @@ private fun SubPage(
                         if (offset.value > width * 0.3f) {
                             haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
                             onBack()
-                        } else scope.launch { offset.animateTo(0f, Specs.settle()) }
+                        } else scope.launch { offset.animateTo(0f, Specs.release()) }
                     },
-                    onDragCancel = { scope.launch { offset.animateTo(0f) } },
+                    onDragCancel = { scope.launch { offset.animateTo(0f, Specs.release()) } },
                 )
             }
             .edgeFade(scroll, Orientation.Vertical, insets = contentPadding)
@@ -345,7 +345,7 @@ private fun SubPage(
             Page.Playback -> PlaybackPage()
             Page.Engine -> EnginePage()
             Page.Devices -> DevicesPage(onDevice)
-            Page.Hidden -> HiddenPage(onDelete, onHint, onMenu)
+            Page.Hidden -> HiddenSettings(onDelete, onHint, onMenu)
             Page.Data -> DataPage()
             Page.About -> AboutPage(onUpdate, onTour)
         }
@@ -532,74 +532,6 @@ private fun DataPage() {
     )
 }
 
-/** Files hidden from the library: show them again, or delete them for good; a tap opens the file's menu. */
-@Composable
-private fun HiddenPage(onDelete: (List<DownloadTask>) -> Unit, onHint: (String) -> Unit, onMenu: (DownloadTask) -> Unit) {
-    val c = Hamstr.colors
-    val tasks by DownloadStore.tasks.collectAsState()
-    val hidden = remember(tasks) { tasks.filter { it.hidden && it.status == Status.Done } }
-    var confirm by remember { mutableStateOf(false) }
-    val restored = stringResource(R.string.hidden_restored)
-    if (hidden.isEmpty()) {
-        Txt(stringResource(R.string.hidden_empty), color = c.muted, modifier = Modifier.padding(horizontal = 6.dp))
-        return
-    }
-    Group {
-        hidden.forEachIndexed { i, t ->
-            if (i > 0) Divider()
-            // Like the stash: swipe right to show it again, left to delete it (icons on a desktop).
-            key(t.id) {
-                SwipeRow(
-                    start = SwipeAction(Res.drawable.ic_restore, stringResource(R.string.hidden_restore), c.accent, removes = true) {
-                        DownloadStore.setHidden(setOf(t.id), false)
-                        onHint(restored)
-                    },
-                    end = SwipeAction(Res.drawable.ic_delete, stringResource(R.string.menu_delete), c.red, removes = true) { onDelete(listOf(t)) },
-                    background = c.overlay,
-                ) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(Radii.row))
-                            .swipeActions()
-                            .pressable({ onMenu(t) })
-                            .heightIn(min = 64.dp)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(52.dp).clip(RoundedCornerShape(Radii.thumb)).background(c.black)) {
-                            AsciiImage(rememberImage(t.thumbnail, 160), reveal = 1f, cell = 4.dp, modifier = Modifier.size(52.dp))
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Txt(t.title, style = Hamstr.type.bodyMedium, maxLines = 2)
-                            Spacer(Modifier.height(2.dp))
-                            Txt(
-                                listOfNotNull(t.uploader ?: t.source, t.sizeBytes.takeIf { it > 0 }?.let(::formatBytes)).joinToString(" · "),
-                                style = Hamstr.type.small, color = c.ghost, maxLines = 1,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Spacer(Modifier.height(12.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        HButton(stringResource(R.string.hidden_restore_all), {
-            DownloadStore.setHidden(hidden.map { it.id }.toSet(), false)
-            onHint(restored)
-        }, Modifier.weight(1f), kind = ButtonKind.Neutral, icon = Res.drawable.ic_restore)
-        HButton(
-            stringResource(if (confirm) R.string.hidden_delete_confirm else R.string.hidden_delete_all),
-            { if (!confirm) confirm = true else { confirm = false; onDelete(hidden) } },
-            Modifier.weight(1f), kind = ButtonKind.Ghost, icon = Res.drawable.ic_delete,
-        )
-    }
-    Spacer(Modifier.height(12.dp))
-    Txt(stringResource(R.string.hidden_note), style = Hamstr.type.small, color = c.ghost, modifier = Modifier.padding(horizontal = 6.dp))
-}
-
 @Composable
 private fun MotionPage() {
     val s by Prefs.settings.collectAsState()
@@ -643,10 +575,11 @@ private fun DownloadsPage() {
  * Android only lets an app come forward on its own with "Display over other apps", so
  * turning this on asks for that; without it the finished notification stays the way in.
  * Here as the default, and in the download sheet for one download ([hint] off: no line under it
- * unless the permission is missing).
+ * unless the permission is missing). With [sendsAway] off (the share sheet) it only switches,
+ * and the missing permission is a hint pointing to Settings instead of a jump out of the share.
  */
 @Composable
-internal fun OpenWhenDoneRow(on: Boolean, hint: Boolean, set: (Boolean) -> Unit) {
+internal fun OpenWhenDoneRow(on: Boolean, hint: Boolean, sendsAway: Boolean = true, set: (Boolean) -> Unit) {
     val context = LocalContext.current
     fun allowed() = android.provider.Settings.canDrawOverlays(context)
     var system by remember { mutableStateOf(allowed()) }
@@ -664,15 +597,19 @@ internal fun OpenWhenDoneRow(on: Boolean, hint: Boolean, set: (Boolean) -> Unit)
             )
         }
     }
-    val subtitle = if (on && !system) stringResource(R.string.set_open_done_needs) else if (hint) stringResource(R.string.set_open_done_hint) else null
+    val subtitle = when {
+        on && !system -> stringResource(if (sendsAway) R.string.set_open_done_needs else R.string.share_open_done_needs)
+        hint -> stringResource(R.string.set_open_done_hint)
+        else -> null
+    }
     SettingRow(
         stringResource(R.string.set_open_done), subtitle = subtitle,
-        onClick = { if (on && !system) askSystem() else set(!on) },
+        onClick = { if (sendsAway && on && !system) askSystem() else set(!on) },
         checked = on,
     ) {
         HSwitch(on, { v ->
             set(v)
-            if (v && !system) askSystem()
+            if (sendsAway && v && !system) askSystem()
         })
     }
 }
@@ -794,7 +731,7 @@ private fun SubtitleLanguages(s: Settings) {
 private val SUBTITLE_LANGUAGES = listOf("en", "de", "es", "fr", "it", "pt", "nl", "pl", "tr", "ru", "uk", "ar", "hi", "ja", "ko", "zh")
 
 /** "de" as "Deutsch", in its own language. */
-private fun languageName(code: String): String =
+internal fun languageName(code: String): String =
     java.util.Locale.forLanguageTag(code).let { it.getDisplayLanguage(it) }.replaceFirstChar { it.titlecase() }.ifEmpty { code }
 
 @Composable
