@@ -13,8 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
@@ -192,10 +190,7 @@ object DownloadStore {
             for (ignored in saves) {
                 try {
                     // With running downloads' latest progress: after a restart they show how far they got.
-                    val snapshot = snapshot()
-                    val arr = JSONArray()
-                    snapshot.forEach { arr.put(toJson(it)) }
-                    atomic.write(arr.toString())
+                    atomic.write(HistoryJson.write(snapshot()))
                 } catch (e: Exception) {
                     Log.e("HamstrStore", "Could not save download history", e)
                 }
@@ -453,7 +448,7 @@ object DownloadStore {
         return if (live.isEmpty()) list else list.map { current(it, live) }
     }
 
-    fun encode(tasks: List<DownloadTask> = snapshot()): String = JSONArray().apply { tasks.forEach { put(toJson(it)) } }.toString()
+    fun encode(tasks: List<DownloadTask> = snapshot()): String = HistoryJson.write(tasks)
 
     /**
      * Adds entries from a backup that aren't on the list yet, after the ones that are. Nothing
@@ -478,11 +473,7 @@ object DownloadStore {
     class Read(val tasks: List<DownloadTask>, val skipped: Int)
 
     /** Reads every entry on its own, so one it doesn't understand can't take the others with it. */
-    fun read(text: String): Read {
-        val a = JSONArray(text)
-        val tasks = (0 until a.length()).mapNotNull { i -> runCatching { fromJson(a.getJSONObject(i)) }.getOrNull() }
-        return Read(tasks, a.length() - tasks.size)
-    }
+    fun read(text: String): Read = HistoryJson.read(text).let { Read(it.tasks, it.skipped) }
 
     /** Where the list is saved, once [init] ran; for the tests. */
     internal val location: File? get() = file
@@ -509,64 +500,4 @@ object DownloadStore {
         if (file == null) return
         saves.trySend(Unit)
     }
-
-    private fun toJson(t: DownloadTask) = JSONObject().apply {
-        put("id", t.id); put("url", t.url); put("title", t.title)
-        put("thumbnail", t.thumbnail); put("source", t.source); put("duration", t.durationSec)
-        put("mode", t.choice.mode.name); put("height", t.choice.height ?: 0); put("container", t.choice.container)
-        put("audioFormat", t.choice.audioFormat); put("subtitles", t.choice.subtitles); put("customFormat", t.choice.customFormat); put("open", t.choice.open)
-        put("status", t.status.name); put("progress", t.progress.toDouble())
-        put("filePath", t.filePath); put("contentUri", t.contentUri); put("size", t.sizeBytes)
-        put("error", t.error); put("createdAt", t.createdAt); put("finishedAt", t.finishedAt)
-        put("group", t.group); put("groupTitle", t.groupTitle)
-        put("versionOf", t.versionOf); put("replaces", t.replaces); put("videoHeight", t.videoHeight)
-        put("uploader", t.uploader); put("mediaKey", t.mediaKey); put("hidden", t.hidden)
-        put("sha256", t.sha256); put("hashedSize", t.hashedSize); put("hashedModified", t.hashedModified)
-        put("anytime", t.anytime); put("mobileData", t.mobileData); put("tonight", t.tonight)
-        put("channelUrl", t.channelUrl)
-    }
-
-    private fun fromJson(o: JSONObject) = DownloadTask(
-        id = o.getString("id"),
-        url = o.getString("url"),
-        title = o.optString("title"),
-        thumbnail = o.optStringOrNull("thumbnail"),
-        source = o.optStringOrNull("source"),
-        durationSec = o.optInt("duration"),
-        choice = Choice(
-            mode = runCatching { Mode.valueOf(o.optString("mode", "Video")) }.getOrDefault(Mode.Video),
-            height = o.optInt("height").takeIf { it > 0 },
-            container = o.optString("container", "mp4"),
-            audioFormat = o.optString("audioFormat", "opus"),
-            subtitles = o.optBoolean("subtitles"),
-            customFormat = o.optString("customFormat"),
-            open = o.optBoolean("open"),
-        ),
-        // A state this version doesn't know (from a newer Hamstr) waits to be tried again.
-        status = runCatching { Status.valueOf(o.optString("status", "Queued")) }.getOrDefault(Status.Paused),
-        progress = o.optDouble("progress", 0.0).toFloat(),
-        filePath = o.optStringOrNull("filePath"),
-        contentUri = o.optStringOrNull("contentUri"),
-        sizeBytes = o.optLong("size"),
-        error = o.optStringOrNull("error"),
-        createdAt = o.optLong("createdAt"),
-        finishedAt = o.optLong("finishedAt"),
-        group = o.optStringOrNull("group"),
-        groupTitle = o.optStringOrNull("groupTitle"),
-        versionOf = o.optStringOrNull("versionOf"),
-        replaces = o.optStringOrNull("replaces"),
-        videoHeight = o.optInt("videoHeight"),
-        uploader = o.optStringOrNull("uploader"),
-        mediaKey = o.optStringOrNull("mediaKey"),
-        hidden = o.optBoolean("hidden"),
-        sha256 = o.optStringOrNull("sha256"),
-        hashedSize = o.optLong("hashedSize"),
-        hashedModified = o.optLong("hashedModified"),
-        anytime = o.optBoolean("anytime"),
-        mobileData = o.optBoolean("mobileData"),
-        tonight = o.optBoolean("tonight"),
-        channelUrl = o.optStringOrNull("channelUrl"),
-    )
-
-    private fun JSONObject.optStringOrNull(key: String) = if (isNull(key)) null else optString(key).ifEmpty { null }
 }

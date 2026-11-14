@@ -137,10 +137,7 @@ def add_following(data):
     # The night starts four hours from now and lasts six, so these wait for it.
     start = (time.localtime().tm_hour + 4) % 24
     with open(data / "settings.properties", "a", encoding="utf8") as f:
-        f.write(f"nightOnly=true
-nightFrom={start * 60}
-nightTo={(start + 6) % 24 * 60}
-")
+        f.write(f"nightOnly=true\nnightFrom={start * 60}\nnightTo={(start + 6) % 24 * 60}\n")
 
 
 def main():

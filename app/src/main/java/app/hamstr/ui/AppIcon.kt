@@ -21,6 +21,10 @@ import app.hamstr.data.ACCENTS
 import app.hamstr.data.IconStyle
 import app.hamstr.data.Prefs
 import app.hamstr.ui.components.MARK
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -43,10 +47,29 @@ object AppIcon {
         return ACCENTS.indices.minBy { i -> abs(hue(ACCENTS[i].argb) - h).let { d -> min(d, 360f - d) } }
     }
 
-    /** Switches the launcher entry and redraws the shortcuts; cheap when nothing changed. */
+    // Asking the package manager about each of the 21 launcher entries, drawing the shortcuts'
+    // glyphs and handing them to the launcher are calls to other processes: off the main thread
+    // (the start, onStop), one at a time and in order.
+    private val work = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
+
+    // A launcher that refuses (or a drawable that won't load) must not take the app down from a background thread.
+    private fun later(block: () -> Unit) {
+        work.launch { runCatching(block).onFailure { app.hamstr.Log.w("HamstrIcon", "Couldn't update the launcher icon or shortcuts", it) } }
+    }
+
+    // The launcher entry this run of the app switched on: going to the background again with the
+    // same choice asks the package manager nothing.
+    private var applied: Int? = null
+
+    /** Switches the launcher entry and redraws the shortcuts, in the background; cheap when nothing changed. */
     fun sync(context: Context) {
+        later { syncNow(context) }
+    }
+
+    private fun syncNow(context: Context) {
         val s = Prefs.settings.value
         val want = s.iconStyle.ordinal * COLOURS.size + if (s.iconFollowsAccent) nearest(s.accent) else 0
+        if (applied == want) return shortcutsNow(context, s.accent)
         val pm = context.packageManager
         val names = ALIASES.map { ComponentName(context.packageName, "${context.packageName}.$it") }
         // The first alias is on by default in the manifest, the others off.
@@ -62,14 +85,19 @@ object AppIcon {
             // The new entry goes on before the old one goes off, so there is always a launcher icon.
             if (!on(want)) set(want, true)
             names.indices.filter { it != want && on(it) }.forEach { set(it, false) }
+            applied = want
         }
-        shortcuts(context, s.accent)
+        shortcutsNow(context, s.accent)
     }
 
     private var shortcutAccent: Int? = null
 
-    /** Long-press shortcuts with their glyph in the accent. */
+    /** Long-press shortcuts with their glyph in the accent, drawn in the background. */
     fun shortcuts(context: Context, accent: Int) {
+        later { shortcutsNow(context, accent) }
+    }
+
+    private fun shortcutsNow(context: Context, accent: Int) {
         if (shortcutAccent == accent) return
         shortcutAccent = accent
         fun shortcut(id: String, action: String, short: Int, long: Int, icon: Int, rank: Int) =

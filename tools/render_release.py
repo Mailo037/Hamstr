@@ -12,11 +12,11 @@ from PIL import Image, ImageDraw
 
 from render_product import ACCENT, CANVAS, INK, MUTED, OUT, drop, font, glow, phone, raster, window
 
-VERSION = "0.10.14"
+VERSION = "0.10.15"
 FEATURES = [
-    ("CALMER, EASIER ON THE EYES", "Quiet badges, brighter hints, still waits"),
-    ("MOTION THAT SETTLES", "No replays, no blinks, no wobble"),
-    ("UNDO, KEYS & FULLSCREEN", "Undo for cancel, a computer that answers"),
+    ("A QUICKER START", "Your download list loads four times faster"),
+    ("LIGHTER SAVES", "Less work every time a download moves on"),
+    ("NOTHING IN THE WAY", "Shortcuts update in the background"),
 ]
 # A desktop_*.png is drawn as a window; after it, phone shots stand in front of its corner, and a
 # second window (a desktop_*.png or setup_*.png capture) sits at its lower left.
@@ -25,7 +25,8 @@ FEATURES = [
 # was connected, and this computer's JDK has no jpackage for the desktop captures.
 # 0.10.13: emulator screenshots of the song player with the drawer closed, half and all the way up.
 # 0.10.14: emulator screenshots from tools/demo_screens.py: the calmer stash, the shorter share sheet, a song.
-SHOTS = [("stash.png", "Stash"), ("share.png", "Share"), ("music.png", "Song")]
+# 0.10.15: emulator screenshots from tools/demo_screens.py: the stash and the library, which load faster, and a song.
+SHOTS = [("stash.png", "Stash"), ("library.png", "Library"), ("music.png", "Song")]
 
 
 def sharing_panel(shots):
